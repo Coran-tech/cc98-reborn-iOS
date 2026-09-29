@@ -1,33 +1,106 @@
 const STORAGE_KEY = "cc98ComfortSettings";
-const EXTENSION_VERSION = "0.1.2";
+const PINNED_BOARDS_STORAGE_KEY = "cc98RebornPinnedBoards:v1";
+const READ_LATER_STORAGE_KEY = "cc98RebornReadLater:v1";
+const OPENID_BINDING_STORAGE_KEY = "cc98RebornOpenIdBinding:v1";
+const SEARCH_SORT_STORAGE_KEY = "cc98RebornSearchSort:v2";
+const SEARCH_HISTORY_STORAGE_KEY = "cc98RebornSearchHistory:v1";
+const SEARCH_HISTORY_CHANGE_EVENT = "cc98-reborn-search-history-change";
+const SEARCH_HISTORY_LIMIT = 12;
+const READ_LATER_ROUTE_HASH = "#cc98-reborn-read-later";
+const BLACKLIST_ROUTE_HASH = "#cc98-reborn-blacklist";
+const EXTENSION_VERSION = globalThis.chrome?.runtime?.getManifest?.()?.version || "dev";
 const LOGIN_REDIRECT_MARK_KEY = "cc98RebornLoginRedirectStartedAt";
+const LOGIN_REDIRECT_SNAPSHOT_KEY = "cc98RebornLoginRedirectSnapshot";
+const LOGIN_HOME_REFRESH_MARK_KEY = "cc98RebornLoginHomeRefreshPendingAt";
+const OPENID_BIND_PROMPT_AFTER_LOGIN_KEY = "cc98RebornOpenIdBindPromptAfterLoginAt";
 const LOGOUT_REDIRECT_MARK_KEY = "cc98RebornLogoutRedirectStartedAt";
 const FIRST_PAGE_PREVISIT_PENDING_KEY = "cc98RebornFirstPagePrevisitPending";
 const FIRST_PAGE_PREVISIT_DONE_PREFIX = "cc98RebornFirstPagePrevisitDone:";
 const FIRST_PAGE_PREVISIT_TTL = 5 * 60 * 1000;
+const HOT_REPLY_FINGERPRINT_CACHE_PREFIX = "cc98RebornHotReplyFingerprints:v1:";
+const HOT_REPLY_FINGERPRINT_KEY_SEPARATOR = "\u001f";
 const VOTE_OPTIMISTIC_COUNT_TTL = 2100;
 const VOTE_OPTIMISTIC_STATE_TTL = 2600;
+const HOME_HOT_RANK_CACHE_KEY_PREFIX = "cc98RebornHomeHotRanking:v1:";
+const SEARCH_EMPTY_INITIAL_GRACE_MS = 2600;
+const SEARCH_EMPTY_LOADING_GRACE_MS = 7000;
+const NEW_TOPICS_INITIAL_GRACE_MS = 3600;
+const NEW_TOPICS_LOADING_GRACE_MS = 8000;
+const SEAMLESS_SCROLL_SYNC_DELAY = 160;
+const SEAMLESS_SCROLL_SYNC_FOLLOWUP_DELAY = 820;
+const SEAMLESS_SCROLL_SYNC_MIN_INTERVAL = 520;
+const SEAMLESS_SCROLL_SYNC_INTENT_TTL = 1900;
+const NATIVE_ANT_UI_SELECTOR = [
+  ".ant-list",
+  ".ant-list-pagination",
+  ".ant-pagination",
+  ".ant-modal",
+  ".ant-modal-wrap",
+  ".ant-modal-content"
+].join(",");
+const LEGACY_COLOR_PICKER_SELECTOR = [
+  ".sp-container",
+  ".sp-picker-container",
+  ".sp-palette-container",
+  ".sp-replacer",
+  ".ubb-button-color",
+  ".ubb-color-picker",
+  "input[type='color']",
+  "input.cc98-rebuild-native-color-input"
+].join(",");
+// Hash targets can become available a little after the first rebuilt shell is
+// mounted (especially on WebVPN).  Keep the retry window finite so this does
+// not turn into a background scroll loop.
+const REBUILT_HASH_SCROLL_RETRY_DELAYS = [0, 80, 220, 500, 1000, 1800, 3200, 5200];
+const REBUILT_HASH_SCROLL_GUARD_MS = 9000;
+const REBUILT_HASH_SCROLL_GUARD_CHECK_MS = 90;
+const TOPIC_CONTENT_CAPTURE_GRACE_MS = 3600;
+const REBUILD_TRANSITION_VEIL_FAILSAFE_MS = 2800;
+const REBUILD_TRANSITION_VEIL_FADE_MS = 140;
+const EDITOR_SUBMIT_INTENT_KEY = "cc98RebornEditorSubmitIntentAt";
+const EDITOR_SUBMIT_CONTEXT_KEY = "cc98RebornEditorSubmitContext";
+const EDITOR_LAST_TOPIC_HREF_KEY = "cc98RebornLastTopicHref";
+const EDITOR_TOPIC_RELOAD_KEY_PREFIX = "cc98RebornEditorTopicReload:";
+const EDITOR_TOPIC_RELOAD_TTL = 15000;
+const EDITOR_TOPIC_SUBMIT_RELOAD_KEY_PREFIX = "cc98RebornEditorTopicSubmitReload:";
+const EDITOR_TOPIC_SUBMIT_RELOAD_TTL = 30000;
+const EDITOR_SUBMIT_MONITOR_EVENT = "cc98-reborn-submit-monitor-event";
+const EDITOR_DRAFT_STORAGE_PREFIX = "cc98RebornDraft:v1:";
+const BLACKLIST_PAGE_REVEAL_PREFIX = "cc98RebornBlacklistPageReveal:";
+const BLACKLIST_ITEM_REVEAL_PREFIX = "cc98RebornBlacklistItemReveal:";
 const EXTERNAL_AI_SEARCH_REQUIRES_EXPLICIT_CONSENT = true;
-// Disabled until the official CC98 OAuth authorization flow is wired.
-const WATERMARK_FEATURE_ENABLED = false;
+// Watermark source: the extension's own CC98 OpenID binding summary.
+const WATERMARK_FEATURE_ENABLED = true;
 const WATERMARK_CACHE_TTL = 30 * 60 * 1000;
 const WATERMARK_DIRECTION_INTERVAL = 3600;
 const WATERMARK_REVALIDATE_INTERVAL = 5 * 60 * 1000;
+const REPLY_REBORN_TAIL_LEGACY_BRAND_UBB = "[color=#eb2f96]C[/color][color=#de2f9d]C[/color][color=#d02fa3]9[/color][color=#c32faa]8[/color] [color=#b52fb0]R[/color][color=#a82eb7]e[/color][color=#9a2ebd]b[/color][color=#8d2ec4]o[/color][color=#7f2eca]r[/color][color=#722ed1]n[/color]";
+const REPLY_REBORN_TAIL_BRAND_UBB = `[url=https://www.cc98.org/topic/6521472]${REPLY_REBORN_TAIL_LEGACY_BRAND_UBB}[/url]`;
+const REPLY_REBORN_TAIL_MARKER = "\u2014\u2014\u6765\u81ea\u300c[url=https://www.cc98.org/topic/6521472]";
+const REPLY_REBORN_TAIL_LEGACY_MARKER = "\u2014\u2014\u6765\u81ea\u300c[color=#eb2f96]C[/color]";
+const REPLY_REBORN_TAIL_UBB = `[align=right]\u2014\u2014\u6765\u81ea\u300c${REPLY_REBORN_TAIL_BRAND_UBB}\u300d[/align]`;
+const REPLY_REBORN_TAIL_LEGACY_RIGHT_UBB = `[right]\u2014\u2014\u6765\u81ea\u300c${REPLY_REBORN_TAIL_LEGACY_BRAND_UBB}\u300d\uff0c[/right]`;
+const REPLY_REBORN_TAIL_LEGACY_ALIGN_UBB = `[align=right]\u2014\u2014\u6765\u81ea\u300c${REPLY_REBORN_TAIL_LEGACY_BRAND_UBB}\u300d\uff0c[/align]`;
 
 const DEFAULT_SETTINGS = {
   enabled: true,
   theme: "soft",
   density: "comfortable",
-  fontScale: 100,
-  emojiScale: 100,
+  fontScale: 110,
+  emojiScale: 200,
   neutralizeNativeSkin: true,
   rebuildUi: true,
   roundUi: true,
   cornerRadius: 10,
+  prewarmPostImages: false,
   imageLoadDuration: 2100,
-  previsitFirstPageForTopicImages: false,
+  previsitFirstPageForTopicImages: true,
+  openLinksInNewTab: false,
+  sideTopbar: false,
+  replyRebornTail: true,
   minimalMode: false,
-  homeHotOnly: false,
+  homeHotOnly: true,
+  expandTopicCardsByDefault: false,
   softenAvatars: true,
   hideSticky: false,
   focusReading: false,
@@ -44,6 +117,102 @@ const DEFAULT_SETTINGS = {
   placeholderText: "已根据你的屏蔽规则折叠一条内容"
 };
 
+const THEME_IDS = new Set(["soft", "mist", "night", "sage", "lake", "rose", "graphite", "midnight", "wine"]);
+const DARK_THEME_IDS = new Set(["night", "graphite", "midnight", "wine"]);
+const SEAMLESS_SCROLL_SYNC_PAGE_KINDS = new Set(["home", "boardList", "topics", "search", "boardSearch", "board", "post"]);
+const THEME_LOADING_COLORS = {
+  soft: {
+    bg: "#f4f6f5",
+    surface: "#ffffff",
+    text: "#24302d",
+    muted: "#5f6d68",
+    border: "#dbe3df",
+    accent: "#1f6f66",
+    panelBorder: "rgba(31, 111, 102, 0.18)",
+    shadow: "0 18px 48px rgba(30, 45, 40, 0.16)"
+  },
+  mist: {
+    bg: "#f2f5f8",
+    surface: "#ffffff",
+    text: "#25313a",
+    muted: "#60717c",
+    border: "#d5e0e7",
+    accent: "#286f84",
+    panelBorder: "rgba(40, 111, 132, 0.2)",
+    shadow: "0 18px 48px rgba(30, 45, 55, 0.16)"
+  },
+  sage: {
+    bg: "#eef5ef",
+    surface: "#fbfdfb",
+    text: "#22342a",
+    muted: "#607466",
+    border: "#d1dfd5",
+    accent: "#39785a",
+    panelBorder: "rgba(57, 120, 90, 0.2)",
+    shadow: "0 18px 48px rgba(34, 58, 43, 0.16)"
+  },
+  lake: {
+    bg: "#edf5f7",
+    surface: "#fbfdfe",
+    text: "#21313a",
+    muted: "#5d707a",
+    border: "#cfdfe6",
+    accent: "#2d7890",
+    panelBorder: "rgba(45, 120, 144, 0.2)",
+    shadow: "0 18px 48px rgba(33, 58, 66, 0.16)"
+  },
+  rose: {
+    bg: "#f7f1f4",
+    surface: "#fffafb",
+    text: "#352830",
+    muted: "#75636c",
+    border: "#e0cfd7",
+    accent: "#9a4968",
+    panelBorder: "rgba(154, 73, 104, 0.2)",
+    shadow: "0 18px 48px rgba(61, 39, 50, 0.16)"
+  },
+  night: {
+    bg: "#15191d",
+    surface: "#20262b",
+    text: "#e8edf0",
+    muted: "#b4c0c6",
+    border: "#3d4850",
+    accent: "#8bc7bd",
+    panelBorder: "rgba(139, 199, 189, 0.22)",
+    shadow: "0 18px 52px rgba(0, 0, 0, 0.35)"
+  },
+  graphite: {
+    bg: "#151716",
+    surface: "#202421",
+    text: "#e7ede9",
+    muted: "#b5c1bb",
+    border: "#3b4740",
+    accent: "#9cc8b3",
+    panelBorder: "rgba(156, 200, 179, 0.22)",
+    shadow: "0 18px 52px rgba(0, 0, 0, 0.35)"
+  },
+  midnight: {
+    bg: "#14171d",
+    surface: "#1f242c",
+    text: "#e7edf5",
+    muted: "#b3becb",
+    border: "#3c4654",
+    accent: "#9dbde8",
+    panelBorder: "rgba(157, 189, 232, 0.22)",
+    shadow: "0 18px 52px rgba(0, 0, 0, 0.35)"
+  },
+  wine: {
+    bg: "#1a1518",
+    surface: "#241f22",
+    text: "#efe8ec",
+    muted: "#c7b5bd",
+    border: "#4a3c43",
+    accent: "#e1a3b5",
+    panelBorder: "rgba(225, 163, 181, 0.22)",
+    shadow: "0 18px 52px rgba(0, 0, 0, 0.35)"
+  }
+};
+
 const BLOCKABLE_SELECTORS = [
   ".focus-topic",
   ".card-topic",
@@ -52,12 +221,22 @@ const BLOCKABLE_SELECTORS = [
   ".specialOfferRow",
   ".card-recommendation-topic-container-item",
   ".boardContent",
-  ".noImgBoardContent"
+  ".noImgBoardContent",
+  ".user-post",
+  ".user-center-myfollowings-user",
+  ".user-center-myfollowers-user",
+  ".message-message-person",
+  "[id^='contact_']"
 ].join(",");
 
 let lastSettings = null;
 let observer = null;
 let headObserver = null;
+let rebuiltAppPresenceWatchdog = null;
+let publicProfileTopbarRecoveryTimer = null;
+let publicProfileRebuildDeferredForSelection = false;
+let publicProfileSelectionGuardBound = false;
+let publicProfilePointerSelectionActive = false;
 let filterQueued = false;
 let isFiltering = false;
 let rebuildQueued = false;
@@ -66,11 +245,47 @@ let syncQueued = false;
 let delayedRebuildTimers = [];
 let historyPatched = false;
 let autoLoadArmed = false;
+let autoLoadScrollFrame = 0;
 let isPokingNativeScroll = false;
 let lastAutoLoadAt = 0;
 let lastSyncScheduledAt = 0;
+let seamlessScrollSyncTimer = null;
+let seamlessScrollSyncFollowupTimer = null;
+let seamlessScrollSyncRouteKey = "";
+let seamlessScrollSyncSignature = "";
+let seamlessScrollSyncDirty = false;
+let seamlessScrollSyncDirtyRouteKey = "";
+let seamlessScrollSyncLastRefreshAt = 0;
+let seamlessScrollSyncIntentUntil = 0;
+let seamlessScrollInteractionRevision = 0;
+let rebuiltHashScrollFrame = 0;
+let rebuiltHashScrollAppliedKey = "";
+let rebuiltHashScrollAppliedInteractionRevision = 0;
+let rebuiltHashScrollSuppressedKey = "";
+let rebuiltHashScrollRetryTimers = [];
+let rebuiltHashScrollPendingKey = "";
+let rebuiltHashScrollPendingInteractionRevision = 0;
+let rebuiltHashScrollRetryExhaustedKey = "";
+let rebuiltHashScrollAttemptGeneration = 0;
+let rebuiltHashScrollGuardTimer = 0;
+let rebuiltHashScrollGuardUntil = 0;
+let rebuiltRefreshSequence = 0;
+let newTopicModeSyncRevision = 0;
+let newTopicModeSyncTimers = [];
+let newTopicAutoRefreshVisitActive = false;
+let newTopicAutoRefreshTriggered = false;
+let newTopicAutoRefreshTimer = null;
+let newTopicPageRouteKey = "";
+let newTopicPageRouteFirstSeenAt = 0;
+let newTopicPendingRecheckTimer = null;
+let topicContentCaptureGraceRouteKey = "";
+let topicContentCaptureGraceUntil = 0;
+let topicContentCaptureFallbackTimer = null;
 let lazyPrewarmPromise = null;
 let lazyPrewarmedPageKey = "";
+let homeAvatarPrewarmPromise = null;
+let homeAvatarPrewarmedPageKey = "";
+let lastKnownTopbarAvatarUrl = "";
 let prewarmedSnapshotPageKey = "";
 let prewarmedPostSnapshots = [];
 let originalPagePrewarmPromise = null;
@@ -79,7 +294,20 @@ let firstPagePrevisitInProgress = false;
 let loadingOverlayActive = false;
 let loadingOverlayMessage = "";
 let loadingOverlayWatchdog = null;
+let loadingOverlayFailsafeTimer = null;
+let loadingOverlayAutoHideTimer = null;
+let loadingOverlayStartedAt = 0;
+let loadingOverlaySoft = false;
+let rebuildTransitionVeilFailsafeTimer = null;
+let rebuildTransitionVeilReleaseTimer = null;
+let rebuildTransitionVeilNavigationBound = false;
+let nativeLazyScrollOverlayDepth = 0;
+let userCenterPendingRebuildTimer = null;
 let messageTitleObserver = null;
+let messageTitleSource = null;
+let messageTitleClickHandler = null;
+let messageTitleSyncTimer = null;
+let messageTitleLateSyncTimer = null;
 let nativeAntUiObserver = null;
 let nativeAntUiStabilizeTimer = null;
 let legacyQuoteGuardObserver = null;
@@ -87,8 +315,18 @@ let imageViewerScale = 1;
 let imageViewerOffsetX = 0;
 let imageViewerOffsetY = 0;
 let imageViewerPushedState = false;
-let nativePostSubmitRefreshTimer = null;
+let imageViewerItems = [];
+let imageViewerIndex = -1;
+let imageViewerScrollPositions = null;
+let imageViewerScrollRestoreTimers = [];
+let imageViewerPreviousScrollRestoration = "";
+let imageViewerSuppressHashScrollUntil = 0;
+let nativePostSubmitRefreshTimers = [];
+let editorSubmitOverlayReleaseTimer = null;
+let editorSubmitResultMonitorBound = false;
+let editorSubmitOverlayAwaitingRebuild = false;
 let editorColorPopoverSequence = 0;
+let editorGradientStopSequence = 0;
 let editorColorGlobalInterceptorBound = false;
 let editorFontSizePopoverSequence = 0;
 let editorFontSizeGlobalInterceptorBound = false;
@@ -96,14 +334,57 @@ let legacyColorPickerObserver = null;
 let legacyColorPickerInterval = null;
 let loginRedirectWatcherTimer = null;
 let topbarAuthRedirectBound = false;
+let openIdBindPromptTimer = null;
+let logoutRedirectTimers = [];
+let searchPageEmptyRecheckTimer = null;
+let routeFollowupTimers = [];
+let searchPageRouteKey = "";
+let searchPageRouteFirstSeenAt = 0;
+let readLaterSearchQuery = "";
+let readLaterPage = 1;
+let readLaterSidebarSearchQuery = "";
+let readLaterSidebarPage = 1;
+let readLaterItemsCache = null;
+let readLaterStorageHydratedKey = "";
+let readLaterStorageHydratingKey = "";
+let blacklistFilterType = "all";
+let embeddedBlacklistOpenPath = "";
+let editorSubmitIntermediateTimer = null;
+let editorDraftAutosaveTimers = new WeakMap();
+let normalPageBooted = false;
+let normalPageDomBooted = false;
+let normalPageStartupTimers = [];
+let webVpnBootProbeStarted = false;
+let topbarStabilizeTimers = [];
+let webVpnNakedRouteGuardBound = false;
+let openLinksInNewTabGuardBound = false;
+let rebornReplyTailSubmitGuardBound = false;
+let privateMessageEmojiDismissBound = false;
 const originalPosterIdentityPrefetches = new Map();
+const capturedTopicPostsById = new Map();
+const capturedTopicPostsByFloor = new Map();
+const capturedTopicContentPages = new Set();
+const capturedTopicContentPageCounts = new Map();
 const neutralizedLinks = new WeakMap();
 const reparentedNativeNodes = new WeakMap();
 const nativeEditorStabilizers = new WeakSet();
+const nativeEditorStabilizeTimers = new WeakMap();
+const nativeSignInStabilizers = new WeakSet();
+const markdownEditorInputStates = new WeakMap();
+const markdownEditorLocalPreviews = new WeakMap();
 const nativeUserCenterStabilizers = new WeakSet();
 const nativeTopbarUserStabilizers = new WeakSet();
+const nativeTopbarMenuCloseTimers = new WeakMap();
 const proxyControlSyncTimers = new WeakMap();
+const proxyControlSyncObservers = new WeakMap();
+const handledEditorSubmitMonitorEvents = new Set();
 const searchSuggestionCache = new Map();
+let searchHistoryCache = null;
+let searchHistoryStorageHydratedKey = "";
+let searchHistoryStorageHydratingKey = "";
+const homeHotRankingStates = new Map();
+const postAwardDeltaCache = new Map();
+const blacklistRevealScopes = new Set();
 let searchSuggestionLastFetchAt = 0;
 let searchSuggestionSequence = 0;
 let aiSearchSuggestionLastFetchAt = 0;
@@ -119,7 +400,6 @@ let securityWatermarkObserver = null;
 let securityWatermarkCode = "";
 let securityWatermarkCachedCode = "";
 let securityWatermarkCachedAt = 0;
-let securityWatermarkBridgeListenerBound = false;
 let securityWatermarkOffsetX = 0;
 let securityWatermarkOffsetY = 0;
 let securityWatermarkLastFrameAt = 0;
@@ -170,9 +450,11 @@ const TOPIC_TIME_PATTERN = "(?:刚刚|\\d+\\s*(?:秒前|分钟前|小时前|天�
 const TOPIC_TIME_RE = new RegExp(`^${TOPIC_TIME_PATTERN}$`);
 
 function normalizeSettings(settings = {}) {
+  const theme = THEME_IDS.has(settings.theme) ? settings.theme : DEFAULT_SETTINGS.theme;
   return {
     ...DEFAULT_SETTINGS,
     ...settings,
+    theme,
     density: DEFAULT_SETTINGS.density,
     neutralizeNativeSkin: DEFAULT_SETTINGS.neutralizeNativeSkin,
     rebuildUi: DEFAULT_SETTINGS.rebuildUi,
@@ -186,8 +468,17 @@ function normalizeSettings(settings = {}) {
     advancedFuzzySearch: false,
     fontScale: clampNumber(settings.fontScale, 90, 120, DEFAULT_SETTINGS.fontScale),
     emojiScale: clampNumber(settings.emojiScale, 70, 200, DEFAULT_SETTINGS.emojiScale),
+    prewarmPostImages: Boolean(settings.prewarmPostImages),
     imageLoadDuration: clampNumber(settings.imageLoadDuration, 800, 8000, DEFAULT_SETTINGS.imageLoadDuration),
-    previsitFirstPageForTopicImages: Boolean(settings.previsitFirstPageForTopicImages),
+    previsitFirstPageForTopicImages: Boolean(
+      settings.previsitFirstPageForTopicImages ?? DEFAULT_SETTINGS.previsitFirstPageForTopicImages
+    ),
+    openLinksInNewTab: Boolean(settings.openLinksInNewTab),
+    sideTopbar: Boolean(settings.sideTopbar),
+    replyRebornTail: Boolean(settings.replyRebornTail ?? DEFAULT_SETTINGS.replyRebornTail),
+    expandTopicCardsByDefault: Boolean(
+      settings.expandTopicCardsByDefault ?? DEFAULT_SETTINGS.expandTopicCardsByDefault
+    ),
     aiSearchSuggestProvider: ["openai", "deepseek"].includes(settings.aiSearchSuggestProvider)
       ? settings.aiSearchSuggestProvider
       : DEFAULT_SETTINGS.aiSearchSuggestProvider,
@@ -210,15 +501,41 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, number));
 }
 
+function getThemeLoadingColors() {
+  const root = document.documentElement;
+  const theme = THEME_IDS.has(lastSettings?.theme)
+    ? lastSettings.theme
+    : normalizeSettings({ theme: root.dataset.cc98ComfortTheme }).theme;
+  const fallback = THEME_LOADING_COLORS[theme] || THEME_LOADING_COLORS.soft;
+  const computed = window.getComputedStyle(root);
+  const readVar = (name, fallbackValue) => computed.getPropertyValue(name).trim() || fallbackValue;
+  return {
+    bg: readVar("--cc98-comfort-bg", fallback.bg),
+    surface: readVar("--cc98-comfort-surface", fallback.surface),
+    text: readVar("--cc98-comfort-text", fallback.text),
+    muted: readVar("--cc98-comfort-muted", fallback.muted),
+    border: readVar("--cc98-comfort-border", fallback.border),
+    accent: readVar("--cc98-comfort-accent", fallback.accent),
+    panelBorder: fallback.panelBorder,
+    shadow: fallback.shadow
+  };
+}
+
 function applySettings(settings) {
   lastSettings = normalizeSettings(settings);
+  if (!lastSettings.prewarmPostImages && topicContentCaptureFallbackTimer) {
+    window.clearTimeout(topicContentCaptureFallbackTimer);
+    topicContentCaptureFallbackTimer = null;
+  }
   ensureSecurityWatermark();
   enforceRecentLogoutRedirectIntent();
   bindGlobalTopbarAuthRedirects();
+  bindOpenLinksInNewTabGuard();
 
   const root = document.documentElement;
   root.classList.toggle("cc98-comfort", lastSettings.enabled);
   root.dataset.cc98ComfortTheme = lastSettings.theme;
+  root.dataset.cc98ComfortTone = DARK_THEME_IDS.has(lastSettings.theme) ? "dark" : "light";
   root.dataset.cc98ComfortDensity = lastSettings.density;
   root.dataset.cc98ComfortAvatars = String(lastSettings.softenAvatars);
   root.dataset.cc98ComfortHideSticky = String(lastSettings.hideSticky);
@@ -228,22 +545,38 @@ function applySettings(settings) {
   root.dataset.cc98ComfortRound = String(lastSettings.roundUi);
   root.dataset.cc98ComfortMinimal = String(lastSettings.minimalMode);
   root.dataset.cc98ComfortHomeHotOnly = String(lastSettings.homeHotOnly);
+  root.dataset.cc98ComfortExpandTopicCards = String(lastSettings.expandTopicCardsByDefault);
+  root.dataset.cc98ComfortPrewarmPostImages = String(lastSettings.prewarmPostImages);
   root.dataset.cc98ComfortPrevisitFirstPage = String(lastSettings.previsitFirstPageForTopicImages);
+  root.dataset.cc98ComfortOpenLinksInNewTab = String(lastSettings.openLinksInNewTab);
+  root.dataset.cc98ComfortSideTopbar = String(lastSettings.sideTopbar);
   root.style.setProperty("--cc98-comfort-font-scale", `${lastSettings.fontScale}%`);
   root.style.setProperty("--cc98-emoji-size", `${(1.75 * lastSettings.emojiScale / 100).toFixed(3)}em`);
   root.style.setProperty("--cc98-editor-emoji-size", `${(2.2 * lastSettings.emojiScale / 100).toFixed(3)}em`);
   root.style.setProperty("--cc98-comfort-radius", `${lastSettings.cornerRadius}px`);
+  if (!lastSettings.enabled || !lastSettings.rebuildUi) {
+    releaseRebuildTransitionVeil({ immediate: true });
+  }
 
+  if (consumeLoginHomeRefreshIntent()) {
+    return;
+  }
+
+  scheduleOpenIdBindPromptAfterLogin();
+  syncOpenIdBindingWithWebAccount();
+  hydrateReadLaterStorage();
   scheduleFiltering();
   stabilizeEmojiRendering(document);
   scheduleRebuild();
   applyNativeSkinPolicy();
   ensureObserver();
+  ensureRebuiltAppPresenceWatchdog();
   ensureHeadObserver();
   ensureNativeAntUiStabilizer();
   scheduleNativeAntUiStabilize();
   patchHistoryNavigation();
   handleTopicFirstPagePrevisitNavigation();
+  markCurrentTopicReadLaterRead();
 }
 
 function loadSettings() {
@@ -257,6 +590,134 @@ function parseList(value) {
     .split(/[\n,，;；]+/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeBlockedUserId(value) {
+  return cleanupPostText(value)
+    .replace(/^(?:uid|用户\s*uid|id|用户\s*id)\s*[:：]?\s*/i, "")
+    .trim();
+}
+
+function normalizeBlockedUid(value) {
+  const text = normalizeBlockedUserId(value);
+  return /^\d+$/.test(text) ? text : "";
+}
+
+function normalizeUserIdentityText(value) {
+  return normalizeBlockedUserId(value).toLowerCase();
+}
+
+function getBlacklistRules(settings = lastSettings) {
+  return {
+    boards: parseList(settings?.blockedBoards),
+    titleKeywords: parseList(settings?.blockedTitleKeywords),
+    userIds: [...new Set(parseList(settings?.blockedUserIds).map(normalizeBlockedUserId).filter(Boolean))],
+    placeholderText: String(settings?.placeholderText || DEFAULT_SETTINGS.placeholderText).trim() || DEFAULT_SETTINGS.placeholderText
+  };
+}
+
+function hasBlacklistRules(settings = lastSettings) {
+  const rules = getBlacklistRules(settings);
+  return rules.boards.length > 0 || rules.titleKeywords.length > 0 || rules.userIds.length > 0;
+}
+
+function userRuleMatchesIdentity(rule, identity = {}) {
+  const normalizedRule = normalizeUserIdentityText(rule);
+  if (!normalizedRule) {
+    return false;
+  }
+  const textValues = [
+    identity.id,
+    identity.user,
+    ...(identity.ids || []),
+    ...(identity.users || [])
+  ].map(normalizeUserIdentityText).filter(Boolean);
+  if (textValues.includes(normalizedRule)) {
+    return true;
+  }
+  const uidRule = normalizeBlockedUid(rule);
+  if (!uidRule) {
+    return false;
+  }
+  const uidValues = [
+    identity.uid,
+    ...(identity.uids || [])
+  ].map(normalizeBlockedUid).filter(Boolean);
+  return uidValues.includes(uidRule);
+}
+
+function getUserBlockReason(identity = {}, settings = lastSettings) {
+  const matched = getBlacklistRules(settings).userIds.find((rule) => userRuleMatchesIdentity(rule, identity));
+  if (!matched) {
+    return "";
+  }
+  return normalizeBlockedUid(matched) ? `UID：${matched}` : `用户 ID：${matched}`;
+}
+
+function isUserIdBlocked(identity, settings = lastSettings) {
+  const normalized = normalizeBlockedUserId(identity);
+  return Boolean(normalized && getUserBlockReason({ id: normalized, uid: normalized }, settings));
+}
+
+function getBlockedUserReason(identity) {
+  return getUserBlockReason(typeof identity === "object" ? identity : { id: identity, uid: identity });
+}
+
+function writeSettingsPatch(patch) {
+  const next = normalizeSettings({
+    ...(lastSettings || DEFAULT_SETTINGS),
+    ...patch
+  });
+  lastSettings = next;
+  try {
+    chrome.storage.local.set({ [STORAGE_KEY]: next });
+  } catch {
+    // Storage may be unavailable on local file previews; keep the in-memory state.
+  }
+  scheduleFiltering();
+  scheduleRebuild();
+}
+
+function writeBlacklistRules(rules) {
+  writeSettingsPatch({
+    blockedBoards: (rules.boards || []).map((item) => String(item).trim()).filter(Boolean).join("\n"),
+    blockedTitleKeywords: (rules.titleKeywords || []).map((item) => String(item).trim()).filter(Boolean).join("\n"),
+    blockedUserIds: [...new Set((rules.userIds || []).map(normalizeBlockedUserId).filter(Boolean))].join("\n"),
+    placeholderText: String(rules.placeholderText || DEFAULT_SETTINGS.placeholderText).trim() || DEFAULT_SETTINGS.placeholderText
+  });
+}
+
+function getBlacklistRevealStorageKey(prefix, id = "") {
+  return `${prefix}${getRoutePageKey()}:${String(id || "").trim()}`;
+}
+
+function isBlacklistRevealed(prefix, id = "") {
+  return blacklistRevealScopes.has(getBlacklistRevealStorageKey(prefix, id));
+}
+
+function revealBlacklistScope(prefix, id = "") {
+  blacklistRevealScopes.add(getBlacklistRevealStorageKey(prefix, id));
+}
+
+function getBlacklistItemRevealId(item) {
+  return [
+    item?.type || "",
+    item?.id || "",
+    item?.href || "",
+    item?.uid || ""
+  ].filter(Boolean).join(":");
+}
+
+function isBlacklistItemRevealed(item) {
+  const id = getBlacklistItemRevealId(item);
+  return Boolean(id && isBlacklistRevealed(BLACKLIST_ITEM_REVEAL_PREFIX, id));
+}
+
+function revealBlacklistItem(item) {
+  const id = getBlacklistItemRevealId(item);
+  if (id) {
+    revealBlacklistScope(BLACKLIST_ITEM_REVEAL_PREFIX, id);
+  }
 }
 
 function normalizeText(value) {
@@ -296,14 +757,63 @@ function getTitleText(item) {
 }
 
 function getUserIds(item) {
-  const ids = [];
-  item.querySelectorAll('a[href*="/user/id/"]').forEach((link) => {
-    const match = link.href.match(/\/user\/id\/(\d+)/);
-    if (match) {
-      ids.push(match[1]);
+  const collectLinkIds = (selectors) => {
+    const ids = [];
+    item.querySelectorAll(selectors.join(",")).forEach((link) => {
+      const match = link.href?.match?.(/\/user\/id\/(\d+)/);
+      if (match) {
+        ids.push(match[1]);
+      }
+    });
+    return ids;
+  };
+  const primaryIds = collectLinkIds([
+    ".focus-topic-left[href*='/user/id/']",
+    ".card-topic-userName[href*='/user/id/']",
+    ".board-postItem-userName[href*='/user/id/']",
+    ".board-postItem-userName a[href*='/user/id/']"
+  ]);
+  const ids = primaryIds.length ? primaryIds : collectLinkIds(['a[href*="/user/id/"]']);
+  const idMatch = String(item.id || "").match(/(?:^|_)(\d{3,})(?:$|_)/);
+  if (idMatch) {
+    ids.push(idMatch[1]);
+  }
+  ["data-user-id", "data-uid", "data-author-id"].forEach((attr) => {
+    const value = item.getAttribute?.(attr);
+    const uid = normalizeBlockedUid(value);
+    if (uid) {
+      ids.push(uid);
     }
   });
   return [...new Set(ids)];
+}
+
+function getUserIdentityTexts(item) {
+  const collectTexts = (selectors) => {
+    const texts = [];
+    item.querySelectorAll(selectors.join(",")).forEach((node) => {
+      const text = cleanupPostText(node.textContent);
+      if (text) {
+        texts.push(text);
+      }
+    });
+    return [...new Set(texts.map(normalizeBlockedUserId).filter(Boolean))];
+  };
+  const primarySelectors = [
+    ".focus-topic-left[href*='/user/']",
+    ".card-topic-userName[href*='/user/']",
+    ".board-postItem-userName[href*='/user/']",
+    ".board-postItem-userName a[href*='/user/']",
+    ".message-message-pName"
+  ];
+  const primary = collectTexts(primarySelectors);
+  if (primary.length) {
+    return primary;
+  }
+  return collectTexts([
+    "a[href*='/user/id/']",
+    "a[href*='/user/name/']"
+  ]);
 }
 
 function getFirstText(root, selector) {
@@ -316,7 +826,7 @@ function normalizeHref(href) {
     return value || "#";
   }
   try {
-    return new URL(value, location.origin).href;
+    return makeAbsoluteCc98Url(value);
   } catch {
     return value;
   }
@@ -327,8 +837,9 @@ function getFirstLink(root, selector) {
   if (!link) {
     return null;
   }
+  const externalHref = getWebVpnExternalProxyDirectHref(link);
   return {
-    href: normalizeHref(link.getAttribute("href") || link.href || "#"),
+    href: normalizeHref(externalHref || link.getAttribute("href") || link.href || "#"),
     text: link.textContent?.trim() ?? ""
   };
 }
@@ -344,20 +855,77 @@ function createElement(tagName, className, text) {
   return element;
 }
 
+function getLinkNewTabHref(link) {
+  if (!(link instanceof HTMLAnchorElement)) {
+    return "";
+  }
+  const externalHref = repairWebVpnExternalProxyLink(link);
+  if (externalHref) {
+    return externalHref;
+  }
+  const rawHref = String(link.getAttribute("href") || link.href || "").trim();
+  if (!rawHref || rawHref === "#" || /^(?:javascript|mailto|tel):/i.test(rawHref)) {
+    return "";
+  }
+  return repairWebVpnNakedCc98Href(makeAbsoluteCc98Url(rawHref));
+}
+
+function shouldForceLinkNewTab(link, href = getLinkNewTabHref(link)) {
+  if (!lastSettings?.openLinksInNewTab || !(link instanceof HTMLAnchorElement) || !href) {
+    return false;
+  }
+  if (link.hasAttribute("download") || link.classList.contains("download-file") || link.classList.contains("cc98-rebuild-download-button")) {
+    return false;
+  }
+  if (link.closest(".download-file, .cc98-rebuild-download-button, [data-cc98-rebuild-no-new-tab], .cc98-image-viewer")) {
+    return false;
+  }
+  return true;
+}
+
+function bindOpenLinksInNewTabGuard() {
+  if (openLinksInNewTabGuardBound) {
+    return;
+  }
+  openLinksInNewTabGuardBound = true;
+  document.addEventListener("click", (event) => {
+    if (!lastSettings?.openLinksInNewTab || event.defaultPrevented || event.button !== 0) {
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    const link = event.target?.closest?.("a[href]");
+    if (!(link instanceof HTMLAnchorElement) || link.target === "_blank") {
+      return;
+    }
+    const href = getLinkNewTabHref(link);
+    if (!shouldForceLinkNewTab(link, href)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    window.open(href, "_blank", "noopener");
+  }, true);
+}
+
 function createLink(className, text, href) {
   const link = createElement("a", className, text || href || "打开");
-  link.href = href || "#";
-  const isCc98Link = href && (
-    href.startsWith(location.origin)
-    || href.includes("cc98.org")
-    || href.includes("www-cc98-org-s.webvpn.zju.edu.cn")
-  );
-  if (href && href !== "#" && !isCc98Link) {
+  link.href = makeAbsoluteCc98Url(href || "#");
+  repairWebVpnExternalProxyLink(link);
+  const normalizedHref = link.href || String(href || "");
+  const isCc98Link = Boolean(href && isCc98InternalNavigationHref(normalizedHref));
+  const forceNewTab = shouldForceLinkNewTab(link, normalizedHref);
+  if (href && href !== "#" && (!isCc98Link || forceNewTab)) {
     link.target = "_blank";
-    link.rel = "noreferrer";
+    link.rel = isCc98Link ? "noopener" : "noreferrer";
   }
   if (isCc98Link) {
     link.addEventListener("click", () => {
+      if (!forceNewTab && isWebVpnHost() && stripUrlHash(link.href) !== stripUrlHash(location.href)) {
+        showLoadingOverlay("正在通过 WebVPN 跳转...");
+      }
       scheduleDelayedRebuilds();
     });
   }
@@ -366,6 +934,99 @@ function createLink(className, text, href) {
 
 function getRebuiltFloorAnchorId(floor) {
   return `cc98-floor-${floor}`;
+}
+
+function getRebuiltHashScrollKey() {
+  const hash = String(location.hash || "").trim();
+  return hash ? `${getRoutePageKey()}${hash}` : "";
+}
+
+function cancelRebuiltHashScrollAttempts() {
+  rebuiltHashScrollAttemptGeneration += 1;
+  if (rebuiltHashScrollFrame) {
+    window.cancelAnimationFrame(rebuiltHashScrollFrame);
+    rebuiltHashScrollFrame = 0;
+  }
+  rebuiltHashScrollRetryTimers.forEach((timer) => window.clearTimeout(timer));
+  rebuiltHashScrollRetryTimers = [];
+}
+
+function cancelRebuiltHashScrollGuard() {
+  if (rebuiltHashScrollGuardTimer) {
+    window.clearTimeout(rebuiltHashScrollGuardTimer);
+    rebuiltHashScrollGuardTimer = 0;
+  }
+  rebuiltHashScrollGuardUntil = 0;
+}
+
+function getRebuiltHashScrollTargetTop(card) {
+  if (!(card instanceof HTMLElement)) {
+    return 0;
+  }
+  const topbarBottom = document.querySelector("#cc98-comfort-app .cc98-rebuild-topbar")
+    ?.getBoundingClientRect?.().bottom || 0;
+  const scrollMarginTop = Number.parseFloat(getComputedStyle(card).scrollMarginTop) || 0;
+  return Math.max(scrollMarginTop, topbarBottom + 8);
+}
+
+function isRebuiltHashCardAtAnchor(card) {
+  if (!(card instanceof HTMLElement)) {
+    return false;
+  }
+  const rect = card.getBoundingClientRect();
+  const targetTop = getRebuiltHashScrollTargetTop(card);
+  // Browser implementations differ slightly in how they apply
+  // scroll-margin when a fixed header is present.  Accept a generous band
+  // around the header, but still reject a card that is far below/above the
+  // viewport after an unexpected page-top reset.
+  return rect.top >= -40 && rect.top <= Math.max(160, targetTop + 72);
+}
+
+function scheduleRebuiltHashScrollGuard() {
+  if (rebuiltHashScrollGuardTimer) {
+    return;
+  }
+  rebuiltHashScrollGuardTimer = window.setTimeout(() => {
+    rebuiltHashScrollGuardTimer = 0;
+    const key = getRebuiltHashScrollKey();
+    if (!key
+      || rebuiltHashScrollAppliedKey !== key
+      || rebuiltHashScrollAppliedInteractionRevision !== seamlessScrollInteractionRevision
+      || Date.now() >= rebuiltHashScrollGuardUntil) {
+      cancelRebuiltHashScrollGuard();
+      return;
+    }
+
+    let floor = null;
+    try {
+      const url = new URL(location.href);
+      const candidates = getTopicHashFloorCandidatesForUrl(url);
+      floor = candidates.find((candidate) => getRebuiltPostCardByFloor(candidate)) || null;
+    } catch {
+      floor = null;
+    }
+    const card = floor ? getRebuiltPostCardByFloor(floor) : null;
+    if (card && !isRebuiltHashCardAtAnchor(card)) {
+      scrollToRebuiltFloor(floor, { behavior: "auto" });
+    }
+    scheduleRebuiltHashScrollGuard();
+  }, REBUILT_HASH_SCROLL_GUARD_CHECK_MS);
+}
+
+function armRebuiltHashScrollGuard() {
+  rebuiltHashScrollGuardUntil = Date.now() + REBUILT_HASH_SCROLL_GUARD_MS;
+  scheduleRebuiltHashScrollGuard();
+}
+
+function clearRebuiltHashScrollIntent() {
+  cancelRebuiltHashScrollAttempts();
+  cancelRebuiltHashScrollGuard();
+  rebuiltHashScrollAppliedKey = "";
+  rebuiltHashScrollAppliedInteractionRevision = 0;
+  rebuiltHashScrollSuppressedKey = "";
+  rebuiltHashScrollPendingKey = "";
+  rebuiltHashScrollPendingInteractionRevision = 0;
+  rebuiltHashScrollRetryExhaustedKey = "";
 }
 
 function getFloorFromHash(hash) {
@@ -385,7 +1046,45 @@ function buildTopicFloorHref(topicId, floor, origin = location.origin, search = 
   }
   const page = getTopicPageFromFloor(floor);
   const suffix = page === 1 ? "" : `/${page}`;
-  return `${origin}/topic/${topicId}${suffix}${search || ""}#${floor}`;
+  return buildCc98RouteHref(`/topic/${topicId}${suffix}${search || ""}#${floor}`);
+}
+
+function getTopicPathTarget(pathname = "") {
+  const match = String(pathname || "").match(/\/topic\/(\d+)(?:\/(\d+))?\/?$/i);
+  if (!match) {
+    return null;
+  }
+  const page = Number(match[2] || 1);
+  return {
+    topicId: match[1],
+    page: Number.isFinite(page) && page > 0 ? page : 1
+  };
+}
+
+function getTopicHashFloorCandidatesForUrl(url) {
+  const rawFloor = getFloorFromHash(url?.hash || "");
+  if (!rawFloor) {
+    return [];
+  }
+  const target = getTopicPathTarget(url?.pathname || "");
+  const targetPage = target?.page || getTopicPageInfo()?.current || 1;
+  if (targetPage > 1 && rawFloor <= 10) {
+    const absoluteFloor = (targetPage - 1) * 10 + rawFloor;
+    // Different native views expose either an absolute floor or a page-local
+    // floor.  Keep both candidates until the rebuilt cards tell us which form
+    // this page uses.
+    return [...new Set([absoluteFloor, rawFloor])];
+  }
+  return [rawFloor];
+}
+
+function resolveTopicHashFloorForUrl(url) {
+  const candidates = getTopicHashFloorCandidatesForUrl(url);
+  if (!candidates.length) {
+    return null;
+  }
+  const mounted = candidates.find((floor) => getRebuiltPostCardByFloor(floor));
+  return mounted || candidates[candidates.length - 1];
 }
 
 function getQuotedOriginalFloorFromText(text) {
@@ -426,7 +1125,25 @@ function getOriginalPostQuoteTargetFromLink(link) {
     return null;
   }
   const pageInfo = getTopicPageInfo();
-  const topicId = url.pathname.match(/\/topic\/(\d+)/i)?.[1] || pageInfo?.topicId || "";
+  const topicTarget = getTopicPathTarget(url.pathname);
+  let topicId = topicTarget?.topicId || "";
+  if (!topicId && pageInfo) {
+    let currentUrl = null;
+    try {
+      currentUrl = new URL(location.href);
+    } catch {
+      currentUrl = null;
+    }
+    const isCurrentTopicDocument = Boolean(
+      currentUrl
+      && url.origin === currentUrl.origin
+      && url.pathname === currentUrl.pathname
+      && url.search === currentUrl.search
+    );
+    if (isCurrentTopicDocument) {
+      topicId = pageInfo.topicId;
+    }
+  }
   if (!topicId) {
     return null;
   }
@@ -470,20 +1187,27 @@ function getSameTopicFloorFromLink(link) {
     return null;
   }
 
-  const floor = getFloorFromHash(url.hash);
   const pageInfo = getTopicPageInfo();
-  if (!floor || !pageInfo) {
+  if (!pageInfo) {
     return null;
   }
 
-  const targetTopic = url.pathname.match(/\/topic\/(\d+)(?:\/\d+)?$/i)?.[1];
+  const target = getTopicPathTarget(url.pathname);
+  const targetTopic = target?.topicId || "";
   if (targetTopic && targetTopic !== pageInfo.topicId) {
     return null;
   }
   if (!targetTopic && (url.origin !== location.origin || url.pathname !== location.pathname || url.search !== location.search)) {
     return null;
   }
+  if (target?.page && target.page !== pageInfo.current) {
+    return null;
+  }
 
+  const floor = resolveTopicHashFloorForUrl(url);
+  if (!floor) {
+    return null;
+  }
   return getRebuiltPostCardByFloor(floor) ? floor : null;
 }
 
@@ -505,6 +1229,10 @@ function scrollToRebuiltFloor(floor, options = {}) {
 
   if (options.updateHash) {
     history.pushState(null, "", `${location.pathname}${location.search}#${floor}`);
+    rebuiltHashScrollAppliedKey = getRebuiltHashScrollKey();
+    rebuiltHashScrollAppliedInteractionRevision = seamlessScrollInteractionRevision;
+    rebuiltHashScrollSuppressedKey = "";
+    armRebuiltHashScrollGuard();
   }
   return true;
 }
@@ -519,7 +1247,9 @@ function bindRebuiltFloorLinks(app) {
     if (quoteTarget) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (!scrollToRebuiltFloor(quoteTarget.floor, { updateHash: true })) {
+      const currentTopicId = getTopicPageInfo()?.topicId || "";
+      const isSameTopic = Boolean(currentTopicId && quoteTarget.topicId === currentTopicId);
+      if (!isSameTopic || !scrollToRebuiltFloor(quoteTarget.floor, { updateHash: true })) {
         navigateToRebuiltHref(quoteTarget.href);
       }
       return;
@@ -535,14 +1265,140 @@ function bindRebuiltFloorLinks(app) {
   }, true);
 }
 
-function scrollToCurrentRebuiltHash() {
-  const floor = getFloorFromHash(location.hash);
+function attemptCurrentRebuiltHashScroll(key, generation, options = {}) {
+  const forceApplied = Boolean(options.forceApplied);
+  if (generation !== rebuiltHashScrollAttemptGeneration
+    || getRebuiltHashScrollKey() !== key
+    || (!forceApplied && rebuiltHashScrollAppliedKey === key)
+    || rebuiltHashScrollSuppressedKey === key) {
+    return;
+  }
+
+  if (forceApplied
+    && rebuiltHashScrollAppliedKey === key
+    && rebuiltHashScrollAppliedInteractionRevision !== seamlessScrollInteractionRevision) {
+    return;
+  }
+
+  // A real wheel/touch/keyboard/drag interaction wins over delayed hash
+  // restoration.  Keep this check tied to the first attempt for this route;
+  // native fragment restoration and later content mutations must not reset
+  // that baseline and accidentally pull the reader back.
+  if (seamlessScrollInteractionRevision !== rebuiltHashScrollPendingInteractionRevision) {
+    rebuiltHashScrollSuppressedKey = key;
+    cancelRebuiltHashScrollAttempts();
+    return;
+  }
+
+  let floor = null;
+  try {
+    // Try both absolute and page-local floor forms; the mounted rebuilt card
+    // is the authoritative indication of which form this page uses.
+    const url = new URL(location.href);
+    const candidates = getTopicHashFloorCandidatesForUrl(url);
+    floor = candidates.find((candidate) => getRebuiltPostCardByFloor(candidate)) || null;
+  } catch {
+    floor = null;
+  }
   if (!floor) {
     return;
   }
-  requestAnimationFrame(() => {
-    scrollToRebuiltFloor(floor, { behavior: "auto" });
+
+  if (scrollToRebuiltFloor(floor, { behavior: "auto" })) {
+    rebuiltHashScrollAppliedKey = key;
+    rebuiltHashScrollAppliedInteractionRevision = seamlessScrollInteractionRevision;
+    cancelRebuiltHashScrollAttempts();
+    armRebuiltHashScrollGuard();
+  }
+}
+
+function scheduleCurrentRebuiltHashAttempt(key, generation, options = {}) {
+  const forceApplied = Boolean(options.forceApplied);
+  if (generation !== rebuiltHashScrollAttemptGeneration
+    || getRebuiltHashScrollKey() !== key
+    || (!forceApplied && rebuiltHashScrollAppliedKey === key)
+    || rebuiltHashScrollSuppressedKey === key) {
+    return;
+  }
+  if (rebuiltHashScrollFrame) {
+    window.cancelAnimationFrame(rebuiltHashScrollFrame);
+  }
+  rebuiltHashScrollFrame = window.requestAnimationFrame(() => {
+    rebuiltHashScrollFrame = 0;
+    attemptCurrentRebuiltHashScroll(key, generation, { forceApplied });
   });
+}
+
+function scrollToCurrentRebuiltHash(options = {}) {
+  const forceApplied = Boolean(options.forceApplied);
+  const key = getRebuiltHashScrollKey();
+  if (!key
+    || (!forceApplied && rebuiltHashScrollAppliedKey === key)
+    || rebuiltHashScrollSuppressedKey === key) {
+    return;
+  }
+  if (forceApplied
+    && rebuiltHashScrollAppliedKey === key
+    && rebuiltHashScrollAppliedInteractionRevision !== seamlessScrollInteractionRevision) {
+    return;
+  }
+
+  let floor = null;
+  try {
+    floor = resolveTopicHashFloorForUrl(new URL(location.href));
+  } catch {
+    floor = null;
+  }
+  if (!floor) {
+    return;
+  }
+
+  if (rebuiltHashScrollPendingKey !== key) {
+    cancelRebuiltHashScrollAttempts();
+    rebuiltHashScrollPendingKey = key;
+    rebuiltHashScrollPendingInteractionRevision = seamlessScrollInteractionRevision;
+    rebuiltHashScrollRetryExhaustedKey = "";
+  } else if (seamlessScrollInteractionRevision !== rebuiltHashScrollPendingInteractionRevision) {
+    rebuiltHashScrollSuppressedKey = key;
+    cancelRebuiltHashScrollAttempts();
+    return;
+  }
+
+  const generation = rebuiltHashScrollAttemptGeneration;
+  // Try immediately, then retry only while the rebuilt target is still
+  // unavailable.  This covers the initial native-to-rebuilt handoff and late
+  // WebVPN responses without creating a recurring scroll listener.
+  attemptCurrentRebuiltHashScroll(key, generation, { forceApplied });
+  if ((!forceApplied && rebuiltHashScrollAppliedKey === key)
+    || rebuiltHashScrollSuppressedKey === key) {
+    return;
+  }
+  if (rebuiltHashScrollFrame || rebuiltHashScrollRetryTimers.length) {
+    return;
+  }
+  // If the bounded retry window has elapsed, keep later native-content syncs
+  // as a cheap single probe rather than restarting another timer batch.
+  if (rebuiltHashScrollRetryExhaustedKey === key) {
+    return;
+  }
+
+  const retryTimers = [];
+  REBUILT_HASH_SCROLL_RETRY_DELAYS.slice(1).forEach((delay) => {
+    let timer = 0;
+    timer = window.setTimeout(() => {
+      const index = retryTimers.indexOf(timer);
+      if (index >= 0) {
+        retryTimers.splice(index, 1);
+      }
+      rebuiltHashScrollRetryTimers = retryTimers;
+      if (retryTimers.length === 0) {
+        rebuiltHashScrollRetryExhaustedKey = key;
+      }
+      scheduleCurrentRebuiltHashAttempt(key, generation, { forceApplied });
+    }, delay);
+    retryTimers.push(timer);
+  });
+  rebuiltHashScrollRetryTimers = retryTimers;
 }
 
 function createButton(className, text, onClick) {
@@ -559,6 +1415,40 @@ function getViewerImageSrc(image) {
   return makeAbsoluteCc98Url(getMediaUrl(image) || image.currentSrc || image.src || "");
 }
 
+function isImageViewerCandidate(image) {
+  if (!(image instanceof HTMLImageElement) || image.classList.contains("cc98-rebuild-inline-emoji")) {
+    return false;
+  }
+  if (!image.classList.contains("cc98-rebuild-content-image") && !image.classList.contains("cc98-rebuild-board-image")) {
+    return false;
+  }
+  return Boolean(getViewerImageSrc(image));
+}
+
+function getImageViewerItems(activeImage) {
+  const root = document.querySelector("#cc98-comfort-app") || document;
+  const images = [...root.querySelectorAll("img.cc98-rebuild-content-image, img.cc98-rebuild-board-image")]
+    .filter(isImageViewerCandidate);
+  const items = images.map((node) => ({
+    node,
+    src: getViewerImageSrc(node),
+    alt: node.alt || ""
+  })).filter((item) => item.src);
+  let index = items.findIndex((item) => item.node === activeImage);
+  if (index < 0) {
+    const activeSrc = getViewerImageSrc(activeImage);
+    index = items.findIndex((item) => item.src === activeSrc);
+  }
+  if (index < 0 && activeImage instanceof HTMLImageElement) {
+    const src = getViewerImageSrc(activeImage);
+    if (src) {
+      items.unshift({ node: activeImage, src, alt: activeImage.alt || "" });
+      index = 0;
+    }
+  }
+  return { items, index: Math.max(0, index) };
+}
+
 function updateImageViewerTransform() {
   const image = document.querySelector("#cc98-comfort-image-viewer img");
   if (image) {
@@ -566,20 +1456,174 @@ function updateImageViewerTransform() {
   }
 }
 
-function removeImageViewer() {
-  document.querySelector("#cc98-comfort-image-viewer")?.remove();
-  imageViewerPushedState = false;
+function resetImageViewerTransform() {
   imageViewerScale = 1;
   imageViewerOffsetX = 0;
   imageViewerOffsetY = 0;
+  updateImageViewerTransform();
+}
+
+function zoomImageViewerAt(viewerImage, clientX, clientY, nextScale) {
+  if (!(viewerImage instanceof HTMLImageElement)) {
+    return;
+  }
+  const stage = viewerImage.closest(".cc98-image-viewer-stage");
+  const stageRect = stage?.getBoundingClientRect?.();
+  const currentScale = imageViewerScale || 1;
+  const clampedScale = Math.min(6, Math.max(0.35, nextScale));
+  if (!stageRect || Math.abs(clampedScale - currentScale) < 0.001) {
+    imageViewerScale = clampedScale;
+    updateImageViewerTransform();
+    return;
+  }
+  const centerX = stageRect.left + stageRect.width / 2;
+  const centerY = stageRect.top + stageRect.height / 2;
+  const ratio = clampedScale / currentScale;
+  imageViewerOffsetX += (1 - ratio) * (clientX - centerX - imageViewerOffsetX);
+  imageViewerOffsetY += (1 - ratio) * (clientY - centerY - imageViewerOffsetY);
+  imageViewerScale = clampedScale;
+  updateImageViewerTransform();
+}
+
+function updateImageViewerSource(resetTransform = true) {
+  const viewer = document.querySelector("#cc98-comfort-image-viewer");
+  const viewerImage = viewer?.querySelector(".cc98-image-viewer-stage img");
+  const item = imageViewerItems[imageViewerIndex];
+  if (!(viewer instanceof HTMLElement) || !(viewerImage instanceof HTMLImageElement) || !item) {
+    return;
+  }
+  viewerImage.src = item.src;
+  viewerImage.alt = item.alt || "";
+  const counter = viewer.querySelector(".cc98-image-viewer-counter");
+  if (counter) {
+    counter.textContent = `${imageViewerIndex + 1} / ${imageViewerItems.length}`;
+  }
+  viewer.querySelectorAll(".cc98-image-viewer-nav").forEach((button) => {
+    button.disabled = imageViewerItems.length <= 1;
+  });
+  const saveButton = viewer.querySelector(".cc98-image-viewer-save");
+  if (saveButton) {
+    saveButton.dataset.href = item.src;
+  }
+  if (resetTransform) {
+    resetImageViewerTransform();
+  }
+}
+
+function switchImageViewer(delta) {
+  if (imageViewerItems.length <= 1) {
+    return;
+  }
+  imageViewerIndex = (imageViewerIndex + delta + imageViewerItems.length) % imageViewerItems.length;
+  updateImageViewerSource(true);
+}
+
+function clearImageViewerScrollRestoreTimers() {
+  imageViewerScrollRestoreTimers.forEach((timer) => window.clearTimeout(timer));
+  imageViewerScrollRestoreTimers = [];
+}
+
+function setImageViewerManualScrollRestoration() {
+  try {
+    imageViewerPreviousScrollRestoration = history.scrollRestoration || "";
+    history.scrollRestoration = "manual";
+  } catch {
+    imageViewerPreviousScrollRestoration = "";
+  }
+}
+
+function restoreImageViewerScrollRestoration() {
+  try {
+    if (imageViewerPreviousScrollRestoration) {
+      history.scrollRestoration = imageViewerPreviousScrollRestoration;
+    }
+  } catch {
+    // Ignore unsupported scroll restoration.
+  }
+  imageViewerPreviousScrollRestoration = "";
+}
+
+function scheduleRestoreImageViewerScroll() {
+  const positions = imageViewerScrollPositions;
+  if (!positions) {
+    restoreImageViewerScrollRestoration();
+    return;
+  }
+  clearImageViewerScrollRestoreTimers();
+  imageViewerSuppressHashScrollUntil = Date.now() + 1200;
+  restoreImageViewerScrollPosition(positions);
+  [30, 90, 180, 360, 720].forEach((delay) => {
+    imageViewerScrollRestoreTimers.push(window.setTimeout(() => {
+      if (document.querySelector("#cc98-comfort-image-viewer")) {
+        return;
+      }
+      restoreImageViewerScrollPosition(positions);
+      if (delay >= 620) {
+        restoreImageViewerScrollRestoration();
+        imageViewerScrollPositions = null;
+      }
+    }, delay));
+  });
+}
+
+function captureImageViewerScrollPosition() {
+  const root = document.querySelector("#root");
+  return {
+    x: window.scrollX || document.documentElement?.scrollLeft || document.body?.scrollLeft || 0,
+    y: window.scrollY || document.scrollingElement?.scrollTop || document.documentElement?.scrollTop || document.body?.scrollTop || 0,
+    rootTop: root instanceof HTMLElement ? root.scrollTop || 0 : 0,
+    rootLeft: root instanceof HTMLElement ? root.scrollLeft || 0 : 0
+  };
+}
+
+function restoreImageViewerScrollPosition(position) {
+  if (!position || typeof position !== "object") {
+    return;
+  }
+  const root = document.querySelector("#root");
+  if (root instanceof HTMLElement) {
+    root.scrollTop = Number(position.rootTop) || 0;
+    root.scrollLeft = Number(position.rootLeft) || 0;
+  }
+  const x = Number(position.x) || 0;
+  const y = Number(position.y) || 0;
+  if (document.scrollingElement) {
+    document.scrollingElement.scrollTop = y;
+    document.scrollingElement.scrollLeft = x;
+  }
+  window.scrollTo({ top: y, left: x, behavior: "auto" });
+}
+
+function removeImageViewer(options = {}) {
+  document.querySelector("#cc98-comfort-image-viewer")?.remove();
+  imageViewerPushedState = false;
+  imageViewerItems = [];
+  imageViewerIndex = -1;
+  imageViewerScale = 1;
+  imageViewerOffsetX = 0;
+  imageViewerOffsetY = 0;
+  if (options.restoreScroll !== false) {
+    scheduleRestoreImageViewerScroll();
+  } else {
+    clearImageViewerScrollRestoreTimers();
+    imageViewerScrollPositions = null;
+    restoreImageViewerScrollRestoration();
+  }
 }
 
 function closeImageViewer(fromHistory = false) {
   if (fromHistory || !imageViewerPushedState) {
-    removeImageViewer();
+    removeImageViewer({ restoreScroll: true });
     return;
   }
-  history.back();
+  try {
+    if (history.state?.cc98ComfortImageViewer) {
+      history.replaceState({ cc98ComfortImageViewerClosed: true }, "", location.href);
+    }
+  } catch {
+    // Keep closing the viewer even if the history state cannot be updated.
+  }
+  removeImageViewer({ restoreScroll: true });
 }
 
 function openImageViewer(image) {
@@ -587,11 +1631,13 @@ function openImageViewer(image) {
   if (!src) {
     return;
   }
+  const viewerData = getImageViewerItems(image);
 
-  removeImageViewer();
-  imageViewerScale = 1;
-  imageViewerOffsetX = 0;
-  imageViewerOffsetY = 0;
+  removeImageViewer({ restoreScroll: false });
+  imageViewerScrollPositions = captureImageViewerScrollPosition();
+  setImageViewerManualScrollRestoration();
+  imageViewerItems = viewerData.items.length ? viewerData.items : [{ node: image, src, alt: image.alt || "" }];
+  imageViewerIndex = Math.min(Math.max(0, viewerData.index), imageViewerItems.length - 1);
   const viewer = createElement("div", "cc98-image-viewer");
   viewer.id = "cc98-comfort-image-viewer";
   viewer.innerHTML = `
@@ -603,7 +1649,39 @@ function openImageViewer(image) {
   const viewerImage = viewer.querySelector("img");
   viewerImage.src = src;
   viewerImage.alt = image.alt || "";
+  const closeButton = viewer.querySelector(".cc98-image-viewer-close");
+  if (closeButton) {
+    closeButton.textContent = "x";
+  }
+  const stage = viewer.querySelector(".cc98-image-viewer-stage");
+  const counter = createElement("div", "cc98-image-viewer-counter");
+  const saveButton = createButton("cc98-image-viewer-save", "\u4fdd\u5b58", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const href = saveButton.dataset.href || imageViewerItems[imageViewerIndex]?.src || "";
+    requestBrowserDownload(href, href);
+  });
+  const toolbar = createElement("div", "cc98-image-viewer-toolbar");
+  toolbar.append(counter, saveButton);
+  const prevButton = createButton("cc98-image-viewer-nav cc98-image-viewer-prev", "<", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    switchImageViewer(-1);
+  });
+  prevButton.setAttribute("aria-label", "Previous image");
+  const nextButton = createButton("cc98-image-viewer-nav cc98-image-viewer-next", ">", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    switchImageViewer(1);
+  });
+  nextButton.setAttribute("aria-label", "Next image");
+  if (stage) {
+    viewer.insertBefore(toolbar, stage);
+    viewer.insertBefore(prevButton, stage);
+    viewer.append(nextButton);
+  }
   document.body.append(viewer);
+  updateImageViewerSource(true);
 
   history.pushState({ cc98ComfortImageViewer: true }, "", location.href);
   imageViewerPushedState = true;
@@ -621,8 +1699,7 @@ function openImageViewer(image) {
   viewer.addEventListener("wheel", (event) => {
     event.preventDefault();
     const factor = event.deltaY < 0 ? 1.12 : 0.9;
-    imageViewerScale = Math.min(6, Math.max(0.35, imageViewerScale * factor));
-    updateImageViewerTransform();
+    zoomImageViewerAt(viewerImage, event.clientX, event.clientY, imageViewerScale * factor);
   }, { passive: false });
 
   let isDragging = false;
@@ -672,10 +1749,20 @@ function openImageViewer(image) {
       document.removeEventListener("keydown", onKeydown, true);
     }
     if (event.key === "0") {
-      imageViewerScale = 1;
-      imageViewerOffsetX = 0;
-      imageViewerOffsetY = 0;
-      updateImageViewerTransform();
+      resetImageViewerTransform();
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      switchImageViewer(-1);
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      switchImageViewer(1);
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      const href = imageViewerItems[imageViewerIndex]?.src || "";
+      requestBrowserDownload(href, href);
     }
   };
   document.addEventListener("keydown", onKeydown, true);
@@ -684,10 +1771,7 @@ function openImageViewer(image) {
 function bindImageViewer(app) {
   app.addEventListener("click", (event) => {
     const image = event.target?.closest?.("img");
-    if (!(image instanceof HTMLImageElement) || image.classList.contains("cc98-rebuild-inline-emoji")) {
-      return;
-    }
-    if (!image.classList.contains("cc98-rebuild-content-image") && !image.classList.contains("cc98-rebuild-board-image")) {
+    if (!isImageViewerCandidate(image)) {
       return;
     }
     event.preventDefault();
@@ -742,29 +1826,13 @@ function bindPostDownloadButtons(app) {
 
 function triggerOriginalControl(control) {
   if (!(control instanceof HTMLElement)) {
-    return;
+    return false;
   }
-  const target = control.querySelector("i, span, button, a, [role='button']") || control;
-  const rect = control.getBoundingClientRect();
-  const eventInit = {
-    bubbles: true,
-    cancelable: true,
-    composed: true,
-    view: window,
-    clientX: rect.left + Math.max(1, rect.width / 2),
-    clientY: rect.top + Math.max(1, rect.height / 2),
-    button: 0,
-    buttons: 1
-  };
-  if (typeof PointerEvent === "function") {
-    target.dispatchEvent(new PointerEvent("pointerdown", { ...eventInit, pointerId: 1, pointerType: "mouse", isPrimary: true }));
-  }
-  target.dispatchEvent(new MouseEvent("mousedown", eventInit));
-  if (typeof PointerEvent === "function") {
-    target.dispatchEvent(new PointerEvent("pointerup", { ...eventInit, buttons: 0, pointerId: 1, pointerType: "mouse", isPrimary: true }));
-  }
-  target.dispatchEvent(new MouseEvent("mouseup", { ...eventInit, buttons: 0 }));
+  const target = control.matches("button, a, input, label, [role='button']")
+    ? control
+    : (control.querySelector("button, a, input, label, [role='button']") || control);
   target.click();
+  return true;
 }
 
 function getActionKindFromText(text) {
@@ -774,6 +1842,9 @@ function getActionKindFromText(text) {
   }
   if (value.includes("\u8e29")) {
     return "dislike";
+  }
+  if (value.includes("\u8bc4\u5206")) {
+    return "score";
   }
   return "";
 }
@@ -901,78 +1972,6 @@ function getVoteGroupDisplayKind(group) {
     return desiredKind;
   }
   return nativeKind;
-}
-
-function waitForNativeVoteState(action, active, timeout = 900) {
-  const kind = getActionVoteKind(action);
-  if (kind !== "like" && kind !== "dislike") {
-    return Promise.resolve(false);
-  }
-  const startedAt = Date.now();
-  return new Promise((resolve) => {
-    const check = () => {
-      const current = isPostActionActive(action.control, kind);
-      if (current === active) {
-        resolve(true);
-        return;
-      }
-      if (Date.now() - startedAt >= timeout) {
-        resolve(false);
-        return;
-      }
-      window.setTimeout(check, 60);
-    };
-    check();
-  });
-}
-
-function settleVoteGroupNativeState(group, desiredKind, token) {
-  if (!group || group.transitionToken !== token) {
-    return;
-  }
-  const nativeKind = getVoteGroupNativeKind(group);
-  if (nativeKind === desiredKind) {
-    return;
-  }
-  if (!desiredKind && nativeKind) {
-    triggerOriginalControl(group[nativeKind]?.control);
-    return;
-  }
-  if (desiredKind && nativeKind && nativeKind !== desiredKind) {
-    const wrongAction = group[nativeKind];
-    triggerOriginalControl(wrongAction?.control);
-    waitForNativeVoteState(wrongAction, false, 900).then(() => {
-      if (group.transitionToken !== token) {
-        return;
-      }
-      if (!isPostActionActive(group[desiredKind]?.control, desiredKind)) {
-        triggerOriginalControl(group[desiredKind]?.control);
-      }
-    });
-    return;
-  }
-  if (desiredKind && !nativeKind) {
-    triggerOriginalControl(group[desiredKind]?.control);
-  }
-}
-
-function triggerVoteNativeTransition(action, oppositeAction, oppositeWasNativeActive) {
-  const group = action?.voteGroup;
-  const token = group?.transitionToken || 0;
-  const actionKind = getActionVoteKind(action);
-  if (!oppositeWasNativeActive) {
-    triggerOriginalControl(action.control);
-    return;
-  }
-  triggerOriginalControl(oppositeAction.control);
-  waitForNativeVoteState(oppositeAction, false, 1200).then(() => {
-    if (group && group.transitionToken !== token) {
-      return;
-    }
-    if (!isPostActionActive(action.control, actionKind)) {
-      triggerOriginalControl(action.control);
-    }
-  });
 }
 
 function getVoteActionNativeCount(action) {
@@ -1104,10 +2103,89 @@ function enforceVoteGroupMutualExclusion(action) {
   setVoteActionVisual(group.dislike, displayKind === "dislike");
 }
 
+function configureFollowProxyAction(proxy, action) {
+  if (!(proxy instanceof HTMLElement) || !isFollowPostAction(action)) {
+    return;
+  }
+  const currentText = cleanupPostText(proxy.textContent || action.control?.textContent || "");
+  const text = currentText || cleanupPostText(action.displayText || action.text || "");
+  const followed = /^(?:\u53d6\u5173|\u53d6\u6d88\u5173\u6ce8)$/.test(text);
+  proxy.classList.add("cc98-rebuild-post-follow-action");
+  proxy.dataset.followSymbol = followed ? "\u2212" : "+";
+  proxy.dataset.followLabel = followed ? "\u53d6\u6d88\u5173\u6ce8" : "\u5173\u6ce8";
+  proxy.setAttribute("aria-label", followed ? "\u53d6\u6d88\u5173\u6ce8\u6b64\u7528\u6237" : "\u5173\u6ce8\u6b64\u7528\u6237");
+}
+
+function renderNativeFollowControl(action) {
+  if (!(action?.control instanceof HTMLElement) || !isFollowPostAction(action)) {
+    return renderProxyControl(action);
+  }
+
+  const control = action.control;
+  rememberReparentedNativeNode(control);
+  control.classList.add(
+    "cc98-rebuild-mini-action",
+    "cc98-rebuild-post-follow-action",
+    "cc98-rebuild-native-post-follow-action"
+  );
+  if (control instanceof HTMLButtonElement) {
+    control.type = "button";
+  }
+  configureFollowProxyAction(control, action);
+  if (control.dataset.cc98RebuildPostFollowBound !== "true") {
+    control.dataset.cc98RebuildPostFollowBound = "true";
+    control.addEventListener("click", () => {
+      control.classList.add("is-pending");
+      [180, 650, 1400].forEach((delay, index, delays) => {
+        window.setTimeout(() => {
+          if (!control.isConnected) {
+            return;
+          }
+          configureFollowProxyAction(control, {
+            ...action,
+            text: control.textContent || action.text
+          });
+          if (index === delays.length - 1) {
+            control.classList.remove("is-pending");
+          }
+        }, delay);
+      });
+      window.setTimeout(scheduleRebuild, 850);
+      scheduleNativeAntUiStabilize();
+    }, false);
+  }
+  return control;
+}
+
+function setProxyControlDisplayText(proxy, text, kind = "", scoreDelta = NaN) {
+  if (!(proxy instanceof HTMLElement)) {
+    return;
+  }
+  const value = String(text ?? "");
+  const deltaMatch = kind === "score" ? value.match(/([+-]\d+)\s*$/) : null;
+  if (deltaMatch && Number.isFinite(scoreDelta) && scoreDelta !== 0) {
+    const delta = deltaMatch[1];
+    const prefix = value.slice(0, deltaMatch.index);
+    const suffix = value.slice(deltaMatch.index + delta.length);
+    const deltaNode = createElement("span", "cc98-rebuild-action-delta", delta);
+    deltaNode.dataset.awardDelta = scoreDelta > 0 ? "positive" : "negative";
+    proxy.replaceChildren(
+      document.createTextNode(prefix),
+      deltaNode,
+      document.createTextNode(suffix)
+    );
+    return;
+  }
+  proxy.textContent = value;
+}
+
 function syncProxyControlDisplay(proxy, action) {
-  const nativeText = getActionText(action.control) || action.text;
+  resolveCurrentProxyAction(action);
+  const nativeText = getTopicFavoriteDisplayText(action)
+    || action.displayText
+    || getActionText(action.control)
+    || action.text;
   const text = getVoteActionSyncedText(action, nativeText);
-  proxy.textContent = text;
   const normalized = text.replace(/\s+\d+$/, "");
   proxy.dataset.actionType = normalized;
   const kind = getActionVoteKind(action) || getPostActionKind(action.control, text);
@@ -1116,6 +2194,15 @@ function syncProxyControlDisplay(proxy, action) {
   } else {
     delete proxy.dataset.actionKind;
   }
+  const scoreDelta = Number.isFinite(action.awardDelta)
+    ? action.awardDelta
+    : (kind === "score" ? Number(text.match(/([+-]\d+)/)?.[1]) : NaN);
+  if (kind === "score" && Number.isFinite(scoreDelta)) {
+    proxy.dataset.awardDelta = scoreDelta > 0 ? "positive" : (scoreDelta < 0 ? "negative" : "zero");
+  } else {
+    delete proxy.dataset.awardDelta;
+  }
+  setProxyControlDisplayText(proxy, text, kind, scoreDelta);
   const isVoteAction = kind === "like" || kind === "dislike";
   const isActive = isVoteAction && isVoteActionVisuallyActive(action);
   proxy.classList.toggle("is-active", Boolean(isActive));
@@ -1126,18 +2213,7 @@ function syncProxyControlDisplay(proxy, action) {
     setNativeVoteControlVisual(action.control, kind, isActive);
     enforceVoteGroupMutualExclusion(action);
   }
-}
-
-function applyOptimisticPostActionState(button, action) {
-  const kind = getPostActionKind(action.control, action.text);
-  if (kind !== "like" && kind !== "dislike") {
-    return;
-  }
-  button.dataset.actionKind = kind;
-  button.classList.toggle("is-like", kind === "like");
-  button.classList.toggle("is-dislike", kind === "dislike");
-  button.classList.add("is-pending");
-  button.setAttribute("aria-busy", "true");
+  configureFollowProxyAction(proxy, action);
 }
 
 function clearProxyControlSyncTimers(button) {
@@ -1168,8 +2244,327 @@ function scheduleProxyControlDisplaySync(button, action, delays, clearPendingAft
   proxyControlSyncTimers.set(button, timers);
 }
 
+function clearProxyControlSyncObserver(button) {
+  const state = proxyControlSyncObservers.get(button);
+  if (!state) {
+    return;
+  }
+  state.observer.disconnect();
+  window.clearTimeout(state.timeout);
+  proxyControlSyncObservers.delete(button);
+}
+
+function watchProxyControlDisplay(button, action, timeoutMs = 30000) {
+  clearProxyControlSyncObserver(button);
+  const control = resolveCurrentProxyAction(action);
+  if (!(button instanceof HTMLElement) || !(control instanceof HTMLElement)) {
+    return;
+  }
+  const root = control.closest(".topicInfo-info, .topicInfo-title") || control;
+  const observer = new MutationObserver(() => {
+    if (!button.isConnected || !root.isConnected) {
+      clearProxyControlSyncObserver(button);
+      return;
+    }
+    syncProxyControlDisplay(button, action);
+    button.classList.remove("is-pending");
+    button.removeAttribute("aria-busy");
+    clearProxyControlSyncObserver(button);
+    scheduleRebuild();
+  });
+  observer.observe(root, {
+    attributes: true,
+    characterData: true,
+    childList: true,
+    subtree: true
+  });
+  const timeout = window.setTimeout(() => clearProxyControlSyncObserver(button), timeoutMs);
+  proxyControlSyncObservers.set(button, { observer, timeout });
+}
+
+function isTopicShareAction(action) {
+  return action?.scope === "topic" && cleanupPostText(action.text).includes("\u5206\u4eab\u5e16\u5b50\u94fe\u63a5");
+}
+
+function getProxyActionIdentity(action) {
+  const kind = getActionVoteKind(action) || getPostActionKind(action?.control, action?.text || "");
+  if (kind) {
+    return kind;
+  }
+  const label = cleanupPostText(getActionText(action?.control) || action?.text || "")
+    .replace(/\s+[+-]?\d+\s*$/, "");
+  if (/^(?:\u5173\u6ce8|\u53d6\u5173|\u53d6\u6d88\u5173\u6ce8)$/.test(label)) {
+    return "follow";
+  }
+  return label;
+}
+
+function findCurrentNativePostForAction(action) {
+  if (action?.sourcePost instanceof HTMLElement
+    && action.sourcePost.isConnected
+    && !action.sourcePost.closest("#cc98-comfort-app")) {
+    return action.sourcePost;
+  }
+  const posts = [...document.querySelectorAll(".reply")]
+    .filter((post) => post instanceof HTMLElement && !post.closest("#cc98-comfort-app"));
+  if (action?.nativePostId) {
+    const matchedById = posts.find((post) => (
+      getCapturedPostIdCandidates(post).includes(action.nativePostId)
+    ));
+    if (matchedById) {
+      return matchedById;
+    }
+  }
+  const floor = Math.max(0, Number(action?.nativePostFloor) || 0);
+  return floor
+    ? posts.find((post, index) => getPostFloorNumber(post, index) === floor) || null
+    : null;
+}
+
+function resolveCurrentProxyAction(action) {
+  if (!action) {
+    return null;
+  }
+  if (action.control instanceof HTMLElement
+    && action.control.isConnected
+    && (
+      !action.control.closest("#cc98-comfort-app")
+      || action.control.classList.contains("cc98-rebuild-native-post-follow-action")
+    )) {
+    return action.control;
+  }
+
+  let freshAction = null;
+  if (action.scope === "topic") {
+    const current = getTopicToolbarActions();
+    freshAction = isTopicShareAction(action) ? current.share : current.favorite;
+  } else if (action.scope === "post") {
+    const sourcePost = findCurrentNativePostForAction(action);
+    if (sourcePost) {
+      const identity = getProxyActionIdentity(action);
+      freshAction = collectPostActions(sourcePost)
+        .find((candidate) => getProxyActionIdentity(candidate) === identity) || null;
+      action.sourcePost = sourcePost;
+    }
+  }
+
+  if (!(freshAction?.control instanceof HTMLElement)) {
+    return null;
+  }
+  const existingVoteGroup = action.voteGroup;
+  if (existingVoteGroup && freshAction.voteGroup) {
+    ["like", "dislike"].forEach((kind) => {
+      const existing = existingVoteGroup[kind];
+      const fresh = freshAction.voteGroup[kind];
+      if (!existing || !fresh?.control) {
+        return;
+      }
+      existing.control = fresh.control;
+      existing.text = fresh.text || existing.text;
+      existing.href = fresh.href || existing.href;
+      existing.kind = fresh.kind || existing.kind;
+      existing.sourcePost = fresh.sourcePost || action.sourcePost;
+      existing.nativePostId = fresh.nativePostId || action.nativePostId;
+      existing.nativePostFloor = fresh.nativePostFloor || action.nativePostFloor;
+    });
+  }
+  action.control = freshAction.control;
+  action.text = freshAction.text || action.text;
+  action.href = freshAction.href || action.href;
+  action.kind = freshAction.kind || action.kind;
+  return action.control;
+}
+
+function isTopicFavoriteAction(action) {
+  if (action?.scope !== "topic") {
+    return false;
+  }
+  const text = cleanupPostText(getActionText(action.control) || action.text || "")
+    .replace(/\s+\d+\s*$/, "");
+  return /^(?:\u6536\u85cf|\u53d6\u6d88\u6536\u85cf|\u5df2\u6536\u85cf)$/.test(text);
+}
+
+function getTopicShareClipboardText() {
+  const topicInfo = getTopicRouteInfo();
+  const topicId = topicInfo?.topicId || "";
+  const href = topicId
+    ? `https://www.cc98.org/topic/${topicId}`
+    : stripUrlHash(location.href);
+  const title = cleanupPostText(
+    getFirstText(document, "#essay1")
+      || document.title.replace(/\s*-\s*CC98.*$/i, "")
+  );
+  const board = cleanupPostText(
+    getFirstText(document, ".topicInfo-boardMessage a")
+      || getFirstText(document, ".board-head-name")
+  );
+  const label = title ? `${board ? `\u3010${board}\u3011` : ""}${title}` : "";
+  return `${[label, href].filter(Boolean).join(" ")} \u590d\u5236\u672c\u94fe\u63a5\u5230\u6d4f\u89c8\u5668\u6216\u8005\u6253\u5f00\u3010CC98\u3011\u5fae\u4fe1\u5c0f\u7a0b\u5e8f\u67e5\u770b~`.trim();
+}
+
+function fallbackCopyTextToClipboard(text) {
+  if (!text || !document.body) {
+    return false;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;";
+  document.body.append(textarea);
+  textarea.focus({ preventScroll: true });
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  textarea.remove();
+  return copied;
+}
+
+async function copyTextToClipboard(text) {
+  if (!text) {
+    return false;
+  }
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return fallbackCopyTextToClipboard(text);
+    }
+  }
+  return fallbackCopyTextToClipboard(text);
+}
+
+function showRebuiltTransientToast(anchor, text) {
+  if (!document.body) {
+    return;
+  }
+  const toast = createElement("div", "cc98-rebuild-toast");
+  toast.setAttribute("role", "status");
+  toast.setAttribute("aria-live", "polite");
+  const label = createElement("span", "cc98-rebuild-toast-text", text);
+  const close = createButton("cc98-rebuild-toast-close", "\u00d7", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissRebuiltTransientToast(toast);
+  });
+  close.type = "button";
+  close.setAttribute("aria-label", "\u5173\u95ed\u63d0\u793a");
+  toast.append(label, close);
+  document.body.append(toast);
+  const anchorRect = anchor instanceof HTMLElement ? anchor.getBoundingClientRect() : null;
+  const toastRect = toast.getBoundingClientRect();
+  const margin = 12;
+  let top = anchorRect ? anchorRect.top - toastRect.height - 10 : margin;
+  if (top < margin && anchorRect) {
+    top = anchorRect.bottom + 10;
+  }
+  const left = anchorRect
+    ? anchorRect.left + anchorRect.width / 2 - toastRect.width / 2
+    : window.innerWidth / 2 - toastRect.width / 2;
+  toast.style.top = `${window.scrollY + Math.max(margin, Math.min(window.innerHeight - toastRect.height - margin, top))}px`;
+  toast.style.left = `${window.scrollX + Math.max(margin, Math.min(window.innerWidth - toastRect.width - margin, left))}px`;
+  requestAnimationFrame(() => toast.classList.add("is-visible"));
+  const hideTimer = window.setTimeout(() => dismissRebuiltTransientToast(toast), 1200);
+  toast.dataset.cc98ToastHideTimer = String(hideTimer);
+  toast.addEventListener("click", () => dismissRebuiltTransientToast(toast), { once: true });
+}
+
+function dismissRebuiltTransientToast(toast) {
+  if (!(toast instanceof HTMLElement) || toast.dataset.cc98ToastDismissing === "true") {
+    return;
+  }
+  toast.dataset.cc98ToastDismissing = "true";
+  const timer = Number(toast.dataset.cc98ToastHideTimer || 0);
+  if (timer) {
+    window.clearTimeout(timer);
+  }
+  toast.classList.remove("is-visible");
+  toast.classList.add("is-leaving");
+  window.setTimeout(() => toast.remove(), 220);
+}
+
+function sendExtensionMessage(message) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(response || null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+function dismissStartupUpdateNotice(notice) {
+  if (!(notice instanceof HTMLElement) || notice.dataset.cc98UpdateNoticeLeaving === "true") {
+    return;
+  }
+  notice.dataset.cc98UpdateNoticeLeaving = "true";
+  const timer = Number(notice.dataset.cc98UpdateNoticeTimer || 0);
+  if (timer) {
+    window.clearTimeout(timer);
+  }
+  notice.classList.remove("is-visible");
+  notice.classList.add("is-leaving");
+  window.setTimeout(() => notice.remove(), 260);
+}
+
+function showStartupUpdateNotice(status) {
+  if (!document.body || document.querySelector(".cc98-rebuild-startup-update-notice")) {
+    return;
+  }
+  const latestVersion = status?.latestVersion ? ` v${status.latestVersion}` : "";
+  const notice = createElement("aside", "cc98-rebuild-startup-update-notice");
+  notice.setAttribute("role", "status");
+  notice.setAttribute("aria-live", "polite");
+  const content = createElement("div", "cc98-rebuild-startup-update-content");
+  content.append(
+    createElement("strong", "", `CC98 Reborn 有新版本${latestVersion}`),
+    createElement("span", "", "可以前往发布页下载更新包。")
+  );
+  const actions = createElement("div", "cc98-rebuild-startup-update-actions");
+  const open = createButton("cc98-rebuild-startup-update-open", "打开发布页", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    sendExtensionMessage({
+      type: "CC98_REBORN_OPEN_RELEASES",
+      url: status?.releaseUrl || "https://github.com/Coran-tech/cc98-reborn/releases"
+    });
+    dismissStartupUpdateNotice(notice);
+  });
+  const close = createButton("cc98-rebuild-startup-update-close", "稍后", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissStartupUpdateNotice(notice);
+  });
+  actions.append(open, close);
+  notice.append(content, actions);
+  document.body.append(notice);
+  requestAnimationFrame(() => notice.classList.add("is-visible"));
+  const timer = window.setTimeout(() => dismissStartupUpdateNotice(notice), 9000);
+  notice.dataset.cc98UpdateNoticeTimer = String(timer);
+}
+
+async function ensureStartupUpdateNotice() {
+  if (!lastSettings?.enabled) {
+    return;
+  }
+  const response = await sendExtensionMessage({ type: "CC98_REBORN_CONSUME_STARTUP_UPDATE_NOTICE" });
+  if (response?.show && response.status?.hasUpdate) {
+    showStartupUpdateNotice(response.status);
+  }
+}
+
 function renderProxyControl(action) {
-  if (action.href && action.href !== "#") {
+  if (action.href && action.href !== "#" && !isFollowPostAction(action)) {
     return createLink("cc98-rebuild-mini-action", action.text, action.href);
   }
   let lastActivatedAt = 0;
@@ -1178,55 +2573,80 @@ function renderProxyControl(action) {
     event?.stopPropagation?.();
     event?.stopImmediatePropagation?.();
     const now = Date.now();
+    const isShareAction = isTopicShareAction(action);
+    if (!isShareAction && !(resolveCurrentProxyAction(action) instanceof HTMLElement)) {
+      showRebuiltTransientToast(button, "\u539f\u9875\u9762\u63a7\u4ef6\u5df2\u66f4\u65b0\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21");
+      scheduleDelayedRebuilds();
+      return;
+    }
     const actionKind = getPostActionKind(action.control, action.text);
     const isVoteAction = actionKind === "like" || actionKind === "dislike";
-    const activationGap = isVoteAction ? 180 : 420;
+    const isFollowAction = isFollowPostAction(action);
+    const isFavoriteAction = isTopicFavoriteAction(action);
+    const activationGap = isVoteAction ? 180 : 320;
     if (now - lastActivatedAt < activationGap) {
       return;
     }
     lastActivatedAt = now;
+
+    if (isShareAction) {
+      button.classList.add("is-pending");
+      button.setAttribute("aria-busy", "true");
+      copyTextToClipboard(getTopicShareClipboardText()).then((copied) => {
+        showRebuiltTransientToast(
+          button,
+          copied ? "\u590d\u5236\u6210\u529f" : "\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5"
+        );
+      }).finally(() => {
+        button.classList.remove("is-pending");
+        button.removeAttribute("aria-busy");
+      });
+      return;
+    }
+
     const isPostAction = action.scope === "post" || Boolean(action.control?.closest?.(".reply"));
+    const isNativeOverlayAction = isPostAction || action.scope === "topic";
     const oppositeAction = isVoteAction ? getOppositeVoteAction(action) : null;
     if (isVoteAction) {
       const wasActive = isVoteActionVisuallyActive(action);
       const shouldBeActive = !wasActive;
-      const oppositeKind = getActionVoteKind(oppositeAction);
       const oppositeWasVisuallyActive = shouldBeActive && oppositeAction && isVoteActionVisuallyActive(oppositeAction);
-      const oppositeWasActive = shouldBeActive && oppositeAction && isPostActionActive(oppositeAction.control, oppositeKind);
       if (action.voteGroup) {
         setVoteGroupDesiredKind(action.voteGroup, shouldBeActive ? actionKind : "");
       }
       setVoteActionVisual(oppositeAction, false);
       setVoteActionVisual(action, shouldBeActive);
       applyOptimisticVoteCounts(action, shouldBeActive, oppositeAction, oppositeWasVisuallyActive);
-      if (oppositeWasActive) {
-        triggerVoteNativeTransition(action, oppositeAction, true);
-      } else {
-        triggerOriginalControl(action.control);
-      }
-      if (action.voteGroup && oppositeWasActive) {
-        const token = action.voteGroup.transitionToken || 0;
-        const desiredKind = shouldBeActive ? actionKind : "";
-        [1300, 2600].forEach((delay) => {
-          window.setTimeout(() => settleVoteGroupNativeState(action.voteGroup, desiredKind, token), delay);
-        });
-      }
-    } else {
-      applyOptimisticPostActionState(button, action);
+      // CC98's native like endpoint accepts the desired state and refreshes
+      // both counters, so one native click is sufficient for mutual exclusion.
       triggerOriginalControl(action.control);
+    } else {
+      triggerOriginalControl(action.control);
+      if (isFollowAction) {
+        window.setTimeout(scheduleRebuild, 850);
+      }
     }
-    if (isPostAction) {
+    if (isNativeOverlayAction) {
       scheduleNativeAntUiStabilize();
     } else {
       scheduleDelayedRebuilds();
     }
-    button.classList.add("is-pending");
+    const shouldSyncDisplay = isVoteAction || isFavoriteAction || isFollowAction;
+    if (shouldSyncDisplay) {
+      button.classList.add("is-pending");
+      button.setAttribute("aria-busy", "true");
+    }
     const syncDelays = isVoteAction
-      ? [35, 90, 170, 320, 620, 1000, 1400, 1800, 2200, 3000, 4200]
-      : [120, 360, 900, 1800];
-    scheduleProxyControlDisplaySync(button, action, syncDelays, isVoteAction ? 620 : 360);
+      ? [80, 260, 700, 1400, 2400]
+      : [180, 700, 1600, 3200];
+    if (shouldSyncDisplay) {
+      scheduleProxyControlDisplaySync(button, action, syncDelays, isVoteAction ? 700 : 180);
+    }
+    if (isFavoriteAction) {
+      watchProxyControlDisplay(button, action);
+    }
     if (isVoteAction && oppositeAction?.proxyButton) {
-      scheduleProxyControlDisplaySync(oppositeAction.proxyButton, oppositeAction, syncDelays, 90);
+      scheduleProxyControlDisplaySync(oppositeAction.proxyButton, oppositeAction, syncDelays, 80);
     }
   });
   button.addEventListener("pointerdown", (event) => {
@@ -1244,14 +2664,591 @@ function renderProxyControl(action) {
   return button;
 }
 
+function isCc98RoutePath(pathname = "") {
+  const path = String(pathname || "").trim();
+  return path === "/"
+    || /^\/(?:boardList|boardlist|newTopics|recommendedTopics|searchBoard|usercenter|topic|board|focus|search|user|message|editor|signin|logOn)(?:\/|$|\?)/i.test(path);
+}
+
+function getCc98RoutePathFromHref(href) {
+  const value = String(href || "").trim();
+  if (!value || value === "#") {
+    return "";
+  }
+  try {
+    const url = new URL(value, location.href);
+    if (isDirectCc98Host(url.hostname) && isCc98RoutePath(url.pathname)) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+    if (isWebVpnHost(url.hostname)) {
+      const proxyPrefix = getWebVpnProxyPrefixFromUrl(url.href);
+      const cc98Prefix = getCurrentWebVpnCc98Prefix();
+      if (proxyPrefix
+        && cc98Prefix
+        && normalizeWebVpnProxyPrefix(proxyPrefix) !== normalizeWebVpnProxyPrefix(cc98Prefix)) {
+        return "";
+      }
+      const match = url.pathname.match(/\/(?:boardList|boardlist|newTopics|recommendedTopics|searchBoard|usercenter|topic|board|focus|search|user|message|editor|signin|logOn)(?:\/[^?#]*)?(?=$|[?#])/i);
+      if (match) {
+        return `${match[0]}${url.search}${url.hash}`;
+      }
+    }
+  } catch {
+    if (isCc98RoutePath(value)) {
+      return value;
+    }
+  }
+  return isCc98RoutePath(value) ? value : "";
+}
+
+function getCurrentCc98RoutePath() {
+  return getCc98RoutePathFromHref(location.href) || `${location.pathname}${location.search}${location.hash}`;
+}
+
+function getWebVpnPrefixCacheKey() {
+  return `cc98RebornWebVpnPrefix:${location.origin}`;
+}
+
+function getConfirmedWebVpnPrefixCacheKey() {
+  return `cc98RebornConfirmedWebVpnPrefix:${location.origin}`;
+}
+
+function cacheWebVpnCc98Prefix(prefix) {
+  if (!prefix || !isWebVpnHost()) {
+    return;
+  }
+  try {
+    sessionStorage.setItem(getWebVpnPrefixCacheKey(), prefix);
+    localStorage.setItem(getWebVpnPrefixCacheKey(), prefix);
+  } catch {
+    // Web storage may be blocked; URL extraction will still work on normal WebVPN pages.
+  }
+}
+
+function getCachedWebVpnCc98Prefix() {
+  if (!isWebVpnHost()) {
+    return "";
+  }
+  try {
+    return sessionStorage.getItem(getWebVpnPrefixCacheKey())
+      || localStorage.getItem(getWebVpnPrefixCacheKey())
+      || "";
+  } catch {
+    return "";
+  }
+}
+
+function getConfirmedWebVpnCc98Prefix() {
+  if (!isWebVpnHost()) {
+    return "";
+  }
+  try {
+    return sessionStorage.getItem(getConfirmedWebVpnPrefixCacheKey())
+      || localStorage.getItem(getConfirmedWebVpnPrefixCacheKey())
+      || "";
+  } catch {
+    return "";
+  }
+}
+
+function confirmCurrentWebVpnCc98Prefix() {
+  if (!isWebVpnHost() || !isLikelyCc98Document(document)) {
+    return "";
+  }
+  const prefix = getWebVpnProxyPrefixFromUrl(location.href) || getCachedWebVpnCc98Prefix();
+  if (!prefix) {
+    return "";
+  }
+  try {
+    sessionStorage.setItem(getConfirmedWebVpnPrefixCacheKey(), prefix);
+    localStorage.setItem(getConfirmedWebVpnPrefixCacheKey(), prefix);
+  } catch {
+    // Prefix confirmation is best-effort.
+  }
+  cacheWebVpnCc98Prefix(prefix);
+  return prefix;
+}
+
+function getWebVpnProxyPrefixFromUrl(value) {
+  try {
+    const url = new URL(value, location.href);
+    if (!isWebVpnHost(url.hostname)) {
+      return "";
+    }
+    const match = url.pathname.match(/^(\/https?\/[^/?#]+)(?:\/|$)/i);
+    return match ? `${url.origin}${match[1].replace(/\/+$/, "")}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function getCurrentWebVpnCc98Prefix() {
+  if (!isWebVpnHost()) {
+    return "";
+  }
+  const currentProxyPrefix = getWebVpnProxyPrefixFromUrl(location.href);
+  if (currentProxyPrefix) {
+    const confirmedPrefix = getConfirmedWebVpnCc98Prefix();
+    if (confirmedPrefix
+      && normalizeWebVpnProxyPrefix(currentProxyPrefix) !== normalizeWebVpnProxyPrefix(confirmedPrefix)) {
+      return confirmedPrefix;
+    }
+    cacheWebVpnCc98Prefix(currentProxyPrefix);
+    return currentProxyPrefix;
+  }
+  const getPrefixFromUrl = (value) => {
+    try {
+      const url = new URL(value, location.href);
+      if (!isWebVpnHost(url.hostname)) {
+        return "";
+      }
+      const proxyPrefix = getWebVpnProxyPrefixFromUrl(url.href);
+      if (proxyPrefix) {
+        return proxyPrefix;
+      }
+      const match = url.pathname.match(/\/(?:boardList|boardlist|newTopics|recommendedTopics|searchBoard|usercenter|topic|board|focus|search|user|message|editor|signin|logOn)(?:\/|$)/i);
+      if (!match) {
+        return "";
+      }
+      const prefixPath = url.pathname.slice(0, match.index).replace(/\/+$/, "");
+      if (!prefixPath && !isKnownCc98WebVpnHost(url.hostname)) {
+        return "";
+      }
+      return `${url.origin}${prefixPath}`;
+    } catch {
+      return "";
+    }
+  };
+  const currentPrefix = getPrefixFromUrl(location.href);
+  if (currentPrefix) {
+    cacheWebVpnCc98Prefix(currentPrefix);
+    return currentPrefix;
+  }
+  const referrerPrefix = getPrefixFromUrl(document.referrer || "");
+  if (referrerPrefix) {
+    cacheWebVpnCc98Prefix(referrerPrefix);
+    return referrerPrefix;
+  }
+  for (const link of document.querySelectorAll("a[href]")) {
+    const prefix = getPrefixFromUrl(link.getAttribute("href") || link.href || "");
+    if (prefix) {
+      cacheWebVpnCc98Prefix(prefix);
+      return prefix;
+    }
+  }
+  return getCachedWebVpnCc98Prefix();
+}
+
+function normalizeWebVpnProxyPrefix(prefix) {
+  return String(prefix || "").replace(/\/+$/, "").toLowerCase();
+}
+
+function getWebVpnExternalOriginCacheKey() {
+  return `cc98RebornWebVpnExternalOrigins:${location.origin}`;
+}
+
+function readWebVpnExternalOriginCache() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(getWebVpnExternalOriginCacheKey()) || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberWebVpnExternalOrigin(proxyPrefix, directHref) {
+  try {
+    const proxyUrl = new URL(proxyPrefix, location.href);
+    const directUrl = new URL(directHref);
+    if (isWebVpnHost(directUrl.hostname) || isDirectCc98Host(directUrl.hostname)) {
+      return;
+    }
+    const normalizedPrefix = normalizeWebVpnProxyPrefix(proxyUrl.href);
+    if (!normalizedPrefix) {
+      return;
+    }
+    const cache = readWebVpnExternalOriginCache();
+    cache[normalizedPrefix] = directUrl.origin;
+    sessionStorage.setItem(getWebVpnExternalOriginCacheKey(), JSON.stringify(cache));
+  } catch {
+    // External-link recovery remains best-effort when storage is unavailable.
+  }
+}
+
+function getDirectExternalUrlCandidate(value) {
+  const match = String(value || "").match(/https?:\/\/[^\s<>"'`]+/i);
+  if (!match) {
+    return "";
+  }
+  const candidate = match[0].replace(/[\])}>.,;!?\uff0c\u3002\uff1b\uff01\uff1f\u3011\u3009\u300b]+$/g, "");
+  try {
+    const url = new URL(candidate);
+    if (!/^https?:$/i.test(url.protocol)
+      || isWebVpnHost(url.hostname)
+      || isDirectCc98Host(url.hostname)) {
+      return "";
+    }
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
+function getWebVpnExternalProxyDirectHref(link) {
+  if (!isWebVpnHost() || !(link instanceof HTMLAnchorElement)) {
+    return "";
+  }
+  const rememberedHref = getDirectExternalUrlCandidate(link.dataset.cc98ExternalHref || "");
+  if (rememberedHref) {
+    return rememberedHref;
+  }
+  const rawHref = String(link.getAttribute("href") || link.href || "").trim();
+  let proxiedUrl;
+  try {
+    proxiedUrl = new URL(rawHref, location.href);
+  } catch {
+    return "";
+  }
+  if (!isWebVpnHost(proxiedUrl.hostname)) {
+    return "";
+  }
+  const proxyPrefix = getWebVpnProxyPrefixFromUrl(proxiedUrl.href);
+  const cc98Prefix = getCurrentWebVpnCc98Prefix();
+  if (!proxyPrefix
+    || (cc98Prefix && normalizeWebVpnProxyPrefix(proxyPrefix) === normalizeWebVpnProxyPrefix(cc98Prefix))) {
+    return "";
+  }
+
+  const candidates = [
+    link.getAttribute("data-original-href"),
+    link.getAttribute("data-original"),
+    link.getAttribute("data-url"),
+    link.getAttribute("data-href"),
+    link.getAttribute("title"),
+    link.getAttribute("aria-label"),
+    link.textContent
+  ];
+  const directHref = candidates.map(getDirectExternalUrlCandidate).find(Boolean) || "";
+  if (directHref) {
+    try {
+      const proxyUrl = new URL(proxyPrefix);
+      const directUrl = new URL(directHref);
+      const suffixPath = proxiedUrl.pathname.slice(proxyUrl.pathname.length) || "/";
+      if (decodeURIComponent(suffixPath) === decodeURIComponent(directUrl.pathname)) {
+        rememberWebVpnExternalOrigin(proxyPrefix, directHref);
+      }
+    } catch {
+      // The visible URL still safely repairs this link even if it cannot seed the host cache.
+    }
+    return directHref;
+  }
+
+  try {
+    const normalizedPrefix = normalizeWebVpnProxyPrefix(proxyPrefix);
+    const origin = readWebVpnExternalOriginCache()[normalizedPrefix];
+    if (!origin) {
+      return "";
+    }
+    const proxyUrl = new URL(proxyPrefix);
+    const directUrl = new URL(origin);
+    directUrl.pathname = proxiedUrl.pathname.slice(proxyUrl.pathname.length) || "/";
+    directUrl.search = proxiedUrl.search;
+    directUrl.hash = proxiedUrl.hash;
+    return directUrl.href;
+  } catch {
+    return "";
+  }
+}
+
+function repairWebVpnExternalProxyLink(link) {
+  const directHref = getWebVpnExternalProxyDirectHref(link);
+  if (!directHref || !(link instanceof HTMLAnchorElement)) {
+    return "";
+  }
+  link.dataset.cc98ExternalHref = directHref;
+  link.setAttribute("href", directHref);
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  return directHref;
+}
+
+function repairWebVpnExternalProxyLinks(root = document) {
+  if (!isWebVpnHost() || !root?.querySelectorAll) {
+    return;
+  }
+  const links = root instanceof HTMLAnchorElement ? [root] : [];
+  links.push(...root.querySelectorAll("a[href]"));
+  links.forEach((link) => repairWebVpnExternalProxyLink(link));
+}
+
+function isCc98InternalNavigationHref(href) {
+  try {
+    const url = new URL(href, location.href);
+    if (isDirectCc98Host(url.hostname)) {
+      return true;
+    }
+    if (!isWebVpnHost(url.hostname)) {
+      return false;
+    }
+    if (isKnownCc98WebVpnHost(url.hostname)) {
+      return true;
+    }
+    const proxyPrefix = getWebVpnProxyPrefixFromUrl(url.href);
+    const cc98Prefix = getCurrentWebVpnCc98Prefix();
+    if (proxyPrefix && cc98Prefix) {
+      return normalizeWebVpnProxyPrefix(proxyPrefix) === normalizeWebVpnProxyPrefix(cc98Prefix);
+    }
+    return isCc98RoutePath(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function getCurrentWebVpnProxySuffix(currentUrl, proxyPrefix) {
+  try {
+    const url = currentUrl instanceof URL ? currentUrl : new URL(currentUrl, location.href);
+    const prefixUrl = new URL(proxyPrefix, location.href);
+    return url.pathname.slice(prefixUrl.pathname.length) || "/";
+  } catch {
+    return "";
+  }
+}
+
+function getCurrentDocumentDirectExternalHref() {
+  if (!isWebVpnHost()) {
+    return "";
+  }
+  const currentProxyPrefix = getWebVpnProxyPrefixFromUrl(location.href);
+  if (!currentProxyPrefix) {
+    return "";
+  }
+  let currentUrl;
+  try {
+    currentUrl = new URL(location.href);
+  } catch {
+    return "";
+  }
+  const suffixPath = getCurrentWebVpnProxySuffix(currentUrl, currentProxyPrefix);
+  const candidateValues = [
+    document.querySelector('link[rel="canonical"]')?.getAttribute("href"),
+    document.querySelector('meta[property="og:url"]')?.getAttribute("content"),
+    document.querySelector('meta[name="twitter:url"]')?.getAttribute("content"),
+    document.querySelector('meta[itemprop="url"]')?.getAttribute("content"),
+    document.querySelector('base[href]')?.getAttribute("href")
+  ];
+  for (const value of candidateValues) {
+    const directHref = getDirectExternalUrlCandidate(value);
+    if (!directHref) {
+      continue;
+    }
+    try {
+      const directUrl = new URL(directHref);
+      if (decodeURIComponent(directUrl.pathname) !== decodeURIComponent(suffixPath)) {
+        continue;
+      }
+      rememberWebVpnExternalOrigin(currentProxyPrefix, directHref);
+      directUrl.search = currentUrl.search || directUrl.search;
+      directUrl.hash = currentUrl.hash || directUrl.hash;
+      return directUrl.href;
+    } catch {
+      // Try the next page metadata candidate.
+    }
+  }
+
+  const cachedOrigin = readWebVpnExternalOriginCache()[normalizeWebVpnProxyPrefix(currentProxyPrefix)];
+  let inferredOrigin = cachedOrigin || "";
+  if (!inferredOrigin) {
+    const siteName = cleanupPostText(document.querySelector('meta[property="og:site_name"]')?.getAttribute("content"));
+    const octolyticsHost = cleanupPostText(document.querySelector('meta[name="octolytics-host"]')?.getAttribute("content"));
+    const hasGitHubChrome = Boolean(document.querySelector('meta[name="route-pattern"], meta[name="github-keyboard-shortcuts"]'));
+    if (/^github$/i.test(siteName) || /github\.com$/i.test(octolyticsHost) || hasGitHubChrome) {
+      inferredOrigin = "https://github.com";
+    }
+  }
+  if (!inferredOrigin) {
+    return "";
+  }
+  try {
+    const directUrl = new URL(inferredOrigin);
+    directUrl.pathname = suffixPath;
+    directUrl.search = currentUrl.search;
+    directUrl.hash = currentUrl.hash;
+    const directHref = directUrl.href;
+    rememberWebVpnExternalOrigin(currentProxyPrefix, directHref);
+    return directHref;
+  } catch {
+    return "";
+  }
+}
+
+function isCurrentWebVpnExternalProxyPage() {
+  if (!isWebVpnHost()) {
+    return false;
+  }
+  const currentPrefix = getWebVpnProxyPrefixFromUrl(location.href);
+  if (!currentPrefix) {
+    return false;
+  }
+  const confirmedPrefix = getConfirmedWebVpnCc98Prefix();
+  if (confirmedPrefix
+    && normalizeWebVpnProxyPrefix(currentPrefix) !== normalizeWebVpnProxyPrefix(confirmedPrefix)) {
+    return true;
+  }
+  return Boolean(getCurrentDocumentDirectExternalHref());
+}
+
+function redirectCurrentWebVpnExternalPage() {
+  if (!isCurrentWebVpnExternalProxyPage()) {
+    return false;
+  }
+  const directHref = getCurrentDocumentDirectExternalHref();
+  if (!directHref) {
+    return false;
+  }
+  document.documentElement.dataset.cc98RebornExternalRedirect = "true";
+  editorSubmitOverlayAwaitingRebuild = false;
+  hideLoadingOverlay({ force: true, releaseNativeLazyScroll: true });
+  stopSecurityWatermark();
+  try {
+    location.replace(directHref);
+  } catch {
+    location.href = directHref;
+  }
+  return true;
+}
+
+function isUsableCc98WebVpnRouteUrl(url) {
+  if (!url || !isWebVpnHost(url.hostname)) {
+    return false;
+  }
+  if (isKnownCc98WebVpnHost(url.hostname)) {
+    return true;
+  }
+  const match = url.pathname.match(/\/(?:boardList|boardlist|newTopics|recommendedTopics|searchBoard|usercenter|topic|board|focus|search|user|message|editor|signin|logOn)(?:\/|$)/i);
+  return Boolean(match && match.index > 0);
+}
+
+function findExistingWebVpnCc98RouteHref(routePath) {
+  if (!isWebVpnHost() || !routePath) {
+    return "";
+  }
+  const routeUrl = new URL(routePath, "https://www.cc98.org");
+  const targetPath = routeUrl.pathname.replace(/\/+$/, "") || "/";
+  if (targetPath === "/") {
+    return "";
+  }
+  for (const link of document.querySelectorAll("a[href]")) {
+    const rawHref = link.getAttribute("href") || link.href || "";
+    try {
+      const url = new URL(rawHref, location.href);
+      if (!isWebVpnHost(url.hostname)) {
+        continue;
+      }
+      if (!isUsableCc98WebVpnRouteUrl(url)) {
+        continue;
+      }
+      const pathname = url.pathname.replace(/\/+$/, "") || "/";
+      if (!pathname.endsWith(targetPath)) {
+        continue;
+      }
+      if (routeUrl.search && url.search !== routeUrl.search) {
+        continue;
+      }
+      url.hash = routeUrl.hash;
+      return url.href;
+    } catch {
+      // Ignore malformed native links.
+    }
+  }
+  return "";
+}
+
+function buildCc98RouteHref(routePath) {
+  if (!routePath) {
+    return "";
+  }
+  const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
+  if (!isWebVpnHost()) {
+    return new URL(route, location.origin).href;
+  }
+  const existing = findExistingWebVpnCc98RouteHref(route);
+  if (existing) {
+    return existing;
+  }
+  const prefix = getCurrentWebVpnCc98Prefix();
+  if (prefix) {
+    return `${prefix}${route}`;
+  }
+  return `https://www.cc98.org${route}`;
+}
+
+function getCc98HomeHref() {
+  return buildCc98RouteHref("/");
+}
+
+function repairWebVpnNakedCc98Href(href) {
+  if (!href || !isWebVpnHost()) {
+    return href || "";
+  }
+  try {
+    const url = new URL(href, location.href);
+    if (!isWebVpnHost(url.hostname) || !isCc98RoutePath(url.pathname) || getWebVpnProxyPrefixFromUrl(url.href)) {
+      return url.href;
+    }
+    return buildCc98RouteHref(`${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    return href;
+  }
+}
+
+function enforceCurrentWebVpnNakedRouteRedirect() {
+  if (!isWebVpnHost()) {
+    return false;
+  }
+  try {
+    const url = new URL(location.href);
+    if (url.pathname === "/" || !isCc98RoutePath(url.pathname) || getWebVpnProxyPrefixFromUrl(url.href)) {
+      getCurrentWebVpnCc98Prefix();
+      return false;
+    }
+    const prefix = getCurrentWebVpnCc98Prefix();
+    if (!prefix) {
+      return false;
+    }
+    const target = `${prefix}${url.pathname}${url.search}${url.hash}`;
+    if (stripUrlHash(target) === stripUrlHash(url.href)) {
+      return false;
+    }
+    location.replace(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function makeAbsoluteCc98Url(href) {
   if (!href) {
     return "";
   }
+  const value = String(href).trim();
+  if (!value || value === "#") {
+    return value || "";
+  }
+  if (value.startsWith("#")) {
+    try {
+      return repairWebVpnNakedCc98Href(new URL(value, location.href).href);
+    } catch {
+      return `${location.pathname}${location.search}${value}`;
+    }
+  }
   try {
-    return new URL(href, location.origin).href;
+    const routePath = getCc98RoutePathFromHref(value);
+    if (routePath) {
+      return buildCc98RouteHref(routePath);
+    }
+    return repairWebVpnNakedCc98Href(new URL(value, location.origin).href);
   } catch {
-    return href;
+    return value;
   }
 }
 
@@ -1261,6 +3258,58 @@ function wait(ms) {
 
 function getLazyPrewarmPageKey() {
   return `${location.pathname}${location.search}`;
+}
+
+function isReadLaterRoute(url = location.href) {
+  try {
+    return new URL(url, location.href).hash === READ_LATER_ROUTE_HASH;
+  } catch {
+    return location.hash === READ_LATER_ROUTE_HASH;
+  }
+}
+
+function getReadLaterPageHref() {
+  if (isWebVpnHost()) {
+    try {
+      return new URL(READ_LATER_ROUTE_HASH, location.href).href;
+    } catch {
+      return `${location.pathname}${location.search}${READ_LATER_ROUTE_HASH}`;
+    }
+  }
+  return `${location.origin}/${READ_LATER_ROUTE_HASH}`;
+}
+
+function isPublicUserProfilePage(url = location.href) {
+  const cc98RoutePath = getCc98RoutePathFromHref(url);
+  if (/^\/user\/(?:id|name)\//i.test(cc98RoutePath)) {
+    return true;
+  }
+  try {
+    return /^\/user\/(?:id|name)\//i.test(new URL(url, location.href).pathname);
+  } catch {
+    return /^\/user\/(?:id|name)\//i.test(location.pathname);
+  }
+}
+
+function isBlacklistRoute(url = location.href) {
+  try {
+    return new URL(url, location.href).hash === BLACKLIST_ROUTE_HASH;
+  } catch {
+    return location.hash === BLACKLIST_ROUTE_HASH;
+  }
+}
+
+function getBlacklistPageHref() {
+  try {
+    const url = new URL(getCc98HomeHref(), location.href);
+    url.hash = BLACKLIST_ROUTE_HASH;
+    return url.href;
+  } catch {
+    if (isWebVpnHost()) {
+      return `${location.pathname}${location.search}${BLACKLIST_ROUTE_HASH}`;
+    }
+    return `${location.origin}/${BLACKLIST_ROUTE_HASH}`;
+  }
 }
 
 function getRoutePageKey(url = location.href) {
@@ -1282,8 +3331,35 @@ function stripUrlHash(href) {
   }
 }
 
+function addEditorSubmitRecoveryCacheBust(href) {
+  const target = makeAbsoluteCc98Url(href || "");
+  if (!target) {
+    return "";
+  }
+  try {
+    const url = new URL(target, location.href);
+    url.searchParams.set("_cc98_reborn_submit", String(Date.now()));
+    return url.href;
+  } catch {
+    return target;
+  }
+}
+
+function removeEditorSubmitRecoveryCacheBust() {
+  try {
+    const url = new URL(location.href);
+    if (!url.searchParams.has("_cc98_reborn_submit")) {
+      return;
+    }
+    url.searchParams.delete("_cc98_reborn_submit");
+    history.replaceState(history.state, "", url.href);
+  } catch {
+    // URL cleanup is best-effort.
+  }
+}
+
 function navigateToRebuiltHref(href) {
-  const target = makeAbsoluteCc98Url(href);
+  const target = repairWebVpnNakedCc98Href(makeAbsoluteCc98Url(href));
   if (!target) {
     scheduleDelayedRebuilds();
     return;
@@ -1305,7 +3381,151 @@ function navigateToRebuiltHref(href) {
     return;
   }
 
+  if (isWebVpnHost()) {
+    showLoadingOverlay("正在通过 WebVPN 跳转...");
+  }
   location.assign(target);
+}
+
+function bindWebVpnNakedRouteGuard() {
+  if (!isWebVpnHost() || webVpnNakedRouteGuardBound) {
+    return;
+  }
+  webVpnNakedRouteGuardBound = true;
+  getCurrentWebVpnCc98Prefix();
+  rewriteWebVpnNakedRouteLinks(document);
+  [0, 80, 180, 360, 700, 1200, 2000].forEach((delay) => {
+    window.setTimeout(() => {
+      if (redirectCurrentWebVpnExternalPage()) {
+        return;
+      }
+      rewriteWebVpnNakedRouteLinks(document);
+      enforceCurrentWebVpnNakedRouteRedirect();
+    }, delay);
+  });
+  window.addEventListener("load", () => {
+    if (redirectCurrentWebVpnExternalPage()) {
+      return;
+    }
+    if (loadingOverlayActive && /WebVPN/i.test(loadingOverlayMessage) && !editorSubmitOverlayAwaitingRebuild) {
+      hideLoadingOverlay({ force: true });
+      scheduleSync();
+    }
+  }, { once: true });
+  const linkObserver = new MutationObserver((records) => {
+    if (redirectCurrentWebVpnExternalPage()) {
+      return;
+    }
+    records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node instanceof Element) {
+          rewriteWebVpnNakedRouteLinks(node);
+        }
+      });
+    });
+  });
+  linkObserver.observe(document.documentElement || document, { childList: true, subtree: true });
+  window.addEventListener("click", (event) => {
+    if (!isWebVpnHost() || event.button !== 0) {
+      return;
+    }
+    const link = event.target?.closest?.("a[href]");
+    if (!(link instanceof HTMLAnchorElement)) {
+      return;
+    }
+    const directHref = repairWebVpnExternalProxyLink(link);
+    if (!directHref) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    window.open(directHref, "_blank", "noopener,noreferrer");
+  }, true);
+  document.addEventListener("click", (event) => {
+    if (!isWebVpnHost()) {
+      return;
+    }
+    const link = event.target?.closest?.("a[href]");
+    if (!(link instanceof HTMLAnchorElement)) {
+      return;
+    }
+    if (repairWebVpnExternalProxyLink(link)) {
+      return;
+    }
+    const rawHref = link.getAttribute("href") || link.href || "";
+    const fixedHref = repairWebVpnNakedCc98Href(rawHref);
+    if (!fixedHref) {
+      return;
+    }
+    let originalHref = "";
+    try {
+      originalHref = new URL(rawHref, location.href).href;
+    } catch {
+      originalHref = rawHref;
+    }
+    if (stripUrlHash(fixedHref) === stripUrlHash(originalHref)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    showLoadingOverlay("正在通过 WebVPN 跳转...");
+    location.assign(fixedHref);
+  }, true);
+}
+
+function rewriteWebVpnNakedRouteLinks(root = document) {
+  if (!isWebVpnHost() || !root?.querySelectorAll) {
+    return;
+  }
+  const links = [];
+  if (root instanceof HTMLAnchorElement) {
+    links.push(root);
+  }
+  links.push(...root.querySelectorAll("a[href]"));
+  links.forEach((link) => {
+    if (repairWebVpnExternalProxyLink(link)) {
+      return;
+    }
+    const rawHref = link.getAttribute("href") || link.href || "";
+    const fixedHref = repairWebVpnNakedCc98Href(rawHref);
+    if (!fixedHref) {
+      return;
+    }
+    let originalHref = "";
+    try {
+      originalHref = new URL(rawHref, location.href).href;
+    } catch {
+      originalHref = rawHref;
+    }
+    if (stripUrlHash(fixedHref) !== stripUrlHash(originalHref)) {
+      link.setAttribute("href", fixedHref);
+    }
+  });
+}
+
+function scheduleRouteFollowup(targetHref, startedRouteKey = getRoutePageKey()) {
+  routeFollowupTimers.forEach((timer) => window.clearTimeout(timer));
+  routeFollowupTimers = [];
+  const targetRouteKey = getRoutePageKey(targetHref);
+  if (!targetRouteKey) {
+    return;
+  }
+  routeFollowupTimers = [80, 180, 360, 700, 1200, 1900, 3000, 4600].map((delay, index, delays) => (
+    window.setTimeout(() => {
+      const currentRouteKey = getRoutePageKey();
+      if (currentRouteKey === targetRouteKey || currentRouteKey !== startedRouteKey) {
+        searchPageRouteKey = "";
+        scheduleFiltering();
+        scheduleRebuild();
+        scheduleSync();
+      }
+      if (index === delays.length - 1) {
+        routeFollowupTimers = [];
+      }
+    }, delay)
+  ));
 }
 
 function getTopicRouteInfo(url = location.href) {
@@ -1319,16 +3539,1339 @@ function getTopicRouteInfo(url = location.href) {
     const topicId = match[1];
     const current = Math.max(1, Number(match[2] || 1));
     const suffix = current === 1 ? "" : `/${current}`;
+    const currentHref = buildCc98RouteHref(`/topic/${topicId}${suffix}${parsed.search}`);
+    const firstHref = buildCc98RouteHref(`/topic/${topicId}${parsed.search}`);
     return {
       topicId,
       current,
-      href: parsed.href,
-      routeKey: `${parsed.origin}/topic/${topicId}${suffix}${parsed.search}`,
-      firstHref: `${parsed.origin}/topic/${topicId}${parsed.search}`
+      href: repairWebVpnNakedCc98Href(parsed.href),
+      routeKey: stripUrlHash(currentHref),
+      firstHref
     };
   } catch {
     return null;
   }
+}
+
+function getReadLaterKeyFromHref(href) {
+  try {
+    const parsed = new URL(href, location.href);
+    const match = parsed.pathname.match(/\/topic\/(\d+)/i);
+    if (match) {
+      return `topic:${match[1]}`;
+    }
+    parsed.hash = "";
+    return `url:${parsed.href.replace(/\/$/, "")}`;
+  } catch {
+    const value = String(href ?? "").replace(/#.*/, "").replace(/\/$/, "").trim();
+    return value ? `url:${value}` : "";
+  }
+}
+
+function getCurrentReadLaterUserId() {
+  const account = getCurrentCc98WebAccount();
+  const accountId = normalizeCc98AccountId(account?.userId);
+  if (accountId) {
+    return accountId;
+  }
+  const storedId = getCc98AccountId(getStoredCc98UserInfo());
+  if (storedId) {
+    return storedId;
+  }
+  const topbarLink = [...document.querySelectorAll([
+    ".topBarUserInfo a[href*='/user/id/']",
+    ".topBarUserCenter a[href*='/user/id/']",
+    ".topBarUserCenter-mainPage a[href*='/user/id/']",
+    ".cc98-rebuild-native-user-entry a[href*='/user/id/']"
+  ].join(","))].find((link) => link instanceof HTMLAnchorElement);
+  const uidMatch = (topbarLink?.getAttribute("href") || topbarLink?.href || "").match(/\/user\/id\/(\d+)/i);
+  return normalizeCc98AccountId(uidMatch?.[1] || "guest");
+}
+
+function getReadLaterStorageKey(userId = getCurrentReadLaterUserId()) {
+  return `${READ_LATER_STORAGE_KEY}:uid:${encodeURIComponent(normalizeCc98AccountId(userId) || "guest")}`;
+}
+
+function isGuestReadLaterStorageKey(storageKey = getReadLaterStorageKey()) {
+  return String(storageKey || "").endsWith(":uid:guest");
+}
+
+function getReadLaterLegacyMigrationKey() {
+  return `${READ_LATER_STORAGE_KEY}:migratedTo`;
+}
+
+function normalizeReadLaterItemsForStorage(items) {
+  const normalized = [];
+  const seen = new Map();
+  (items || []).forEach((item) => {
+    const key = String(item?.key || getReadLaterKeyFromHref(item?.href) || "");
+    if (!key) {
+      return;
+    }
+    const next = {
+      key,
+      href: normalizeHref(item?.href || "#"),
+      title: String(item?.title || item?.href || "\u672a\u547d\u540d\u5e16\u5b50").trim(),
+      board: String(item?.board || "").trim(),
+      boardHref: item?.boardHref ? normalizeHref(item.boardHref) : "",
+      user: String(item?.user || "").trim(),
+      uid: String(item?.uid || "").trim(),
+      meta: String(item?.meta || "").trim(),
+      addedAt: Number(item?.addedAt) || Date.now(),
+      readAt: Number(item?.readAt) || 0
+    };
+    if (!next.href || !next.title) {
+      return;
+    }
+    const existing = seen.get(key);
+    if (existing) {
+      existing.href = next.href || existing.href;
+      existing.title = next.title || existing.title;
+      existing.board = next.board || existing.board;
+      existing.boardHref = next.boardHref || existing.boardHref;
+      existing.user = next.user || existing.user;
+      existing.uid = next.uid || existing.uid;
+      existing.meta = next.meta || existing.meta;
+      existing.addedAt = Math.min(existing.addedAt || next.addedAt, next.addedAt || existing.addedAt);
+      existing.readAt = Math.max(existing.readAt || 0, next.readAt || 0);
+      return;
+    }
+    seen.set(key, next);
+    normalized.push(next);
+  });
+  return normalized;
+}
+
+function readLegacyReadLaterItemsForCurrentUser(storageKey = getReadLaterStorageKey()) {
+  try {
+    const migratedTo = localStorage.getItem(getReadLaterLegacyMigrationKey()) || "";
+    if (migratedTo && migratedTo !== storageKey) {
+      return [];
+    }
+    if (!migratedTo && isGuestReadLaterStorageKey(storageKey)) {
+      return [];
+    }
+    const value = JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY) || "[]");
+    const rawItems = Array.isArray(value) ? value : (Array.isArray(value?.items) ? value.items : []);
+    return normalizeReadLaterItemsForStorage(rawItems);
+  } catch {
+    return [];
+  }
+}
+
+function writeLegacyReadLaterItemsForCurrentUser(items, storageKey = getReadLaterStorageKey()) {
+  try {
+    if (isGuestReadLaterStorageKey(storageKey) && !(items || []).length) {
+      return;
+    }
+    localStorage.setItem(READ_LATER_STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(getReadLaterLegacyMigrationKey(), storageKey);
+  } catch {
+    // Legacy per-origin cache is best-effort.
+  }
+}
+
+function hydrateReadLaterStorage(options = {}) {
+  const storageKey = getReadLaterStorageKey();
+  if (!options.force && (readLaterStorageHydratedKey === storageKey || readLaterStorageHydratingKey === storageKey)) {
+    return;
+  }
+  if (!globalThis.chrome?.storage?.local?.get) {
+    readLaterStorageHydratedKey = storageKey;
+    return;
+  }
+  readLaterStorageHydratingKey = storageKey;
+  const legacyItems = readLegacyReadLaterItemsForCurrentUser(storageKey);
+  globalThis.chrome.storage.local.get(storageKey, (result) => {
+    if (readLaterStorageHydratingKey !== storageKey) {
+      return;
+    }
+    readLaterStorageHydratingKey = "";
+    if (globalThis.chrome.runtime?.lastError) {
+      readLaterStorageHydratedKey = storageKey;
+      return;
+    }
+    const storedItems = normalizeReadLaterItemsForStorage(result?.[storageKey] || []);
+    const cachedItems = readLaterItemsCache?.storageKey === storageKey ? readLaterItemsCache.items : [];
+    const merged = normalizeReadLaterItemsForStorage([...legacyItems, ...storedItems, ...cachedItems]);
+    readLaterItemsCache = { storageKey, items: merged };
+    writeLegacyReadLaterItemsForCurrentUser(merged, storageKey);
+    readLaterStorageHydratedKey = storageKey;
+    if (JSON.stringify(storedItems) !== JSON.stringify(merged)) {
+      globalThis.chrome.storage.local.set({ [storageKey]: merged });
+    }
+    syncReadLaterUi();
+    scheduleSync();
+    if (isReadLaterRoute()) {
+      scheduleRebuild();
+    }
+  });
+}
+
+function readReadLaterItemsFromExtensionCache() {
+  const storageKey = getReadLaterStorageKey();
+  if (readLaterItemsCache?.storageKey === storageKey) {
+    hydrateReadLaterStorage();
+    return readLaterItemsCache.items;
+  }
+  const legacyItems = readLegacyReadLaterItemsForCurrentUser(storageKey);
+  readLaterItemsCache = { storageKey, items: legacyItems };
+  hydrateReadLaterStorage();
+  return legacyItems;
+}
+
+function writeReadLaterItemsToExtensionCache(items) {
+  const storageKey = getReadLaterStorageKey();
+  const normalized = normalizeReadLaterItemsForStorage(items);
+  readLaterItemsCache = { storageKey, items: normalized };
+  writeLegacyReadLaterItemsForCurrentUser(normalized, storageKey);
+  readLaterStorageHydratedKey = storageKey;
+  try {
+    globalThis.chrome?.storage?.local?.set?.({ [storageKey]: normalized });
+  } catch {
+    // Extension storage may be unavailable on local previews; keep in-memory and legacy cache.
+  }
+  syncReadLaterUi();
+}
+
+function readReadLaterItems() {
+  return readReadLaterItemsFromExtensionCache();
+  try {
+    const value = JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY) || "[]");
+    const rawItems = Array.isArray(value) ? value : (Array.isArray(value?.items) ? value.items : []);
+    return rawItems
+      .map((item) => ({
+        key: String(item?.key || getReadLaterKeyFromHref(item?.href) || ""),
+        href: normalizeHref(item?.href || "#"),
+        title: String(item?.title || item?.href || "未命名帖子").trim(),
+        board: String(item?.board || "").trim(),
+        boardHref: item?.boardHref ? normalizeHref(item.boardHref) : "",
+        user: String(item?.user || "").trim(),
+        uid: String(item?.uid || "").trim(),
+        meta: String(item?.meta || "").trim(),
+        addedAt: Number(item?.addedAt) || Date.now(),
+        readAt: Number(item?.readAt) || 0
+      }))
+      .filter((item) => item.key && item.href && item.title);
+  } catch {
+    return [];
+  }
+}
+
+function writeReadLaterItems(items) {
+  writeReadLaterItemsToExtensionCache(items);
+  return;
+  const normalized = [];
+  const seen = new Set();
+  (items || []).forEach((item) => {
+    const key = String(item?.key || getReadLaterKeyFromHref(item?.href) || "");
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    normalized.push({
+      key,
+      href: normalizeHref(item.href || "#"),
+      title: String(item.title || item.href || "未命名帖子").trim(),
+      board: String(item.board || "").trim(),
+      boardHref: item.boardHref ? normalizeHref(item.boardHref) : "",
+      user: String(item.user || "").trim(),
+      uid: String(item.uid || "").trim(),
+      meta: String(item.meta || "").trim(),
+      addedAt: Number(item.addedAt) || Date.now(),
+      readAt: Number(item.readAt) || 0
+    });
+  });
+  try {
+    localStorage.setItem(READ_LATER_STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+    // Read-later is local-only; ignore storage failures.
+  }
+}
+
+function getReadLaterItemFromTopicItem(item) {
+  const href = normalizeHref(item?.href || "");
+  const key = getReadLaterKeyFromHref(href);
+  if (!href || !key || !key.startsWith("topic:")) {
+    return null;
+  }
+  return {
+    key,
+    href,
+    title: String(item.title || href).trim(),
+    board: String(item.board || "").trim(),
+    boardHref: item.boardHref ? normalizeHref(item.boardHref) : "",
+    user: String(item.user || "").trim(),
+    uid: String(item.uid || "").trim(),
+    meta: String(item.meta || item.hoverMeta || "").trim(),
+    addedAt: Date.now(),
+    readAt: 0
+  };
+}
+
+function isReadLaterSaved(itemOrHref) {
+  const key = typeof itemOrHref === "string"
+    ? getReadLaterKeyFromHref(itemOrHref)
+    : getReadLaterItemFromTopicItem(itemOrHref)?.key;
+  if (!key) {
+    return false;
+  }
+  return readReadLaterItems().some((item) => item.key === key);
+}
+
+function upsertReadLaterItem(item) {
+  const next = item?.key ? item : getReadLaterItemFromTopicItem(item);
+  if (!next?.key) {
+    return false;
+  }
+  const items = readReadLaterItems();
+  const index = items.findIndex((saved) => saved.key === next.key);
+  if (index >= 0) {
+    items[index] = {
+      ...items[index],
+      ...next,
+      addedAt: items[index].addedAt || next.addedAt || Date.now(),
+      readAt: items[index].readAt || 0
+    };
+  } else {
+    items.unshift(next);
+  }
+  writeReadLaterItems(items);
+  return true;
+}
+
+function removeReadLaterItem(key) {
+  if (!key) {
+    return;
+  }
+  writeReadLaterItems(readReadLaterItems().filter((item) => item.key !== key));
+}
+
+function markReadLaterItemRead(key, read = true) {
+  if (!key) {
+    return false;
+  }
+  let changed = false;
+  const items = readReadLaterItems().map((item) => {
+    if (item.key !== key) {
+      return item;
+    }
+    changed = true;
+    return { ...item, readAt: read ? Date.now() : 0 };
+  });
+  if (changed) {
+    writeReadLaterItems(items);
+  }
+  return changed;
+}
+
+function markCurrentTopicReadLaterRead() {
+  const routeInfo = getTopicRouteInfo();
+  if (!routeInfo) {
+    return;
+  }
+  rememberCurrentTopicHref(routeInfo);
+  markReadLaterItemRead(`topic:${routeInfo.topicId}`, true);
+}
+
+function rememberCurrentTopicHref(routeInfo = getTopicRouteInfo()) {
+  if (!routeInfo?.href) {
+    return;
+  }
+  try {
+    sessionStorage.setItem(EDITOR_LAST_TOPIC_HREF_KEY, routeInfo.href);
+  } catch {
+    // Last-topic routing is best-effort.
+  }
+}
+
+function getStoredLastTopicHref() {
+  try {
+    const href = sessionStorage.getItem(EDITOR_LAST_TOPIC_HREF_KEY) || "";
+    return getTopicRouteInfo(href) ? href : "";
+  } catch {
+    return "";
+  }
+}
+
+function getEditorStaleTopicReloadKey(routeInfo = getTopicRouteInfo()) {
+  return routeInfo
+    ? `${EDITOR_TOPIC_RELOAD_KEY_PREFIX}${routeInfo.topicId}:${routeInfo.current}:${encodeURIComponent(routeInfo.routeKey)}`
+    : "";
+}
+
+function readEditorSubmitContext() {
+  try {
+    const context = JSON.parse(sessionStorage.getItem(EDITOR_SUBMIT_CONTEXT_KEY) || "null");
+    if (!context || typeof context !== "object") {
+      return null;
+    }
+    const submittedAt = Number(context.submittedAt);
+    if (!Number.isFinite(submittedAt) || Date.now() - submittedAt > 90000) {
+      return null;
+    }
+    return context;
+  } catch {
+    return null;
+  }
+}
+
+function writeEditorSubmitContext(context) {
+  if (!context || typeof context !== "object") {
+    return null;
+  }
+  try {
+    sessionStorage.setItem(EDITOR_SUBMIT_CONTEXT_KEY, JSON.stringify(context));
+  } catch {
+    // Ignore session storage failures.
+  }
+  return context;
+}
+
+function updateEditorSubmitContext(patch = {}) {
+  const context = readEditorSubmitContext();
+  if (!context) {
+    return null;
+  }
+  return writeEditorSubmitContext({
+    ...context,
+    ...patch
+  });
+}
+
+function clearEditorSubmitIntent() {
+  try {
+    sessionStorage.removeItem(EDITOR_SUBMIT_INTENT_KEY);
+    sessionStorage.removeItem(EDITOR_SUBMIT_CONTEXT_KEY);
+  } catch {
+    // Ignore session storage failures.
+  }
+  if (editorSubmitIntermediateTimer) {
+    window.clearTimeout(editorSubmitIntermediateTimer);
+    editorSubmitIntermediateTimer = null;
+  }
+  nativePostSubmitRefreshTimers.forEach((timer) => window.clearTimeout(timer));
+  nativePostSubmitRefreshTimers = [];
+  if (editorSubmitOverlayReleaseTimer) {
+    window.clearTimeout(editorSubmitOverlayReleaseTimer);
+    editorSubmitOverlayReleaseTimer = null;
+  }
+  if (document.documentElement.dataset.cc98ComfortOriginalPrewarming !== "true" && !firstPagePrevisitInProgress) {
+    editorSubmitOverlayAwaitingRebuild = false;
+    hideLoadingOverlay({ force: true });
+  }
+}
+
+function isSubmitContextAttempted(context, field) {
+  const submittedAt = Number(context?.submittedAt) || 0;
+  const attemptedAt = Number(context?.[field]) || 0;
+  return attemptedAt >= submittedAt && Date.now() - attemptedAt <= 120000;
+}
+
+function clearSettledEditorSubmitIntent() {
+  const context = readEditorSubmitContext();
+  const routeInfo = getTopicRouteInfo();
+  if (!context || !routeInfo || !pageHasNativeTopicContent()) {
+    return false;
+  }
+  const destinationInfo = getTopicRouteInfo(context.destinationHref || context.startedHref || "");
+  if (destinationInfo?.topicId && destinationInfo.topicId !== routeInfo.topicId) {
+    return false;
+  }
+  const submittedAt = Number(context.submittedAt) || 0;
+  const elapsed = Date.now() - submittedAt;
+  const hasNavigationAttempt = [
+    "topicRefreshAttemptedAt",
+    "successNavigationAttemptedAt",
+    "intermediateRecoveryAttemptedAt",
+    "staleTopicReloadAttemptedAt",
+    "forcedRefreshAttemptedAt",
+    "unobservedNativeSubmitReloadAttemptedAt"
+  ].some((field) => isSubmitContextAttempted(context, field));
+  if (!hasNavigationAttempt && elapsed < 10000) {
+    return false;
+  }
+  if (!context.preserveDraftUntilConfirmed) {
+    clearNativeEditorDraftByKey(context.draftKey);
+  }
+  clearEditorSubmitIntent();
+  return true;
+}
+
+function getTopicReferrerHref() {
+  const referrer = document.referrer || "";
+  return getTopicRouteInfo(referrer) ? referrer : "";
+}
+
+function getEditorEditPostId(url = location.href) {
+  try {
+    return new URL(url, location.href).pathname.match(/\/editor\/edit\/(\d+)/i)?.[1] || "";
+  } catch {
+    return String(url ?? "").match(/\/editor\/edit\/(\d+)/i)?.[1] || "";
+  }
+}
+
+function getEditorSubmitTargetHref() {
+  const currentTopic = getTopicRouteInfo();
+  if (currentTopic?.href) {
+    return currentTopic.href;
+  }
+  return getTopicReferrerHref()
+    || getEditorSubmitDestinationHref()
+    || getStoredLastTopicHref()
+    || "";
+}
+
+function markEditorSubmitIntent(context = {}) {
+  const submittedAt = Date.now();
+  const routeInfo = getTopicRouteInfo();
+  const targetHref = context.destinationHref || getEditorSubmitTargetHref();
+  const payload = {
+    ...(readEditorSubmitContext() || {}),
+    ...context,
+    submittedAt,
+    startedHref: context.startedHref || location.href,
+    startedRouteKey: context.startedRouteKey || getRoutePageKey(),
+    startedOnTopic: Boolean(context.startedOnTopic ?? routeInfo),
+    destinationHref: targetHref,
+    editPostId: context.editPostId || getEditorEditPostId(),
+    isEdit: Boolean(context.isEdit ?? getEditorEditPostId())
+  };
+  try {
+    sessionStorage.setItem(EDITOR_SUBMIT_INTENT_KEY, String(submittedAt));
+    sessionStorage.setItem(EDITOR_SUBMIT_CONTEXT_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore session storage failures.
+  }
+}
+
+function getSubmittedTopicIdFromResponseBody(body) {
+  const value = String(body || "").trim();
+  if (!value) {
+    return "";
+  }
+  const unquoted = value.replace(/^"(.*)"$/, "$1");
+  if (/^\d+$/.test(unquoted)) {
+    return unquoted;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    const candidates = [
+      parsed,
+      parsed?.id,
+      parsed?.topicId,
+      parsed?.topic?.id,
+      parsed?.data?.id,
+      parsed?.data?.topicId
+    ];
+    const topicId = candidates
+      .map((candidate) => String(candidate ?? "").trim())
+      .find((candidate) => /^\d+$/.test(candidate));
+    return topicId || "";
+  } catch {
+    return value.match(/(?:topicId|topic\/)(?:["':\s/]+)?(\d+)/i)?.[1] || "";
+  }
+}
+
+function resetReleasedNativeEditors() {
+  document.querySelectorAll("[data-cc98-native-submit-released='true'], [data-cc98-submit-transaction-active='true']")
+    .forEach((editor) => {
+      delete editor.dataset.cc98NativeSubmitReleased;
+      delete editor.dataset.cc98SubmitTransactionActive;
+      delete editor.dataset.cc98SubmitTransactionStartedAt;
+    });
+  document.querySelectorAll("[data-cc98-submit-pending='true']")
+    .forEach((control) => {
+      delete control.dataset.cc98SubmitPending;
+    });
+}
+
+function getCurrentTopicContentCapturePageKey() {
+  const info = getTopicPageInfo();
+  if (!info?.topicId) {
+    return "";
+  }
+  return `${info.topicId}:${Math.max(0, (Math.max(1, Number(info.current) || 1) - 1) * 10)}`;
+}
+
+function ensureTopicContentCaptureGraceWindow() {
+  const routeKey = getRoutePageKey();
+  if (topicContentCaptureGraceRouteKey !== routeKey) {
+    topicContentCaptureGraceRouteKey = routeKey;
+    topicContentCaptureGraceUntil = Date.now() + TOPIC_CONTENT_CAPTURE_GRACE_MS;
+    if (topicContentCaptureFallbackTimer) {
+      window.clearTimeout(topicContentCaptureFallbackTimer);
+      topicContentCaptureFallbackTimer = null;
+    }
+  }
+  return topicContentCaptureGraceUntil;
+}
+
+function hasCapturedCurrentTopicContentPage() {
+  const pageKey = getCurrentTopicContentCapturePageKey();
+  if (!pageKey || !capturedTopicContentPages.has(pageKey)) {
+    return false;
+  }
+  const replies = [...document.querySelectorAll(".reply")]
+    .filter((reply) => !reply.closest("#cc98-comfort-app"))
+    .slice(0, 30);
+  if (!replies.length) {
+    return capturedTopicContentPageCounts.get(pageKey) === 0;
+  }
+  return replies.every((reply, index) => {
+    const contentNode = findPostContentNode(reply);
+    const signatureNode = reply.querySelector(".signature, [class*='signature'], [class*='Signature']");
+    const contentSlots = contentNode?.querySelectorAll(".lazyload-placeholder, .hiddenImage").length || 0;
+    const signatureSlots = signatureNode?.querySelectorAll(".lazyload-placeholder, .hiddenImage").length || 0;
+    if (!contentSlots && !signatureSlots) {
+      return true;
+    }
+    const floor = getPostFloorNumber(reply, index);
+    const snapshot = findCapturedTopicPostSnapshot(reply, floor);
+    if (!snapshot) {
+      return false;
+    }
+    const contentMedia = extractCapturedPostMediaSources(snapshot.content || "").length;
+    const signatureMedia = extractCapturedPostMediaSources(snapshot.signatureCode || "").length;
+    return contentMedia >= contentSlots && signatureMedia >= signatureSlots;
+  });
+}
+
+function pruneCapturedTopicContent() {
+  const trim = (map, limit) => {
+    while (map.size > limit) {
+      map.delete(map.keys().next().value);
+    }
+  };
+  trim(capturedTopicPostsById, 600);
+  trim(capturedTopicPostsByFloor, 600);
+  trim(capturedTopicContentPageCounts, 80);
+  while (capturedTopicContentPages.size > 80) {
+    capturedTopicContentPages.delete(capturedTopicContentPages.values().next().value);
+  }
+}
+
+function handlePageTopicContentSnapshot(event) {
+  if (event.source !== window || event.origin !== location.origin) {
+    return;
+  }
+  const message = event.data;
+  if (message?.source !== "cc98-reborn-submit-monitor" || message.type !== "topic-content-snapshot") {
+    return;
+  }
+  const payload = message.payload;
+  const topicId = String(payload?.topicId || "").match(/\d+/)?.[0] || "";
+  if (!topicId || !Array.isArray(payload?.items)) {
+    return;
+  }
+  const from = Math.max(0, Number(payload.from) || 0);
+  if (payload.kind === "page") {
+    const pageKey = `${topicId}:${from}`;
+    capturedTopicContentPages.add(pageKey);
+    capturedTopicContentPageCounts.set(pageKey, payload.items.length);
+  }
+  payload.items.forEach((item, index) => {
+    const id = String(item?.id || "").match(/\d+/)?.[0] || "";
+    const floor = Math.max(
+      0,
+      Number(item?.floor) || (payload.kind === "page" ? from + index + 1 : 0)
+    );
+    const snapshot = {
+      topicId,
+      id,
+      floor,
+      content: typeof item?.content === "string" ? item.content : "",
+      contentType: Number(item?.contentType) || 0,
+      userId: String(item?.userId || ""),
+      userName: String(item?.userName || ""),
+      isAnonymous: Boolean(item?.isAnonymous),
+      signatureCode: typeof item?.signatureCode === "string" ? item.signatureCode : "",
+      capturedAt: Date.now()
+    };
+    if (id) {
+      capturedTopicPostsById.set(`${topicId}:${id}`, snapshot);
+    }
+    if (floor) {
+      capturedTopicPostsByFloor.set(`${topicId}:${floor}`, snapshot);
+    }
+  });
+  pruneCapturedTopicContent();
+
+  const currentTopicId = getTopicPageInfo()?.topicId || "";
+  if (currentTopicId !== topicId) {
+    return;
+  }
+  scheduleRebuild();
+}
+
+function recoverEditorSubmitContextFromMonitor(result) {
+  const existing = readEditorSubmitContext();
+  if (existing && hasRecentEditorSubmitIntent(90000)) {
+    return existing;
+  }
+  const kind = String(result?.kind || "");
+  const editor = kind === "reply"
+    ? document.querySelector("#sendTopicInfo")
+    : document.querySelector(".createTopic");
+  if (!(editor instanceof HTMLElement)) {
+    return null;
+  }
+  const context = getNativeEditorSubmitContext({
+    editor,
+    submitKind: kind
+  });
+  markEditorSubmitIntent({
+    ...context,
+    monitorRecovered: true
+  });
+  schedulePostSubmitPageRefresh(context);
+  return readEditorSubmitContext();
+}
+
+function getStrictTopicPageHref(value) {
+  if (!value) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value, location.href);
+    if (!/\/topic\/\d+(?:\/\d+)?\/?$/i.test(parsed.pathname)) {
+      return "";
+    }
+    return getTopicRouteInfo(parsed.href)?.href || "";
+  } catch {
+    return "";
+  }
+}
+
+function clearNativePostSubmitRefreshTimers() {
+  nativePostSubmitRefreshTimers.forEach((timer) => window.clearTimeout(timer));
+  nativePostSubmitRefreshTimers = [];
+}
+
+function scheduleAmbiguousEditorSubmitRecovery(context, result) {
+  if (!context) {
+    return;
+  }
+  updateEditorSubmitContext({
+    ambiguousResponseAt: Date.now(),
+    ambiguousResponseStatus: Number(result?.status) || 0,
+    preserveDraftUntilConfirmed: true
+  });
+}
+
+function handlePageEditorSubmitResult(event) {
+  const isDomBridgeEvent = event?.type === EDITOR_SUBMIT_MONITOR_EVENT;
+  if (!isDomBridgeEvent && (event.source !== window || event.origin !== location.origin)) {
+    return;
+  }
+  let message = event.data;
+  if (isDomBridgeEvent) {
+    try {
+      message = JSON.parse(String(event.detail || ""));
+    } catch {
+      return;
+    }
+  }
+  if (message?.source !== "cc98-reborn-submit-monitor"
+    || !/^(?:editor-submit-start|editor-submit-result)$/.test(message.type || "")) {
+    return;
+  }
+  const monitorEventId = String(message.monitorEventId || "");
+  if (monitorEventId && handledEditorSubmitMonitorEvents.has(monitorEventId)) {
+    return;
+  }
+  if (monitorEventId) {
+    handledEditorSubmitMonitorEvents.add(monitorEventId);
+    while (handledEditorSubmitMonitorEvents.size > 80) {
+      handledEditorSubmitMonitorEvents.delete(handledEditorSubmitMonitorEvents.values().next().value);
+    }
+  }
+  const result = message.payload;
+  if (!result?.kind) {
+    return;
+  }
+  const context = recoverEditorSubmitContextFromMonitor(result);
+  if (!context || !hasRecentEditorSubmitIntent(90000)) {
+    return;
+  }
+  if (context.submitKind && context.submitKind !== result.kind) {
+    return;
+  }
+
+  if (message.type === "editor-submit-start") {
+    updateEditorSubmitContext({
+      requestObservedAt: Number(result.startedAt) || Date.now(),
+      requestMethod: String(result.method || ""),
+      requestUrl: String(result.url || "")
+    });
+    if (releaseReparentedNativeEditorForSubmit(result.kind)) {
+      editorSubmitOverlayAwaitingRebuild = true;
+      showLoadingOverlay(result.kind === "edit"
+        ? "正在提交修改，请稍候..."
+        : "正在提交内容，请稍候...", { opaque: true });
+    }
+    return;
+  }
+
+  const responseEntityId = getSubmittedTopicIdFromResponseBody(result.body);
+  const status = Number(result.status) || 0;
+  const accepted = Boolean(result.ok)
+    || (status >= 200 && status < 300)
+    || (/^(?:post|reply)$/.test(result.kind) && /^\d+$/.test(responseEntityId));
+  if (!accepted) {
+    const definitiveFailure = status >= 400 && status < 500;
+    if (definitiveFailure) {
+      clearNativePostSubmitRefreshTimers();
+      clearEditorSubmitIntent();
+      resetReleasedNativeEditors();
+      editorSubmitOverlayAwaitingRebuild = false;
+      hideLoadingOverlay({ force: true });
+      scheduleRebuild();
+      return;
+    }
+    scheduleAmbiguousEditorSubmitRecovery(context, result);
+    return;
+  }
+
+  clearNativePostSubmitRefreshTimers();
+  clearNativeEditorDraftByKey(context.draftKey);
+  const topicId = result.kind === "post"
+    ? responseEntityId
+    : "";
+  const responseTopicHref = getStrictTopicPageHref(
+    result.location || result.responseUrl || result.url || ""
+  );
+  const destination = topicId
+    ? makeAbsoluteCc98Url(`/topic/${topicId}`)
+    : responseTopicHref || getEditorSubmitHardTarget(context);
+  updateEditorSubmitContext({
+    serverAcceptedAt: Date.now(),
+    responseObservedAt: Date.now(),
+    successNavigationAttemptedAt: Date.now(),
+    destinationHref: destination || context.destinationHref,
+    responseStatus: Number(result.status) || 0
+  });
+  showLoadingOverlay(result.kind === "edit"
+    ? "\u4fee\u6539\u5df2\u6210\u529f\uff0c\u6b63\u5728\u8fd4\u56de\u5e16\u5b50..."
+    : "\u63d0\u4ea4\u5df2\u6210\u529f\uff0c\u6b63\u5728\u5237\u65b0\u5e16\u5b50...");
+  window.setTimeout(() => {
+    navigateToEditorSubmitTarget(destination || location.href, {
+      reloadFallback: true,
+      fallbackDelay: 360
+    });
+  }, result.kind === "edit" ? 220 : 360);
+}
+
+function bindPageEditorSubmitResultMonitor() {
+  if (editorSubmitResultMonitorBound) {
+    return;
+  }
+  editorSubmitResultMonitorBound = true;
+  window.addEventListener("message", handlePageEditorSubmitResult);
+  document.addEventListener(EDITOR_SUBMIT_MONITOR_EVENT, handlePageEditorSubmitResult);
+  window.addEventListener("message", handlePageTopicContentSnapshot);
+}
+
+function hasRecentEditorSubmitIntent(ttl = 45000) {
+  try {
+    const markedAt = Number.parseInt(sessionStorage.getItem(EDITOR_SUBMIT_INTENT_KEY) || "", 10);
+    return Number.isFinite(markedAt) && Date.now() - markedAt <= ttl;
+  } catch {
+    return false;
+  }
+}
+
+function pageHasNativeTopicContent() {
+  return Boolean(document.querySelector([
+    ".reply:not(.cc98-rebuild-card)",
+    "#sendTopicInfo",
+    ".topicInfo",
+    ".reply-content",
+    ".substance",
+    ".cc98-rebuild-post-feed"
+  ].join(",")));
+}
+
+function pageHasStaleEditorOnTopicRoute() {
+  const routeInfo = getTopicRouteInfo();
+  if (!routeInfo) {
+    return false;
+  }
+  if (pageHasNativeTopicContent()) {
+    return false;
+  }
+  const hasEditor = Boolean(document.querySelector(".createTopic, .cc98-rebuild-native-editor, #cc98-comfort-app[data-page-kind='editor']"));
+  const hasCrashTemplate = Boolean(document.querySelector("#error-text, #stack-text, #source-text"))
+    || /CC98\s*\u8bba\u575b\s*-\s*\u9519\u8bef/.test(document.title);
+  return hasEditor || (hasCrashTemplate && hasRecentEditorSubmitIntent());
+}
+
+function repairStaleEditorTopicRoute() {
+  clearSettledEditorSubmitIntent();
+  if (!pageHasStaleEditorOnTopicRoute()) {
+    return false;
+  }
+  const context = readEditorSubmitContext();
+  if (isSubmitContextAttempted(context, "staleTopicReloadAttemptedAt")) {
+    return false;
+  }
+  const key = getEditorStaleTopicReloadKey();
+  if (!key) {
+    return false;
+  }
+  try {
+    const lastReloadAt = Number.parseInt(sessionStorage.getItem(key) || "", 10);
+    if (Number.isFinite(lastReloadAt) && Date.now() - lastReloadAt <= EDITOR_TOPIC_RELOAD_TTL) {
+      return false;
+    }
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    // Continue with the reload; the guard is best-effort only.
+  }
+  showLoadingOverlay("\u63d0\u4ea4\u5df2\u6210\u529f\uff0c\u6b63\u5728\u91cd\u65b0\u52a0\u8f7d\u5e16\u5b50\u9875\u9762...");
+  updateEditorSubmitContext({ staleTopicReloadAttemptedAt: Date.now() });
+  navigateToEditorSubmitTarget(location.href, { reloadFallback: true, fallbackDelay: 400 });
+  return true;
+}
+
+function getSubmittedTopicRouteReloadKey(routeInfo = getTopicRouteInfo()) {
+  return routeInfo
+    ? `${EDITOR_TOPIC_SUBMIT_RELOAD_KEY_PREFIX}${routeInfo.topicId}:${routeInfo.current}:${encodeURIComponent(routeInfo.routeKey)}`
+    : "";
+}
+
+function refreshSubmittedTopicRoute() {
+  const routeInfo = getTopicRouteInfo();
+  if (!routeInfo || !hasRecentEditorSubmitIntent(60000)) {
+    return false;
+  }
+  const context = readEditorSubmitContext();
+  if (isSubmitContextAttempted(context, "topicRefreshAttemptedAt")) {
+    return false;
+  }
+  const key = getSubmittedTopicRouteReloadKey(routeInfo);
+  if (!key) {
+    return false;
+  }
+  try {
+    const lastReloadAt = Number.parseInt(sessionStorage.getItem(key) || "", 10);
+    if (Number.isFinite(lastReloadAt) && Date.now() - lastReloadAt <= EDITOR_TOPIC_SUBMIT_RELOAD_TTL) {
+      return false;
+    }
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    // Continue with the reload; the guard is best-effort only.
+  }
+  showLoadingOverlay("\u63d0\u4ea4\u5df2\u6210\u529f\uff0c\u6b63\u5728\u5237\u65b0\u5e16\u5b50\u9875\u9762...");
+  updateEditorSubmitContext({ topicRefreshAttemptedAt: Date.now() });
+  navigateToEditorSubmitTarget(routeInfo.href, { reloadFallback: true, fallbackDelay: 400 });
+  return true;
+}
+
+function isElementDisplayed(element) {
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+  if (element.hidden || element.classList.contains("displaynone")) {
+    return false;
+  }
+  const style = window.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || 1) !== 0;
+}
+
+function hasVisibleEditorSubmitSuccess() {
+  const successPattern = /\u6210\u529f|\u4fee\u6539\u5b8c\u6210|\u7f16\u8f91\u5b8c\u6210|\u5df2\u4fee\u6539|\u5df2\u53d1\u8868|\u5df2\u53d1\u5e03|\u5df2\u63d0\u4ea4|\u5df2\u4fdd\u5b58|\u5df2\u7f16\u8f91/;
+  const notices = [
+    ...document.querySelectorAll(".send-topic-notice-success, .noticeSuccess, [class*='notice-success'], [class*='NoticeSuccess'], [class*='success'], [class*='Success']")
+  ].filter((node) => node instanceof HTMLElement);
+  return notices.some((node) => isElementDisplayed(node) && successPattern.test(cleanupPostText(node.textContent)));
+}
+
+function hasVisibleEditorSubmitFailure() {
+  const failurePattern = /\u5931\u8d25|\u9519\u8bef|\u65e0\u6cd5|\u4e0d\u80fd|\u672a\u767b\u5f55|\u6743\u9650|\u9a8c\u8bc1\u7801|\u5185\u5bb9\u4e3a\u7a7a|\u5185\u5bb9\u592a\u957f|\u53d1\u5e16\u8fc7\u5feb|\u8bf7\u7a0d\u540e/;
+  const notices = [
+    ...document.querySelectorAll([
+      ".send-topic-notice-error",
+      ".noticeError",
+      ".ant-message-error",
+      ".ant-notification-notice-error",
+      ".ant-alert-error",
+      "[class*='notice-error']",
+      "[class*='NoticeError']"
+    ].join(","))
+  ].filter((node) => node instanceof HTMLElement);
+  return notices.some((node) => isElementDisplayed(node) && failurePattern.test(cleanupPostText(node.textContent)));
+}
+
+function getEditorSubmitDestinationHref() {
+  const topicLink = [...document.querySelectorAll('a[href*="/topic/"]')]
+    .map((link) => makeAbsoluteCc98Url(link.getAttribute("href") || link.href || ""))
+    .find((href) => getTopicRouteInfo(href));
+  if (topicLink) {
+    return topicLink;
+  }
+  if (/\/topic\/\d+/i.test(document.referrer || "")) {
+    return document.referrer;
+  }
+  const boardLink = [...document.querySelectorAll('.createTopic a[href*="/board/"], a[href*="/board/"]')]
+    .map((link) => makeAbsoluteCc98Url(link.getAttribute("href") || link.href || ""))
+    .find((href) => /\/board\/\d+/i.test(href));
+  return boardLink || "";
+}
+
+function navigateAfterEditorSubmitSuccess(startedOnTopic = false) {
+  if (!hasRecentEditorSubmitIntent(60000) || !hasVisibleEditorSubmitSuccess()) {
+    return false;
+  }
+  const context = readEditorSubmitContext();
+  if (isSubmitContextAttempted(context, "successNavigationAttemptedAt")) {
+    return false;
+  }
+  const routeInfo = getTopicRouteInfo();
+  if (routeInfo) {
+    showLoadingOverlay("\u63d0\u4ea4\u5df2\u6210\u529f\uff0c\u6b63\u5728\u5237\u65b0\u5e16\u5b50\u9875\u9762...");
+    clearNativeEditorDraftByKey(context?.draftKey);
+    updateEditorSubmitContext({ successNavigationAttemptedAt: Date.now(), topicRefreshAttemptedAt: Date.now() });
+    navigateToEditorSubmitTarget(routeInfo.href, { reloadFallback: true, fallbackDelay: 400 });
+    return true;
+  }
+  const destination = getEditorSubmitDestinationHref();
+  if (destination) {
+    showLoadingOverlay(startedOnTopic
+      ? "\u63d0\u4ea4\u5df2\u6210\u529f\uff0c\u6b63\u5728\u8fd4\u56de\u5e16\u5b50\u9875\u9762..."
+      : "\u63d0\u4ea4\u5df2\u6210\u529f\uff0c\u6b63\u5728\u8df3\u8f6c...");
+    clearNativeEditorDraftByKey(context?.draftKey);
+    updateEditorSubmitContext({ successNavigationAttemptedAt: Date.now() });
+    navigateToEditorSubmitTarget(destination, { reloadFallback: true, fallbackDelay: 450 });
+    return true;
+  }
+  showLoadingOverlay("\u63d0\u4ea4\u5df2\u6210\u529f\uff0c\u6b63\u5728\u5237\u65b0\u9875\u9762...");
+  clearNativeEditorDraftByKey(context?.draftKey);
+  updateEditorSubmitContext({ successNavigationAttemptedAt: Date.now() });
+  hardReloadCurrentLocation();
+  return true;
+}
+
+function isEditorSubmitIntermediatePage() {
+  if (!hasRecentEditorSubmitIntent(90000)) {
+    return false;
+  }
+  const title = cleanupPostText(document.title);
+  const bodyText = cleanupPostText(document.body?.textContent || "");
+  const hasCrashTemplate = Boolean(document.querySelector("#error-text, #stack-text, #source-text"))
+    || /CC98\s*\u8bba\u575b\s*-\s*\u9519\u8bef/.test(title);
+  const hasErrorState = Boolean(document.querySelector(".errorState, .errorTitle, .errorText"));
+  return hasCrashTemplate
+    || hasErrorState
+    || (/(\u9519\u8bef|\u51fa\u9519|Error|Exception|Invariant)/i.test(`${title} ${bodyText}`) && !pageHasNativeTopicContent());
+}
+
+function isNativeErrorPage() {
+  const title = cleanupPostText(document.title);
+  return Boolean(document.querySelector([
+    ".errorState",
+    ".errorTitle",
+    ".errorText",
+    "#error-text",
+    "#stack-text",
+    "#source-text"
+  ].join(",")))
+    || /CC98\s*\u8bba\u575b\s*[-\u2013\u2014]\s*\u9519\u8bef/i.test(title)
+    || /^(?:\u5e16\u5b50\u4e0d\u5b58\u5728|\u60a8\u672a\u767b\u5f55)(?:\s*[-\u2013\u2014].*)?$/i.test(title);
+}
+
+function restoreEditorSubmitOverlayAfterReload() {
+  const context = readEditorSubmitContext();
+  if (!context || !hasRecentEditorSubmitIntent(90000)) {
+    return false;
+  }
+  const submittedAt = Number(context.submittedAt) || 0;
+  const loadedAt = Number(performance?.timeOrigin) || Date.now();
+  const loadedAfterSubmit = loadedAt > submittedAt;
+  const isTopicDestination = Boolean(getTopicRouteInfo());
+  const isKnownRecoveryRoute = isTopicDestination
+    || /\/editor\/(?:postTopic|edit)\//i.test(location.pathname)
+    || isNativeErrorPage();
+  if (!loadedAfterSubmit || !isKnownRecoveryRoute) {
+    return false;
+  }
+  editorSubmitOverlayAwaitingRebuild = true;
+  showLoadingOverlay(context.isEdit
+    ? "\u4fee\u6539\u5df2\u63d0\u4ea4\uff0c\u6b63\u5728\u5237\u65b0\u5e16\u5b50..."
+    : "\u63d0\u4ea4\u5df2\u5b8c\u6210\uff0c\u6b63\u5728\u5237\u65b0\u5e16\u5b50...");
+  scheduleEditorSubmitOverlayRelease();
+  return true;
+}
+
+function releaseEditorSubmitOverlayOnTopic(options = {}) {
+  const context = readEditorSubmitContext();
+  if (!context || !hasRecentEditorSubmitIntent(90000) || !getTopicRouteInfo()) {
+    return false;
+  }
+  const canRelease = options.force
+    || pageHasNativeTopicContent()
+    || Boolean(document.querySelector("#cc98-comfort-app[data-page-kind='post']"));
+  if (!canRelease) {
+    return false;
+  }
+  clearNativeEditorDraftByKey(context.draftKey);
+  resetReleasedNativeEditors();
+  removeEditorSubmitRecoveryCacheBust();
+  editorSubmitOverlayAwaitingRebuild = false;
+  clearEditorSubmitIntent();
+  hideLoadingOverlay({ force: true });
+  scheduleRebuild();
+  scheduleSync();
+  return true;
+}
+
+function scheduleEditorSubmitOverlayRelease(delay = 1800) {
+  if (editorSubmitOverlayReleaseTimer) {
+    window.clearTimeout(editorSubmitOverlayReleaseTimer);
+  }
+  editorSubmitOverlayReleaseTimer = window.setTimeout(() => {
+    editorSubmitOverlayReleaseTimer = null;
+    releaseEditorSubmitOverlayOnTopic({ force: true });
+  }, delay);
+}
+
+function forceReloadEditorSubmitErrorPage() {
+  const context = readEditorSubmitContext();
+  if (!context || !hasRecentEditorSubmitIntent(90000) || !isNativeErrorPage()) {
+    return false;
+  }
+  if (isSubmitContextAttempted(context, "errorPageHardReloadAttemptedAt")) {
+    return false;
+  }
+  updateEditorSubmitContext({ errorPageHardReloadAttemptedAt: Date.now() });
+  showLoadingOverlay(context.isEdit
+    ? "\u4fee\u6539\u5df2\u63d0\u4ea4\uff0c\u6b63\u5728\u5f3a\u5236\u5237\u65b0\u5e16\u5b50..."
+    : "\u63d0\u4ea4\u5df2\u5b8c\u6210\uff0c\u6b63\u5728\u5f3a\u5236\u5237\u65b0\u5e16\u5b50...");
+  window.setTimeout(hardReloadCurrentLocation, 0);
+  return true;
+}
+
+function getEditorSubmitRecoveryTarget(context = readEditorSubmitContext()) {
+  const candidates = [
+    context?.destinationHref,
+    getStoredLastTopicHref(),
+    getTopicReferrerHref(),
+    getTopicRouteInfo()?.href
+  ];
+  return candidates
+    .map((href) => makeAbsoluteCc98Url(href || ""))
+    .find((href) => href && getTopicRouteInfo(href)) || "";
+}
+
+function getEditorSubmitHardTarget(context = readEditorSubmitContext()) {
+  const currentTopic = getTopicRouteInfo()?.href || "";
+  if (currentTopic && !isNativeErrorPage()) {
+    return currentTopic;
+  }
+  const destination = makeAbsoluteCc98Url(context?.destinationHref || "");
+  if (!context?.startedOnTopic && !context?.isEdit && destination) {
+    return destination;
+  }
+  const recoveryTarget = getEditorSubmitRecoveryTarget(context);
+  if (recoveryTarget) {
+    return recoveryTarget;
+  }
+  if (destination) {
+    return destination;
+  }
+  const startedHref = makeAbsoluteCc98Url(context?.startedHref || "");
+  if (context?.startedOnTopic && startedHref) {
+    return startedHref;
+  }
+  return getStoredLastTopicHref() || getTopicReferrerHref() || startedHref || location.href;
+}
+
+function hardReloadCurrentLocation() {
+  try {
+    location.reload();
+  } catch {
+    location.href = location.href;
+  }
+}
+
+function navigateToEditorSubmitTarget(destination, options = {}) {
+  const target = makeAbsoluteCc98Url(destination || "");
+  const currentWithoutHash = stripUrlHash(location.href);
+  const targetWithoutHash = target ? stripUrlHash(target) : "";
+  if (target && targetWithoutHash !== currentWithoutHash) {
+    location.replace(target);
+    if (options.reloadFallback !== false) {
+      const fallbackDelay = Math.max(
+        5000,
+        Number.isFinite(options.fallbackDelay) ? options.fallbackDelay : 6000
+      );
+      window.setTimeout(() => {
+        if (hasRecentEditorSubmitIntent(90000)
+          && stripUrlHash(location.href) === currentWithoutHash) {
+          location.replace(target);
+        }
+      }, fallbackDelay);
+    }
+    return;
+  }
+  hardReloadCurrentLocation();
+}
+
+function getUnobservedNativeSubmitRecoveryTarget(context) {
+  const currentTopic = getTopicRouteInfo()?.href || "";
+  if (currentTopic && !isNativeErrorPage()) {
+    return currentTopic;
+  }
+  if (context?.submitKind === "reply") {
+    return getEditorSubmitRecoveryTarget(context)
+      || makeAbsoluteCc98Url(context.destinationHref || context.startedHref || "")
+      || getStoredLastTopicHref()
+      || getTopicReferrerHref()
+      || location.href;
+  }
+  if (context?.submitKind === "post") {
+    return currentTopic
+      || getEditorSubmitRecoveryTarget(context)
+      || makeAbsoluteCc98Url(context.destinationHref || "")
+      || location.href;
+  }
+  return getEditorSubmitHardTarget(context);
+}
+
+function hasPendingNativeEditorSubmitControl() {
+  return [...document.querySelectorAll(
+    ".createTopic button, .createTopic input[type='button'], .createTopic input[type='submit'], #sendTopicInfo button, #sendTopicInfo input[type='button'], #sendTopicInfo input[type='submit']"
+  )].some((control) => {
+    if (!(control instanceof HTMLElement) || isEditorAuxiliarySubmitControl(control)) {
+      return false;
+    }
+    const label = cleanupPostText(
+      control instanceof HTMLInputElement ? control.value : control.textContent
+    ).replace(/\*/g, "").trim();
+    return label === "..." || control.dataset.cc98SubmitPending === "true";
+  });
+}
+
+function recoverUnobservedNativePostSubmit(startedRouteKey, options = {}) {
+  const context = readEditorSubmitContext();
+  if (!context || context.startedRouteKey !== startedRouteKey || !hasRecentEditorSubmitIntent(90000)) {
+    return false;
+  }
+  if (!/^(?:post|reply)$/i.test(context.submitKind || "")) {
+    return false;
+  }
+  const routeChanged = getRoutePageKey() !== startedRouteKey;
+  const nativeControlPending = hasPendingNativeEditorSubmitControl();
+  const visibleSuccess = hasVisibleEditorSubmitSuccess();
+  if (!routeChanged && !nativeControlPending && !visibleSuccess) {
+    return false;
+  }
+  if (hasVisibleEditorSubmitFailure()) {
+    clearEditorSubmitIntent();
+    resetReleasedNativeEditors();
+    hideLoadingOverlay({ force: true });
+    return false;
+  }
+  if (isSubmitContextAttempted(context, "unobservedNativeSubmitReloadAttemptedAt") && !options.allowRepeat) {
+    return false;
+  }
+  const submittedAt = Number(context.submittedAt) || 0;
+  if (Date.now() - submittedAt < 3200) {
+    return false;
+  }
+  const target = getUnobservedNativeSubmitRecoveryTarget(context);
+  showLoadingOverlay("\u6b63\u5728\u5237\u65b0\u9875\u9762\u6838\u9a8c\u63d0\u4ea4\u7ed3\u679c...");
+  updateEditorSubmitContext({
+    unobservedNativeSubmitReloadAttemptedAt: Date.now(),
+    successNavigationAttemptedAt: Date.now(),
+    preserveDraftUntilConfirmed: true,
+    destinationHref: target || context.destinationHref
+  });
+  resetReleasedNativeEditors();
+  navigateToEditorSubmitTarget(target || location.href, {
+    reloadFallback: true,
+    fallbackDelay: Number.isFinite(options.fallbackDelay) ? options.fallbackDelay : 420
+  });
+  return true;
+}
+
+function handleEditorSubmitIntermediatePage() {
+  clearSettledEditorSubmitIntent();
+  if (!isEditorSubmitIntermediatePage()) {
+    return false;
+  }
+  if (forceReloadEditorSubmitErrorPage()) {
+    return true;
+  }
+  const context = readEditorSubmitContext();
+  if (isSubmitContextAttempted(context, "errorPageHardReloadAttemptedAt")) {
+    clearEditorSubmitIntent();
+    resetReleasedNativeEditors();
+    removeEditorSubmitRecoveryCacheBust();
+    hideLoadingOverlay();
+    return false;
+  }
+  if (isSubmitContextAttempted(context, "intermediateRecoveryAttemptedAt")) {
+    clearEditorSubmitIntent();
+    resetReleasedNativeEditors();
+    removeEditorSubmitRecoveryCacheBust();
+    hideLoadingOverlay();
+    return false;
+  }
+  const target = getEditorSubmitHardTarget(context)
+    || context?.destinationHref
+    || context?.startedHref
+    || "";
+  showLoadingOverlay(context?.isEdit
+    ? "\u5df2\u786e\u8ba4\u4fee\u6539\u5b8c\u6210\uff0c\u6b63\u5728\u5237\u65b0\u8fd4\u56de..."
+    : "\u5df2\u786e\u8ba4\u63d0\u4ea4\u5b8c\u6210\uff0c\u6b63\u5728\u5237\u65b0\u8fd4\u56de...");
+  if (editorSubmitIntermediateTimer) {
+    return true;
+  }
+  const delay = 180;
+  editorSubmitIntermediateTimer = window.setTimeout(() => {
+    editorSubmitIntermediateTimer = null;
+    showLoadingOverlay(context?.isEdit
+      ? "\u4fee\u6539\u5b8c\u6210\uff0c\u6b63\u5728\u5f3a\u5236\u5237\u65b0..."
+      : "\u63d0\u4ea4\u5b8c\u6210\uff0c\u6b63\u5728\u5f3a\u5236\u5237\u65b0...");
+    updateEditorSubmitContext({ intermediateRecoveryAttemptedAt: Date.now() });
+    const recoveryTarget = addEditorSubmitRecoveryCacheBust(target);
+    if (recoveryTarget) {
+      location.replace(recoveryTarget);
+      return;
+    }
+    clearEditorSubmitIntent();
+    resetReleasedNativeEditors();
+    hideLoadingOverlay();
+  }, delay);
+  return true;
+}
+
+function recoverEditorSubmitAfterNavigation() {
+  const context = readEditorSubmitContext();
+  if (!context || !hasRecentEditorSubmitIntent(90000)) {
+    return false;
+  }
+  if (forceReloadEditorSubmitErrorPage()) {
+    return true;
+  }
+  const submittedAt = Number(context.submittedAt) || 0;
+  const loadedAfterSubmit = Number(performance?.timeOrigin || 0) > submittedAt;
+  if (!loadedAfterSubmit) {
+    return false;
+  }
+  if (handleEditorSubmitIntermediatePage()) {
+    return true;
+  }
+  if (getTopicRouteInfo() && pageHasNativeTopicContent()) {
+    if (!context.preserveDraftUntilConfirmed) {
+      clearNativeEditorDraftByKey(context.draftKey);
+    }
+    clearEditorSubmitIntent();
+    resetReleasedNativeEditors();
+    removeEditorSubmitRecoveryCacheBust();
+  }
+  return false;
 }
 
 function readSessionJson(key) {
@@ -1436,6 +4979,7 @@ function startFirstPagePrevisitReturn(pending) {
     if (identity) {
       setCachedOriginalPosterIdentity(pending.topicId, identity);
     }
+    cacheHotReplyFingerprintsFromRoot(pending.topicId, document);
     await wait(260);
   })()
     .catch(() => {})
@@ -1458,6 +5002,12 @@ function handleTopicFirstPagePrevisitNavigation() {
   }
 
   if (!lastSettings?.enabled || !lastSettings.previsitFirstPageForTopicImages) {
+    firstPagePrevisitInProgress = false;
+    removeSessionItem(FIRST_PAGE_PREVISIT_PENDING_KEY);
+    return false;
+  }
+
+  if (isNativeErrorPage()) {
     firstPagePrevisitInProgress = false;
     removeSessionItem(FIRST_PAGE_PREVISIT_PENDING_KEY);
     return false;
@@ -1540,6 +5090,9 @@ function waitForNativeImage(image, timeout = 900) {
 }
 
 async function prewarmNativeLazyMedia() {
+  if (!isPostImagePrewarmEnabled()) {
+    return;
+  }
   const pageKey = getLazyPrewarmPageKey();
   if (lazyPrewarmedPageKey === pageKey) {
     return;
@@ -1550,35 +5103,44 @@ async function prewarmNativeLazyMedia() {
 
   lazyPrewarmPromise = (async () => {
     const root = document.querySelector("#root");
-    const originalRootScrollTop = root?.scrollTop ?? 0;
-    const originalRootScrollLeft = root?.scrollLeft ?? 0;
+    const originalScrollPositions = captureNativeScrollPositions();
     document.documentElement.dataset.cc98ComfortPrewarming = "true";
+    beginNativeLazyScrollOverlay();
 
     try {
       await wait(120);
-      const media = [...document.querySelectorAll([
+      const media = sortNodesByDocumentPosition([...document.querySelectorAll([
         "#root .reply-content .substance img",
         "#root .reply-content .substance [style*='url(']",
+        "#root .reply-content .substance .hiddenImage",
         "#root .signature img",
         "#root .signature [style*='url(']",
+        "#root .signature .hiddenImage",
         "#root article img",
-        "#root article [style*='url(']"
-      ].join(","))]
+        "#root article [style*='url(']",
+        "#root article .hiddenImage"
+      ].join(","))])
         .filter((node) => node instanceof Element && !node.closest("#cc98-comfort-app"));
 
       [...root?.querySelectorAll("img") ?? []].forEach(eagerNativeImage);
+      triggerOriginalDeferredImagesForPrewarm(root);
+      getNativeScrollTargets().forEach((target) => scrollNativeTargetTo(target, 0));
       dispatchNativeLazySignals();
+      await wait(120);
 
       for (const node of media) {
         node.scrollIntoView?.({ block: "center", inline: "nearest" });
         if (node instanceof HTMLImageElement) {
           eagerNativeImage(node);
+        } else if (isDeferredPostImageControl(node)) {
+          triggerOriginalControl(node);
         }
         dispatchNativeLazySignals();
         await wait(70);
       }
 
       root?.scrollTo?.({ top: root.scrollHeight, left: 0, behavior: "auto" });
+      triggerOriginalDeferredImagesForPrewarm(root);
       dispatchNativeLazySignals();
       await wait(180);
 
@@ -1587,14 +5149,26 @@ async function prewarmNativeLazyMedia() {
         .map((image) => waitForNativeImage(image)));
       lazyPrewarmedPageKey = pageKey;
     } finally {
-      root?.scrollTo?.({ top: originalRootScrollTop, left: originalRootScrollLeft, behavior: "auto" });
-      dispatchNativeLazySignals();
-      delete document.documentElement.dataset.cc98ComfortPrewarming;
-      lazyPrewarmPromise = null;
+      try {
+        restoreNativeScrollPositions(originalScrollPositions);
+        dispatchNativeLazySignals();
+      } finally {
+        delete document.documentElement.dataset.cc98ComfortPrewarming;
+        endNativeLazyScrollOverlay();
+        lazyPrewarmPromise = null;
+      }
     }
   })();
 
   return lazyPrewarmPromise;
+}
+
+function triggerOriginalDeferredImagesForPrewarm(root = document) {
+  getDeferredImageControls(root)
+    .filter((control) => control instanceof HTMLElement && !control.closest("#cc98-comfort-app"))
+    .forEach((control) => {
+      triggerOriginalControl(control);
+    });
 }
 
 function getNativeScrollTargets() {
@@ -1629,44 +5203,102 @@ function scrollNativeTargetTo(target, top) {
   target.dispatchEvent(new Event("scroll", { bubbles: true }));
 }
 
+function getNativeScrollTop(target) {
+  if (target === window) {
+    return window.scrollY || document.documentElement?.scrollTop || document.body?.scrollTop || 0;
+  }
+  return target?.scrollTop || 0;
+}
+
+function captureNativeScrollPositions() {
+  return getNativeScrollTargets().map((target) => ({
+    target,
+    top: getNativeScrollTop(target),
+    left: target === window ? (window.scrollX || 0) : (target.scrollLeft || 0)
+  }));
+}
+
+function restoreNativeScrollPositions(positions) {
+  (positions || []).forEach(({ target, top, left }) => {
+    if (target === window) {
+      window.scrollTo({ top, left: left || 0, behavior: "auto" });
+      return;
+    }
+    if (target) {
+      target.scrollTop = top || 0;
+      target.scrollLeft = left || 0;
+      target.dispatchEvent(new Event("scroll", { bubbles: true }));
+    }
+  });
+}
+
+function sortNodesByDocumentPosition(nodes) {
+  return [...nodes].sort((a, b) => {
+    if (a === b) {
+      return 0;
+    }
+    const position = a.compareDocumentPosition?.(b) || 0;
+    if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
+      return -1;
+    }
+    if (position & Node.DOCUMENT_POSITION_PRECEDING) {
+      return 1;
+    }
+    return 0;
+  });
+}
+
 async function scrollOriginalPageForLazyMedia(duration = 2100, shouldStop = () => false) {
   const durationMs = clampNumber(duration, 800, 8000, DEFAULT_SETTINGS.imageLoadDuration);
   const steps = Math.max(6, Math.min(40, Math.round(durationMs / 120)));
   const delay = Math.max(40, Math.round(durationMs / steps));
-  getNativeScrollTargets().forEach((target) => scrollNativeTargetTo(target, 0));
-  dispatchNativeLazySignals();
-  await wait(80);
+  beginNativeLazyScrollOverlay();
+  try {
+    getNativeScrollTargets().forEach((target) => {
+      scrollNativeTargetTo(target, 0);
+    });
+    dispatchNativeLazySignals();
+    await wait(80);
 
-  for (let step = 1; step <= steps; step += 1) {
+    for (let step = 1; step <= steps; step += 1) {
+      if (shouldStop()) {
+        return;
+      }
+      maintainNativeLazyScrollOverlay();
+      const progress = step / steps;
+      getNativeScrollTargets().forEach((target) => {
+        scrollNativeTargetTo(target, getScrollTargetMaxTop(target) * progress);
+      });
+      document.querySelectorAll("img").forEach(eagerNativeImage);
+      dispatchNativeLazySignals();
+      await wait(delay);
+    }
+
     if (shouldStop()) {
       return;
     }
-    const progress = step / steps;
+    maintainNativeLazyScrollOverlay();
     getNativeScrollTargets().forEach((target) => {
-      scrollNativeTargetTo(target, getScrollTargetMaxTop(target) * progress);
+      scrollNativeTargetTo(target, getScrollTargetMaxTop(target));
     });
     document.querySelectorAll("img").forEach(eagerNativeImage);
     dispatchNativeLazySignals();
-    await wait(delay);
+    await wait(180);
+  } finally {
+    endNativeLazyScrollOverlay({
+      keepVisible: document.documentElement.dataset.cc98ComfortOriginalPrewarming === "true"
+    });
   }
-
-  if (shouldStop()) {
-    return;
-  }
-  getNativeScrollTargets().forEach((target) => {
-    scrollNativeTargetTo(target, getScrollTargetMaxTop(target));
-  });
-  document.querySelectorAll("img").forEach(eagerNativeImage);
-  dispatchNativeLazySignals();
-  await wait(180);
 }
 
 function collectSnapshotMedia(root) {
   const media = [];
   const seen = new Set();
-  root?.querySelectorAll("img").forEach((image) => {
-    const src = makeAbsoluteCc98Url(getMediaUrl(image) || image.currentSrc || image.src || "");
-    if (!src || isEmojiImageUrl(src) || isDownloadFileUrl(src)) {
+  root?.querySelectorAll("img, video, source").forEach((node) => {
+    const src = node instanceof HTMLImageElement
+      ? getNonDecorativeImageSrc(node)
+      : makeAbsoluteCc98Url(getMediaUrl(node) || node.src || "");
+    if (!src || isEmojiImageUrl(src) || isDownloadFileUrl(src) || (!isProbablyPostImageUrl(src) && !isProbablyPostVideoUrl(src))) {
       return;
     }
     const key = normalizeMediaKey(src);
@@ -1674,7 +5306,7 @@ function collectSnapshotMedia(root) {
       return;
     }
     seen.add(key);
-    media.push({ src, alt: image.alt || "" });
+    media.push({ src, alt: node.alt || "", kind: isProbablyPostVideoUrl(src) ? "video" : "image" });
   });
   return media;
 }
@@ -1707,7 +5339,12 @@ function applyPrewarmedPostSnapshot(content, snapshot) {
 
 function applyImportantStyle(element, styles) {
   Object.entries(styles).forEach(([property, value]) => {
-    element.style.setProperty(property, value, "important");
+    const nextValue = String(value);
+    if (element.style.getPropertyValue(property) === nextValue
+      && element.style.getPropertyPriority(property) === "important") {
+      return;
+    }
+    element.style.setProperty(property, nextValue, "important");
   });
 }
 
@@ -1768,54 +5405,9 @@ function extractSecurityWatermarkCodeFromValue(value, depth = 0) {
   return "";
 }
 
-function getStoredSecurityWatermarkCode() {
-  try {
-    const preferredKeys = ["userInfo", "currentUser", "me", "profile"];
-    for (const key of preferredKeys) {
-      const code = extractSecurityWatermarkCodeFromValue(localStorage.getItem(key));
-      if (code) {
-        return code;
-      }
-    }
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index) || "";
-      if (!/(watermark|userinfo|currentuser|profile|me|user)/i.test(key)) {
-        continue;
-      }
-      const code = extractSecurityWatermarkCodeFromValue(localStorage.getItem(key));
-      if (code) {
-        return code;
-      }
-    }
-  } catch {
-    return "";
-  }
-  return "";
-}
-
-function handleSecurityWatermarkBridgeMessage(event) {
-  if (event.source !== window || event.data?.source !== "CC98_REBORN_WATERMARK_BRIDGE") {
-    return;
-  }
-  const code = rememberSecurityWatermarkCode(event.data?.code);
-  if (code) {
-    startSecurityWatermark(code);
-  }
-}
-
-function bindSecurityWatermarkBridgeListener() {
-  if (securityWatermarkBridgeListenerBound) {
-    return;
-  }
-  securityWatermarkBridgeListenerBound = true;
-  window.addEventListener("message", handleSecurityWatermarkBridgeMessage);
-}
-
 function injectSecurityWatermarkPageBridge() {
-  if (!WATERMARK_FEATURE_ENABLED) {
-    return;
-  }
-  bindSecurityWatermarkBridgeListener();
+  // OpenID binding is read from extension storage. Do not accept page-side
+  // bridge messages as a watermark source.
 }
 
 function readCachedSecurityWatermarkCode() {
@@ -1847,18 +5439,41 @@ function rememberSecurityWatermarkCode(code) {
   return normalized;
 }
 
-function getSecurityWatermarkCode({ force = false } = {}) {
-  if (!force) {
+function readOpenIdBindingSecurityWatermarkCode() {
+  return new Promise((resolve) => {
+    try {
+      if (!globalThis.chrome?.storage?.local?.get) {
+        resolve("");
+        return;
+      }
+      globalThis.chrome.storage.local.get(OPENID_BINDING_STORAGE_KEY, (result) => {
+        if (globalThis.chrome.runtime?.lastError) {
+          resolve("");
+          return;
+        }
+        const binding = result?.[OPENID_BINDING_STORAGE_KEY];
+        const code = normalizeSecurityWatermarkCode(binding?.watermarkIdPrefix || "");
+        resolve(binding?.bound && code ? code : "");
+      });
+    } catch {
+      resolve("");
+    }
+  });
+}
+
+async function getSecurityWatermarkCode(options = {}) {
+  if (!options.force) {
     const cached = readCachedSecurityWatermarkCode();
-    if (cached && hasFreshCc98LoginSession()) {
-      return Promise.resolve(cached);
+    if (cached) {
+      return cached;
     }
   }
-  const storedCode = rememberSecurityWatermarkCode(getStoredSecurityWatermarkCode());
-  if (storedCode) {
-    return Promise.resolve(storedCode);
+  const openIdCode = await readOpenIdBindingSecurityWatermarkCode();
+  if (openIdCode) {
+    return rememberSecurityWatermarkCode(openIdCode);
   }
-  return Promise.resolve(readCachedSecurityWatermarkCode());
+  clearCachedSecurityWatermarkCode();
+  return "";
 }
 
 function getSecurityWatermarkParent() {
@@ -1894,7 +5509,7 @@ function applySecurityWatermarkHostStyle(host) {
 function ensureSecurityWatermarkHost() {
   if (securityWatermarkHost?.isConnected && securityWatermarkCanvas) {
     const parent = getSecurityWatermarkParent();
-    if (parent) {
+    if (parent && securityWatermarkHost.parentElement !== parent) {
       parent.append(securityWatermarkHost);
     }
     applySecurityWatermarkHostStyle(securityWatermarkHost);
@@ -1946,25 +5561,44 @@ function resizeSecurityWatermarkCanvas() {
   const ratio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
   const pixelWidth = Math.ceil(width * ratio);
   const pixelHeight = Math.ceil(height * ratio);
+  let changed = false;
   if (canvas.width !== pixelWidth) {
     canvas.width = pixelWidth;
+    changed = true;
   }
   if (canvas.height !== pixelHeight) {
     canvas.height = pixelHeight;
+    changed = true;
   }
-  canvas.dataset.pixelRatio = String(ratio);
+  const ratioText = String(ratio);
+  if (canvas.dataset.pixelRatio !== ratioText) {
+    canvas.dataset.pixelRatio = ratioText;
+    changed = true;
+  }
+  if (changed) {
+    requestSecurityWatermarkRedraw();
+  }
 }
 
 function chooseSecurityWatermarkDirection() {
-  const angle = Math.random() * Math.PI * 2;
-  const speed = 18 + Math.random() * 18;
-  securityWatermarkDirection = {
-    x: Math.cos(angle) * speed,
-    y: Math.sin(angle) * speed
-  };
+  const tileX = 192;
+  const tileY = 128;
+  securityWatermarkOffsetX = Math.random() * tileX;
+  securityWatermarkOffsetY = Math.random() * tileY;
+  requestSecurityWatermarkRedraw();
 }
 
-function drawSecurityWatermarkFrame(frameAt = performance.now()) {
+function requestSecurityWatermarkRedraw() {
+  if (securityWatermarkAnimationFrame) {
+    return;
+  }
+  securityWatermarkAnimationFrame = requestAnimationFrame(() => {
+    securityWatermarkAnimationFrame = 0;
+    drawSecurityWatermarkFrame();
+  });
+}
+
+function drawSecurityWatermarkFrame() {
   const canvas = securityWatermarkCanvas;
   const code = normalizeSecurityWatermarkCode(securityWatermarkCode);
   if (!(canvas instanceof HTMLCanvasElement) || !code || !canvas.isConnected) {
@@ -1979,15 +5613,8 @@ function drawSecurityWatermarkFrame(frameAt = performance.now()) {
   const ratio = Number(canvas.dataset.pixelRatio || window.devicePixelRatio || 1) || 1;
   const width = canvas.width / ratio;
   const height = canvas.height / ratio;
-  const delta = securityWatermarkLastFrameAt
-    ? Math.min(0.08, Math.max(0, (frameAt - securityWatermarkLastFrameAt) / 1000))
-    : 0;
-  securityWatermarkLastFrameAt = frameAt;
-  securityWatermarkOffsetX += securityWatermarkDirection.x * delta;
-  securityWatermarkOffsetY += securityWatermarkDirection.y * delta;
-
-  const tileX = 224;
-  const tileY = 154;
+  const tileX = 192;
+  const tileY = 128;
   const offsetX = ((securityWatermarkOffsetX % tileX) + tileX) % tileX;
   const offsetY = ((securityWatermarkOffsetY % tileY) + tileY) % tileY;
   const margin = Math.max(width, height);
@@ -1998,26 +5625,22 @@ function drawSecurityWatermarkFrame(frameAt = performance.now()) {
   ctx.translate(width / 2, height / 2);
   ctx.rotate(-Math.PI / 7);
   ctx.translate(-width / 2, -height / 2);
-  ctx.font = "700 22px Arial, Helvetica, sans-serif";
+  ctx.font = "650 14px Arial, Helvetica, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.34)";
-  ctx.shadowBlur = 4;
-  ctx.fillStyle = "rgba(255, 255, 255, 0.42)";
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(128, 128, 128, 0.05)";
   for (let y = -margin + offsetY; y < height + margin; y += tileY) {
     for (let x = -margin + offsetX; x < width + margin; x += tileX) {
       ctx.fillText(code, x, y);
     }
   }
   ctx.restore();
-  securityWatermarkAnimationFrame = requestAnimationFrame(drawSecurityWatermarkFrame);
 }
 
 function startSecurityWatermarkAnimation() {
-  if (!securityWatermarkAnimationFrame) {
-    securityWatermarkLastFrameAt = 0;
-    securityWatermarkAnimationFrame = requestAnimationFrame(drawSecurityWatermarkFrame);
-  }
+  requestSecurityWatermarkRedraw();
   if (!securityWatermarkDirectionTimer) {
     chooseSecurityWatermarkDirection();
     securityWatermarkDirectionTimer = window.setInterval(chooseSecurityWatermarkDirection, WATERMARK_DIRECTION_INTERVAL);
@@ -2050,7 +5673,7 @@ function observeSecurityWatermarkHost() {
       startSecurityWatermarkAnimation();
     }
   });
-  securityWatermarkObserver.observe(document.documentElement, { childList: true, subtree: true });
+  securityWatermarkObserver.observe(document.documentElement, { childList: true });
 }
 
 function startSecurityWatermark(code) {
@@ -2069,13 +5692,13 @@ function startSecurityWatermark(code) {
   window.addEventListener("resize", resizeSecurityWatermarkCanvas, { passive: true });
   if (!securityWatermarkEnsureTimer) {
     securityWatermarkEnsureTimer = window.setInterval(() => {
-      if (!securityWatermarkCode) {
+      if (!securityWatermarkCode || document.visibilityState === "hidden") {
         return;
       }
       ensureSecurityWatermarkHost();
       resizeSecurityWatermarkCanvas();
       startSecurityWatermarkAnimation();
-    }, 900);
+    }, 1800);
   }
 }
 
@@ -2098,6 +5721,346 @@ function ensureSecurityWatermark(options = {}) {
   }
 }
 
+function getRebuildTransitionRoutePath(value = location.href) {
+  const route = getCc98RoutePathFromHref(value);
+  const normalizedRoutePath = String(route || "").split(/[?#]/, 1)[0] || "/";
+  if (isCc98RoutePath(normalizedRoutePath)) {
+    return normalizedRoutePath;
+  }
+  try {
+    const url = new URL(value, location.href);
+    if (!isWebVpnHost(url.hostname)) {
+      return url.pathname || "/";
+    }
+    const prefixMatch = url.pathname.match(/^\/https?\/[^/?#]+/i);
+    if (!prefixMatch) {
+      return url.pathname || "/";
+    }
+    return url.pathname.slice(prefixMatch[0].length) || "/";
+  } catch {
+    return normalizedRoutePath;
+  }
+}
+
+function isRebuildTransitionVeilTarget(value = location.href) {
+  const path = getRebuildTransitionRoutePath(value).replace(/\/+$/, "") || "/";
+  return path === "/"
+    || /^\/(?:newTopics|focus|recommendedTopics)(?:\/|$)/i.test(path)
+    || /^\/user\/(?:id|name)(?:\/|$)/i.test(path)
+    || /^\/usercenter(?:\/|$)/i.test(path);
+}
+
+function releaseRebuildTransitionVeil(options = {}) {
+  if (rebuildTransitionVeilFailsafeTimer) {
+    window.clearTimeout(rebuildTransitionVeilFailsafeTimer);
+    rebuildTransitionVeilFailsafeTimer = null;
+  }
+  if (rebuildTransitionVeilReleaseTimer) {
+    window.clearTimeout(rebuildTransitionVeilReleaseTimer);
+    rebuildTransitionVeilReleaseTimer = null;
+  }
+  const root = document.documentElement;
+  if (!root.hasAttribute("data-cc98-rebuild-transition-veil")) {
+    return;
+  }
+  if (options.immediate) {
+    root.removeAttribute("data-cc98-rebuild-transition-veil");
+    return;
+  }
+  root.dataset.cc98RebuildTransitionVeil = "leaving";
+  rebuildTransitionVeilReleaseTimer = window.setTimeout(() => {
+    rebuildTransitionVeilReleaseTimer = null;
+    root.removeAttribute("data-cc98-rebuild-transition-veil");
+  }, REBUILD_TRANSITION_VEIL_FADE_MS);
+}
+
+function beginRebuildTransitionVeil(value = location.href) {
+  if (!isRebuildTransitionVeilTarget(value)
+    || (lastSettings && (!lastSettings.enabled || !lastSettings.rebuildUi))) {
+    return false;
+  }
+  if (rebuildTransitionVeilReleaseTimer) {
+    window.clearTimeout(rebuildTransitionVeilReleaseTimer);
+    rebuildTransitionVeilReleaseTimer = null;
+  }
+  if (rebuildTransitionVeilFailsafeTimer) {
+    window.clearTimeout(rebuildTransitionVeilFailsafeTimer);
+  }
+  document.documentElement.dataset.cc98RebuildTransitionVeil = "active";
+  rebuildTransitionVeilFailsafeTimer = window.setTimeout(() => {
+    rebuildTransitionVeilFailsafeTimer = null;
+    releaseRebuildTransitionVeil();
+  }, REBUILD_TRANSITION_VEIL_FAILSAFE_MS);
+  return true;
+}
+
+function releaseRebuildTransitionVeilWhenReady() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => releaseRebuildTransitionVeil());
+  });
+}
+
+function bindRebuildTransitionVeilNavigationGuard() {
+  if (rebuildTransitionVeilNavigationBound) {
+    return;
+  }
+  rebuildTransitionVeilNavigationBound = true;
+  document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0
+      || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    const link = event.target?.closest?.("a[href]");
+    if (!(link instanceof HTMLAnchorElement)
+      || link.target === "_blank"
+      || link.hasAttribute("download")) {
+      return;
+    }
+    const href = getLinkNewTabHref(link);
+    if (!href || shouldForceLinkNewTab(link, href) || !isRebuildTransitionVeilTarget(href)) {
+      return;
+    }
+    try {
+      if (new URL(href, location.href).href === location.href) {
+        return;
+      }
+    } catch {
+      // A valid internal route can still be handled by the native page.
+    }
+    beginRebuildTransitionVeil(href);
+    releaseReparentedNativeNodesForNavigation();
+  }, true);
+}
+
+function armInitialRebuildTransitionVeil() {
+  const canBeCc98 = isDirectCc98Host()
+    || isKnownCc98WebVpnHost()
+    || (isWebVpnHost() && Boolean(getWebVpnProxyPrefixFromUrl(location.href)));
+  if (canBeCc98 && !isOpenIdAuthorizationPage() && !isPotentialWebVpnOpenIdCallback()) {
+    beginRebuildTransitionVeil(location.href);
+  }
+}
+
+function isSoftLoadingOverlayMessage(message = loadingOverlayMessage) {
+  return /WebVPN|跳转搜索结果|刷新搜索结果/i.test(String(message || ""));
+}
+
+function isUserCenterRoutePath(path = getCurrentCc98RoutePath()) {
+  return /\/usercenter(?:\/|$)/i.test(String(path || ""));
+}
+
+function getUserCenterNativeShell() {
+  const outsideApp = (selector) => [...document.querySelectorAll(selector)]
+    .find((node) => node instanceof HTMLElement && !node.closest("#cc98-comfort-app"));
+  return {
+    navSource: outsideApp(".user-center-navigation") || document.querySelector(".user-center-navigation"),
+    router: outsideApp(".user-center-router") || document.querySelector(".user-center-router")
+  };
+}
+
+function getPublicUserProfileNativeShell() {
+  const rebuiltRouter = document.querySelector(
+    "#cc98-comfort-app .cc98-rebuild-native-user-router"
+  );
+  const nativeRouter = [...document.querySelectorAll(".user-center-router")]
+    .find((node) => node instanceof HTMLElement && !node.closest("#cc98-comfort-app"));
+  const router = rebuiltRouter || nativeRouter || null;
+  return {
+    router,
+    exact: router?.querySelector?.(".user-center-exact") || null,
+    profile: router?.querySelector?.(".user-profile") || null,
+    activities: router?.querySelector?.(".user-activities") || null
+  };
+}
+
+function isPublicUserProfileNativeShellReady() {
+  if (!isPublicUserProfilePage()) {
+    return true;
+  }
+  const { router, exact, profile, activities } = getPublicUserProfileNativeShell();
+  if (!(router instanceof HTMLElement)
+    || !(exact instanceof HTMLElement)
+    || !(profile instanceof HTMLElement)
+    || !(activities instanceof HTMLElement)) {
+    return false;
+  }
+  const hasProfile = Boolean(
+    cleanupPostText(profile.textContent)
+    && exact.querySelector(".user-avatar img, .user-avatar-img")
+  );
+  const hasActivities = Boolean(activities.querySelector(".user-posts"));
+  return hasProfile && hasActivities;
+}
+
+function eagerUserCenterImages(root = document) {
+  if (!root?.querySelectorAll) {
+    return [];
+  }
+  const images = [...root.querySelectorAll("img")]
+    .filter((image) => image instanceof HTMLImageElement);
+  images.forEach((image) => {
+    const source = [
+      "data-src",
+      "data-original",
+      "data-url",
+      "data-avatar",
+      "data-portrait",
+      "data-original-src",
+      "data-lazy-src",
+      "data-actualsrc"
+    ].map((attribute) => image.getAttribute(attribute)).find(Boolean)
+      || image.getAttribute("src")
+      || image.currentSrc
+      || image.src
+      || "";
+    const resolved = makeWebVpnCc98ResourceUrl(source);
+    if (resolved && image.getAttribute("src") !== resolved) {
+      image.src = resolved;
+    }
+    image.removeAttribute("srcset");
+    image.loading = "eager";
+    image.decoding = "async";
+  });
+  return images;
+}
+
+function isUserCenterNativeShellReady() {
+  if (isPublicUserProfilePage()) {
+    return isPublicUserProfileNativeShellReady();
+  }
+  if (!isUserCenterRoutePath()) {
+    return true;
+  }
+  const { navSource, router } = getUserCenterNativeShell();
+  if (!(navSource instanceof HTMLElement) || !(router instanceof HTMLElement)) {
+    return false;
+  }
+  const navText = cleanupPostText(navSource.textContent || "");
+  const routerText = cleanupPostText(router.textContent || "");
+  const hasRouterSurface = Boolean(router.querySelector([
+    ".user-center-config",
+    ".user-post",
+    ".user-center-myfavorites",
+    ".user-center-myfavorite",
+    ".user-center-myfollowings-user",
+    ".user-center-myfollowers-user",
+    ".user-center-myfans",
+    ".user-profile",
+    ".user-theme",
+    "#userInfoContent",
+    "#userCenterPageCount",
+    "input",
+    "textarea",
+    "select",
+    "button",
+    "img",
+    "canvas",
+    ".ant-list",
+    ".ant-table"
+  ].join(",")));
+  return Boolean(navText && (routerText || hasRouterSurface));
+}
+
+function isUserCenterPendingNativeLoad() {
+  return (isUserCenterRoutePath() || isPublicUserProfilePage()) && !isUserCenterNativeShellReady();
+}
+
+function scheduleUserCenterPendingRebuild() {
+  if (userCenterPendingRebuildTimer) {
+    return;
+  }
+  userCenterPendingRebuildTimer = window.setTimeout(() => {
+    userCenterPendingRebuildTimer = null;
+    if (!isUserCenterRoutePath() && !isPublicUserProfilePage()) {
+      return;
+    }
+    scheduleRebuild();
+  }, 420);
+}
+
+function cancelUserCenterPendingRebuild() {
+  if (!userCenterPendingRebuildTimer) {
+    return;
+  }
+  window.clearTimeout(userCenterPendingRebuildTimer);
+  userCenterPendingRebuildTimer = null;
+}
+
+function isDismissibleLoadingOverlay() {
+  return loadingOverlaySoft || (isWebVpnHost() && !editorSubmitOverlayAwaitingRebuild);
+}
+
+function clearPublicUserProfileLoadingOverlay() {
+  if (!isPublicUserProfilePage()) {
+    return false;
+  }
+  nativeLazyScrollOverlayDepth = 0;
+  firstPagePrevisitInProgress = false;
+  editorSubmitOverlayAwaitingRebuild = false;
+  delete document.documentElement.dataset.cc98ComfortNativeLazyScrolling;
+  delete document.documentElement.dataset.cc98ComfortOriginalPrewarming;
+  delete document.documentElement.dataset.cc98ComfortPrewarming;
+  removeSessionItem(FIRST_PAGE_PREVISIT_PENDING_KEY);
+  hideLoadingOverlay({ force: true, releaseNativeLazyScroll: true });
+  return true;
+}
+
+function beginNativeLazyScrollOverlay() {
+  nativeLazyScrollOverlayDepth += 1;
+  document.documentElement.dataset.cc98ComfortNativeLazyScrolling = "true";
+  showLoadingOverlay("\u6b63\u5728\u52a0\u8f7d\u5e16\u5b50\u56fe\u7247...", { allowUserCenter: true });
+}
+
+function maintainNativeLazyScrollOverlay() {
+  if (nativeLazyScrollOverlayDepth < 1) {
+    return;
+  }
+  if (!loadingOverlayActive) {
+    showLoadingOverlay("\u6b63\u5728\u52a0\u8f7d\u5e16\u5b50\u56fe\u7247...", { allowUserCenter: true });
+    return;
+  }
+  ensureLoadingOverlayElement();
+}
+
+function endNativeLazyScrollOverlay(options = {}) {
+  nativeLazyScrollOverlayDepth = Math.max(0, nativeLazyScrollOverlayDepth - 1);
+  if (nativeLazyScrollOverlayDepth > 0) {
+    maintainNativeLazyScrollOverlay();
+    return;
+  }
+  delete document.documentElement.dataset.cc98ComfortNativeLazyScrolling;
+  if (!options.keepVisible && !editorSubmitOverlayAwaitingRebuild) {
+    hideLoadingOverlay({ force: true, releaseNativeLazyScroll: true });
+  }
+}
+
+function clearUserCenterStaleLoadingOverlay(kind = getPageKind()) {
+  const isUserCenter = kind === "userCenter" || isUserCenterRoutePath() || isPublicUserProfilePage();
+  if (!isUserCenter) {
+    return false;
+  }
+  nativeLazyScrollOverlayDepth = 0;
+  delete document.documentElement.dataset.cc98ComfortNativeLazyScrolling;
+  if (editorSubmitOverlayAwaitingRebuild || hasRecentEditorSubmitIntent(90000)) {
+    editorSubmitOverlayAwaitingRebuild = false;
+    clearEditorSubmitIntent();
+    resetReleasedNativeEditors();
+  }
+  firstPagePrevisitInProgress = false;
+  removeSessionItem(FIRST_PAGE_PREVISIT_PENDING_KEY);
+  delete document.documentElement.dataset.cc98ComfortOriginalPrewarming;
+  delete document.documentElement.dataset.cc98ComfortPrewarming;
+  document.documentElement.classList.toggle("cc98-comfort", Boolean(lastSettings?.enabled));
+  if (isUserCenterPendingNativeLoad()) {
+    showLoadingOverlay("正在加载个人中心...", { allowUserCenter: true });
+    scheduleUserCenterPendingRebuild();
+    return true;
+  }
+  cancelUserCenterPendingRebuild();
+  hideLoadingOverlay({ force: true, releaseNativeLazyScroll: true });
+  return true;
+}
+
 function ensureLoadingOverlayElement() {
   let overlay = document.querySelector("#cc98-comfort-loading");
   if (!overlay) {
@@ -2117,63 +6080,215 @@ function ensureLoadingOverlayElement() {
     parent.append(overlay);
   }
 
-  const isNight = document.documentElement.dataset.cc98ComfortTheme === "night";
-  applyImportantStyle(overlay, {
-    position: "fixed",
-    inset: "0",
-    "z-index": "2147483647",
-    display: "grid",
-    "place-items": "center",
-    "pointer-events": "auto",
-    opacity: "1",
-    visibility: "visible",
-    background: isNight ? "#15191d" : "#f4f6f5"
-  });
-
-  const panel = overlay.querySelector(".cc98-comfort-loading-panel");
-  if (panel) {
-    applyImportantStyle(panel, {
-      display: "grid",
-      visibility: "visible",
-      opacity: "1"
+  const isSoft = Boolean(loadingOverlaySoft);
+  const isDismissible = isDismissibleLoadingOverlay();
+  if (overlay.dataset.cc98LoadingClickBound !== "true") {
+    overlay.dataset.cc98LoadingClickBound = "true";
+    overlay.addEventListener("click", (event) => {
+      if (isDismissibleLoadingOverlay() && event.target === overlay) {
+        hideLoadingOverlay({ force: true });
+        scheduleSync();
+      }
     });
   }
 
-  overlay.querySelector(".cc98-comfort-loading-title").textContent = loadingOverlayMessage;
-  overlay.querySelector(".cc98-comfort-loading-subtitle").textContent = "\u539f\u7248\u9875\u9762\u6b63\u5728\u906e\u7f69\u540e\u9762\u9884\u70ed\uff0c\u5b8c\u6210\u540e\u4f1a\u81ea\u52a8\u663e\u793a\u5b8c\u6574\u9605\u8bfb\u754c\u9762\u3002";
+  const subtitleText = isDismissible
+    ? "原页面正在加载；若 WebVPN 响应较慢，遮罩会自动收起。"
+    : "\u539f\u7248\u9875\u9762\u6b63\u5728\u906e\u7f69\u540e\u9762\u9884\u70ed\uff0c\u5b8c\u6210\u540e\u4f1a\u81ea\u52a8\u663e\u793a\u5b8c\u6574\u9605\u8bfb\u754c\u9762\u3002";
+  const renderKey = JSON.stringify([
+    lastSettings?.theme || "soft",
+    document.documentElement.dataset.cc98ComfortTone || "light",
+    isSoft,
+    isDismissible,
+    loadingOverlayMessage,
+    subtitleText
+  ]);
+  if (overlay.dataset.cc98LoadingRenderKey !== renderKey) {
+    overlay.dataset.cc98LoadingRenderKey = renderKey;
+    overlay.dataset.cc98LoadingSoft = isSoft ? "true" : "false";
+    const colors = getThemeLoadingColors();
+    applyImportantStyle(overlay, {
+      position: "fixed",
+      inset: "0",
+      "z-index": "2147483647",
+      display: "grid",
+      "place-items": "center",
+      "pointer-events": "auto",
+      opacity: "1",
+      visibility: "visible",
+      cursor: isDismissible ? "pointer" : "default",
+      background: isSoft ? "color-mix(in srgb, var(--cc98-comfort-bg) 72%, transparent)" : colors.bg,
+      color: colors.text
+    });
+
+    const panel = overlay.querySelector(".cc98-comfort-loading-panel");
+    if (panel) {
+      applyImportantStyle(panel, {
+        display: "grid",
+        visibility: "visible",
+        opacity: "1",
+        background: colors.surface,
+        "border-color": colors.panelBorder,
+        "box-shadow": colors.shadow
+      });
+    }
+
+    const spinner = overlay.querySelector(".cc98-comfort-loading-spinner");
+    if (spinner) {
+      applyImportantStyle(spinner, {
+        "border-color": colors.border,
+        "border-top-color": colors.accent
+      });
+    }
+
+    const title = overlay.querySelector(".cc98-comfort-loading-title");
+    if (title) {
+      title.textContent = loadingOverlayMessage;
+      applyImportantStyle(title, { color: colors.text });
+    }
+
+    const subtitle = overlay.querySelector(".cc98-comfort-loading-subtitle");
+    if (subtitle) {
+      subtitle.textContent = subtitleText;
+      applyImportantStyle(subtitle, { color: colors.muted });
+    }
+  }
   overlay.hidden = false;
   overlay.removeAttribute("aria-hidden");
   return overlay;
 }
 
-function showLoadingOverlay(message = "\u6b63\u5728\u52a0\u8f7d\u5e16\u5b50\u56fe\u7247...") {
+function showLoadingOverlay(message = "\u6b63\u5728\u52a0\u8f7d\u5e16\u5b50\u56fe\u7247...", options = {}) {
+  if (clearPublicUserProfileLoadingOverlay()) {
+    return;
+  }
+  if (!options.allowUserCenter && clearUserCenterStaleLoadingOverlay(getPageKind())) {
+    return;
+  }
+  const nextSoft = !options.opaque
+    && isSoftLoadingOverlayMessage(message)
+    && !editorSubmitOverlayAwaitingRebuild
+    && !firstPagePrevisitInProgress
+    && document.documentElement.dataset.cc98ComfortOriginalPrewarming !== "true"
+    && document.documentElement.dataset.cc98ComfortPrewarming !== "true";
+  const shouldRestartOverlayTimer = !loadingOverlayActive || loadingOverlaySoft !== nextSoft;
+  if (shouldRestartOverlayTimer) {
+    loadingOverlayStartedAt = Date.now();
+  }
   loadingOverlayActive = true;
+  loadingOverlaySoft = nextSoft;
   loadingOverlayMessage = message;
   ensureLoadingOverlayElement();
+  if (loadingOverlayAutoHideTimer) {
+    window.clearTimeout(loadingOverlayAutoHideTimer);
+    loadingOverlayAutoHideTimer = null;
+  }
+  if (loadingOverlaySoft) {
+    const elapsed = Date.now() - loadingOverlayStartedAt;
+    const delay = Math.max(900, 3200 - elapsed);
+    loadingOverlayAutoHideTimer = window.setTimeout(() => {
+      loadingOverlayAutoHideTimer = null;
+      if (!loadingOverlayActive || !loadingOverlaySoft || editorSubmitOverlayAwaitingRebuild) {
+        return;
+      }
+      hideLoadingOverlay({ force: true });
+      scheduleSync();
+    }, delay);
+  }
+  if (shouldRestartOverlayTimer && loadingOverlayFailsafeTimer) {
+    window.clearTimeout(loadingOverlayFailsafeTimer);
+    loadingOverlayFailsafeTimer = null;
+  }
   if (!loadingOverlayWatchdog) {
     loadingOverlayWatchdog = setInterval(() => {
-      if (loadingOverlayActive) {
-        ensureLoadingOverlayElement();
+      if (!loadingOverlayActive) {
+        return;
       }
-    }, 120);
+      if (isUserCenterRoutePath()
+        && !isPublicUserProfilePage()
+        && !editorSubmitOverlayAwaitingRebuild
+        && isUserCenterNativeShellReady()) {
+        nativeLazyScrollOverlayDepth = 0;
+        delete document.documentElement.dataset.cc98ComfortNativeLazyScrolling;
+        hideLoadingOverlay({ force: true, releaseNativeLazyScroll: true });
+        const app = document.querySelector("#cc98-comfort-app[data-cc98-user-center-pending='true']");
+        if (app) {
+          scheduleRebuild();
+        }
+        return;
+      }
+      ensureLoadingOverlayElement();
+    }, 300);
+  }
+  if (!loadingOverlayFailsafeTimer) {
+    const failsafeDelay = loadingOverlaySoft
+      ? 3800
+      : (isWebVpnHost() && !editorSubmitOverlayAwaitingRebuild ? 9000 : 18500);
+    loadingOverlayFailsafeTimer = window.setTimeout(() => {
+      loadingOverlayFailsafeTimer = null;
+      if (!loadingOverlayActive) {
+        return;
+      }
+      const elapsed = Date.now() - loadingOverlayStartedAt;
+      if (elapsed < failsafeDelay - 500) {
+        return;
+      }
+      if (firstPagePrevisitInProgress) {
+        firstPagePrevisitInProgress = false;
+        removeSessionItem(FIRST_PAGE_PREVISIT_PENDING_KEY);
+      }
+      if (document.documentElement.dataset.cc98ComfortOriginalPrewarming === "true") {
+        lazyPrewarmedPageKey = getLazyPrewarmPageKey();
+        delete document.documentElement.dataset.cc98ComfortOriginalPrewarming;
+        document.documentElement.classList.toggle("cc98-comfort", Boolean(lastSettings?.enabled));
+      }
+      delete document.documentElement.dataset.cc98ComfortPrewarming;
+      editorSubmitOverlayAwaitingRebuild = false;
+      hideLoadingOverlay({ force: true });
+      scheduleRebuild();
+      scheduleSync();
+    }, failsafeDelay);
   }
 }
 
-function hideLoadingOverlay() {
+function hideLoadingOverlay(options = {}) {
+  if (nativeLazyScrollOverlayDepth > 0 && !options.releaseNativeLazyScroll) {
+    maintainNativeLazyScrollOverlay();
+    return;
+  }
+  if (editorSubmitOverlayAwaitingRebuild && !options.force) {
+    if (loadingOverlayActive) {
+      ensureLoadingOverlayElement();
+    }
+    return;
+  }
   loadingOverlayActive = false;
+  loadingOverlaySoft = false;
+  loadingOverlayStartedAt = 0;
   if (loadingOverlayWatchdog) {
     clearInterval(loadingOverlayWatchdog);
     loadingOverlayWatchdog = null;
   }
+  if (loadingOverlayFailsafeTimer) {
+    window.clearTimeout(loadingOverlayFailsafeTimer);
+    loadingOverlayFailsafeTimer = null;
+  }
+  if (loadingOverlayAutoHideTimer) {
+    window.clearTimeout(loadingOverlayAutoHideTimer);
+    loadingOverlayAutoHideTimer = null;
+  }
   document.querySelector("#cc98-comfort-loading")?.remove();
 }
 
-function hideLoadingOverlayWhenReady(root) {
+function hideLoadingOverlayWhenReady(root, options = {}) {
   const finish = () => {
     requestAnimationFrame(() => {
-      hideLoadingOverlay();
-      scrollToCurrentRebuiltHash();
-      setTimeout(scrollToCurrentRebuiltHash, 120);
+      editorSubmitOverlayAwaitingRebuild = false;
+      hideLoadingOverlay({ force: true });
+      if (!options.skipHashScroll) {
+        scrollToCurrentRebuiltHash();
+        setTimeout(scrollToCurrentRebuiltHash, 120);
+      }
     });
   };
   const overlay = document.querySelector("#cc98-comfort-loading");
@@ -2182,7 +6297,16 @@ function hideLoadingOverlayWhenReady(root) {
     return;
   }
   const images = [...root.querySelectorAll("img")]
-    .filter((image) => image instanceof HTMLImageElement);
+    .filter((image) => {
+      if (!(image instanceof HTMLImageElement)) {
+        return false;
+      }
+      if (image.loading !== "lazy" || image.complete) {
+        return true;
+      }
+      const rect = image.getBoundingClientRect();
+      return rect.bottom >= -240 && rect.top <= window.innerHeight + 240;
+    });
   Promise.all(images.map((image) => waitForNativeImage(image, 1300)))
     .finally(finish);
 }
@@ -2208,13 +6332,251 @@ function withTimeout(promise, timeout, label) {
 }
 
 function shouldPrewarmOriginalBeforeRebuild() {
-  return lastSettings?.enabled
+  const eligible = lastSettings?.enabled
     && lastSettings.rebuildUi
+    && lastSettings.prewarmPostImages
     && getPageKind() === "post"
+    && !isNativeErrorPage()
     && lazyPrewarmedPageKey !== getLazyPrewarmPageKey();
+  if (!eligible || hasCapturedCurrentTopicContentPage()) {
+    return false;
+  }
+  return Date.now() >= ensureTopicContentCaptureGraceWindow();
+}
+
+function shouldPrewarmHomeAvatarBeforeRebuild() {
+  if (!lastSettings?.enabled
+    || !lastSettings.rebuildUi
+    || getPageKind() !== "home"
+    || isNativeErrorPage()
+    || homeAvatarPrewarmedPageKey === getLazyPrewarmPageKey()) {
+    return false;
+  }
+  return isWebVpnHost() || hasFreshCc98LoginSession() || Boolean(document.querySelector(
+    ".topBarUserImg img, .topBarUserName, .topBarRight:not(:has(a[href*='/logOn']))"
+  ));
+}
+
+function getNativeHomeAvatarImages() {
+  return [...document.querySelectorAll([
+    ".topBarUserImg img",
+    ".topBarUserInfo img",
+    ".topBarRight img[class*='avatar' i]",
+    ".topBarRight img[class*='portrait' i]",
+    ".mainPageListRow img",
+    ".focus-topic img",
+    ".card-topic img"
+  ].join(","))]
+    .filter((image) => image instanceof HTMLImageElement);
+}
+
+function getPreferredHomeAvatarUrl(image) {
+  if (!(image instanceof HTMLImageElement)) {
+    return "";
+  }
+  const lazyAttrs = [
+    "data-src",
+    "data-original",
+    "data-url",
+    "data-avatar",
+    "data-portrait",
+    "data-original-src",
+    "data-lazy-src",
+    "data-actualsrc"
+  ];
+  const lazyUrl = lazyAttrs.map((attr) => image.getAttribute(attr)).find(Boolean);
+  const sourceUrl = String(lazyUrl || image.getAttribute("src") || image.currentSrc || image.src || "").trim();
+  const resolvedUrl = makeWebVpnCc98ResourceUrl(sourceUrl);
+  if (resolvedUrl && image.closest(".topBarUserImg, .topBarUserInfo, .topBarRight")) {
+    lastKnownTopbarAvatarUrl = resolvedUrl;
+  }
+  return resolvedUrl;
+}
+
+function getWebVpnFileResourcePrefixCacheKey() {
+  return `cc98RebornWebVpnFileResourcePrefix:${location.origin}`;
+}
+
+function getCurrentWebVpnFileResourcePrefix() {
+  if (!isWebVpnHost()) {
+    return "";
+  }
+  const media = [...document.querySelectorAll([
+    "img[src*='/v4-upload/']",
+    "video[src*='/v4-upload/']",
+    "source[src*='/v4-upload/']"
+  ].join(","))];
+  for (const node of media) {
+    const src = node.getAttribute("src") || node.currentSrc || node.src || "";
+    const prefix = getWebVpnProxyPrefixFromUrl(src);
+    if (!prefix) {
+      continue;
+    }
+    try {
+      sessionStorage.setItem(getWebVpnFileResourcePrefixCacheKey(), prefix);
+    } catch {
+      // The currently visible resource remains usable without persistence.
+    }
+    return prefix;
+  }
+  try {
+    return sessionStorage.getItem(getWebVpnFileResourcePrefixCacheKey()) || "";
+  } catch {
+    return "";
+  }
+}
+
+function makeWebVpnCc98ResourceUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  if (isWebVpnHost()) {
+    try {
+      const directUrl = new URL(raw, "https://www.cc98.org");
+      if (/^(?:file\.)?cc98\.org$/i.test(directUrl.hostname)
+        && /^\/v4-upload(?:\/|$)/i.test(directUrl.pathname)) {
+        const filePrefix = getCurrentWebVpnFileResourcePrefix();
+        if (filePrefix) {
+          return `${filePrefix}${directUrl.pathname}${directUrl.search}${directUrl.hash}`;
+        }
+      }
+    } catch {
+      // Continue with normal WebVPN and direct URL resolution.
+    }
+  }
+  if (isWebVpnHost() && /^\/(?!\/)/.test(raw) && !/^\/https?\//i.test(raw)) {
+    const prefix = getCurrentWebVpnCc98Prefix();
+    if (prefix) {
+      return `${prefix}${raw}`;
+    }
+  }
+  if (isWebVpnHost()) {
+    try {
+      const url = new URL(raw, location.href);
+      if (isWebVpnHost(url.hostname) && getWebVpnProxyPrefixFromUrl(url.href)) {
+        return url.href;
+      }
+      if (isWebVpnHost(url.hostname)
+        && !getWebVpnProxyPrefixFromUrl(url.href)
+        && /^\/(?:static|v4-upload|download)(?:\/|$)/i.test(url.pathname)) {
+        const prefix = getCurrentWebVpnCc98Prefix();
+        if (prefix) {
+          return `${prefix}${url.pathname}${url.search}${url.hash}`;
+        }
+      }
+    } catch {
+      // Fall through to the normal URL resolver.
+    }
+  }
+  return makeAbsoluteCc98Url(raw);
+}
+
+function eagerNativeHomeAvatarImages() {
+  const images = getNativeHomeAvatarImages();
+  images.forEach((image) => {
+    const src = getPreferredHomeAvatarUrl(image);
+    if (src && image.getAttribute("src") !== src) {
+      image.src = src;
+    }
+    image.loading = "eager";
+    image.decoding = "async";
+  });
+  return images;
+}
+
+function startHomeAvatarPrewarm() {
+  const pageKey = getLazyPrewarmPageKey();
+  if (homeAvatarPrewarmedPageKey === pageKey) {
+    return Promise.resolve();
+  }
+  if (homeAvatarPrewarmPromise) {
+    return homeAvatarPrewarmPromise;
+  }
+
+  const useShortWebVpnOverlay = isWebVpnHost();
+  if (useShortWebVpnOverlay) {
+    showLoadingOverlay("\u6b63\u5728\u901a\u8fc7 WebVPN \u52a0\u8f7d\u9996\u9875\u5934\u50cf...", { opaque: true });
+  }
+
+  homeAvatarPrewarmPromise = (async () => {
+    await waitForDomReady();
+    const originalScrollPositions = captureNativeScrollPositions();
+    const deadline = Date.now() + (useShortWebVpnOverlay ? 620 : 1100);
+    let step = 0;
+    try {
+      if (useShortWebVpnOverlay) {
+        document.documentElement.dataset.cc98ComfortPrewarming = "true";
+      }
+      while (Date.now() < deadline) {
+        const images = eagerNativeHomeAvatarImages();
+        const nativeAvatar = images.find((image) => Boolean(image.closest(".topBarUserImg, .topBarUserInfo, .topBarRight")));
+        const storedAvatarUrl = makeWebVpnCc98ResourceUrl(getStoredCc98UserAvatar());
+        if (storedAvatarUrl) {
+          const preload = new Image();
+          preload.loading = "eager";
+          preload.decoding = "async";
+          preload.src = storedAvatarUrl;
+        }
+        if (nativeAvatar instanceof HTMLImageElement && getPreferredHomeAvatarUrl(nativeAvatar)) {
+          await Promise.race([waitForNativeImage(nativeAvatar, 240), wait(240)]);
+          if (nativeAvatar.complete && nativeAvatar.naturalWidth > 0) {
+            return;
+          }
+        }
+        if (useShortWebVpnOverlay) {
+          const progress = Math.min(1, step / 3);
+          getNativeScrollTargets().forEach((target) => {
+            scrollNativeTargetTo(target, getScrollTargetMaxTop(target) * progress);
+          });
+          dispatchNativeLazySignals();
+        }
+        step += 1;
+        await wait(70);
+      }
+    } finally {
+      restoreNativeScrollPositions(originalScrollPositions);
+      dispatchNativeLazySignals();
+      delete document.documentElement.dataset.cc98ComfortPrewarming;
+    }
+  })().catch(() => {})
+    .finally(() => {
+      homeAvatarPrewarmedPageKey = pageKey;
+      homeAvatarPrewarmPromise = null;
+      if (useShortWebVpnOverlay) {
+        hideLoadingOverlay({ force: true, releaseNativeLazyScroll: true });
+      }
+      scheduleRebuild();
+      if (useShortWebVpnOverlay) {
+        [700, 1600].forEach((delay) => {
+          window.setTimeout(() => {
+            eagerNativeHomeAvatarImages();
+            scheduleRebuild();
+          }, delay);
+        });
+      }
+    });
+
+  return homeAvatarPrewarmPromise;
+}
+
+function getOriginalPagePrewarmDuration() {
+  const configured = clampNumber(lastSettings?.imageLoadDuration, 800, 8000, DEFAULT_SETTINGS.imageLoadDuration);
+  return isWebVpnHost() ? Math.min(configured, 3200) : configured;
+}
+
+function isPostImagePrewarmEnabled() {
+  return Boolean(lastSettings?.enabled
+    && lastSettings.rebuildUi
+    && lastSettings.prewarmPostImages
+    && getPageKind() === "post"
+    && !isNativeErrorPage());
 }
 
 function startOriginalPagePrewarm() {
+  if (!isPostImagePrewarmEnabled()) {
+    return Promise.resolve();
+  }
   const pageKey = getLazyPrewarmPageKey();
   if (originalPagePrewarmPageKey === pageKey && originalPagePrewarmPromise) {
     return originalPagePrewarmPromise;
@@ -2222,25 +6584,33 @@ function startOriginalPagePrewarm() {
 
   originalPagePrewarmPageKey = pageKey;
   const root = document.documentElement;
-  showLoadingOverlay();
-  document.querySelector("#cc98-comfort-app")?.remove();
+  const rebuiltApp = document.querySelector("#cc98-comfort-app");
+  if (rebuiltApp instanceof HTMLElement) {
+    restoreReparentedNativeNodes(rebuiltApp);
+    rebuiltApp.remove();
+  }
   root.classList.remove("cc98-comfort", "cc98-comfort-rebuild-active");
   root.dataset.cc98ComfortRebuildReady = "false";
   root.dataset.cc98ComfortOriginalPrewarming = "true";
+  showLoadingOverlay();
 
-  const timeoutMs = clampNumber(lastSettings?.imageLoadDuration, 800, 8000, DEFAULT_SETTINGS.imageLoadDuration) + 3500;
+  const prewarmDuration = getOriginalPagePrewarmDuration();
+  const timeoutMs = prewarmDuration + (isWebVpnHost() ? 3000 : 3500);
   let prewarmAborted = false;
   const prewarmWork = (async () => {
     await waitForDomReady();
-    if (prewarmAborted) {
+    if (prewarmAborted || !isPostImagePrewarmEnabled()) {
       return;
     }
     await wait(450);
-    if (prewarmAborted) {
+    if (prewarmAborted || !isPostImagePrewarmEnabled()) {
       return;
     }
-    await scrollOriginalPageForLazyMedia(lastSettings.imageLoadDuration, () => prewarmAborted);
-    if (prewarmAborted) {
+    await scrollOriginalPageForLazyMedia(
+      prewarmDuration,
+      () => prewarmAborted || !isPostImagePrewarmEnabled()
+    );
+    if (prewarmAborted || !isPostImagePrewarmEnabled()) {
       return;
     }
     showLoadingOverlay("\u6b63\u5728\u6574\u7406\u9605\u8bfb\u754c\u9762...");
@@ -2256,9 +6626,8 @@ function startOriginalPagePrewarm() {
   prewarmWork.catch(() => {});
 
   originalPagePrewarmPromise = withTimeout(prewarmWork, timeoutMs, "CC98 original page prewarm")
-    .catch((error) => {
+    .catch(() => {
       prewarmAborted = true;
-      console.warn("[CC98 Reborn] original page prewarm failed", error);
     })
     .finally(() => {
       prewarmAborted = true;
@@ -2332,55 +6701,225 @@ function setupRebuiltImagePlaceholders(root) {
 }
 
 function startPostLazyFallbackPrewarm() {
-  if (getPageKind() !== "post") {
+  if (!isPostImagePrewarmEnabled()) {
+    if (topicContentCaptureFallbackTimer) {
+      window.clearTimeout(topicContentCaptureFallbackTimer);
+      topicContentCaptureFallbackTimer = null;
+    }
     return;
   }
-  if (lazyPrewarmedPageKey === getLazyPrewarmPageKey()) {
+  if (lazyPrewarmedPageKey === getLazyPrewarmPageKey() || hasCapturedCurrentTopicContentPage()) {
     return;
   }
-  prewarmNativeLazyMedia()
-    .then(() => {
-      scheduleRebuild();
-    })
-    .catch((error) => {
-      console.warn("[CC98 Reborn] lazy prewarm failed", error);
-      document.querySelectorAll("#cc98-comfort-app .cc98-rebuild-image-frame[data-status='loading']")
-        .forEach((frame) => {
-          frame.dataset.status = "failed";
-        });
-    });
+  if (topicContentCaptureFallbackTimer) {
+    return;
+  }
+  const remaining = Math.max(0, ensureTopicContentCaptureGraceWindow() - Date.now());
+  topicContentCaptureFallbackTimer = window.setTimeout(() => {
+    topicContentCaptureFallbackTimer = null;
+    if (!isPostImagePrewarmEnabled()
+      || hasCapturedCurrentTopicContentPage()
+      || lazyPrewarmedPageKey === getLazyPrewarmPageKey()) {
+      return;
+    }
+    startOriginalPagePrewarm();
+  }, remaining + 80);
+}
+
+function isWebVpnHost(hostname = location.hostname) {
+  return /(?:^|\.)webvpn\.zju\.edu\.cn$/i.test(String(hostname || ""));
+}
+
+function decodeLocationValue(value) {
+  let decoded = String(value || "");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) {
+        break;
+      }
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+  return decoded;
+}
+
+function isOpenIdAuthorizationPage(root = document) {
+  if (location.hostname === "openid.cc98.org") {
+    return true;
+  }
+  if (!isWebVpnHost()) {
+    return false;
+  }
+
+  const route = decodeLocationValue(`${location.pathname}${location.search}`);
+  if (/\/connect\/authorize(?:[/?#]|$)|\/(?:Account|PassKey)\/LogOn(?:[/?#]|$)/i.test(route)) {
+    return true;
+  }
+  if (!root?.querySelector) {
+    return false;
+  }
+
+  const title = String(root.title || document.title || "");
+  const hasOpenIdTitle = /CC98\s*(?:OpenID|\u767b\u5f55\u4e2d\u5fc3)|(?:OpenID|\u767b\u5f55\u4e2d\u5fc3)\s*[-|·]?\s*CC98/i.test(title);
+  const hasOpenIdForm = Boolean(root.querySelector(
+    'form[action*="/connect/authorize"], form[action*="/Account/LogOn"], form[action*="/PassKey/LogOn"]'
+  ));
+  return hasOpenIdTitle || hasOpenIdForm;
+}
+
+function isPotentialWebVpnOpenIdCallback() {
+  if (!isWebVpnHost()) {
+    return false;
+  }
+  const result = decodeLocationValue(`${location.pathname}${location.search}${location.hash}`);
+  return /(?:^|[?&#])state=[^&#]+/i.test(result)
+    && /(?:^|[?&#])(?:code|error)=[^&#]+/i.test(result);
+}
+
+function recoverPendingWebVpnOpenIdCallback() {
+  return isPotentialWebVpnOpenIdCallback();
+}
+
+function isDirectCc98Host(hostname = location.hostname) {
+  return /(?:^|\.)cc98\.org$/i.test(String(hostname || ""))
+    || hostname === "cc98.org";
+}
+
+function isKnownCc98WebVpnHost(hostname = location.hostname) {
+  return hostname === "www-cc98-org-s.webvpn.zju.edu.cn";
+}
+
+function isLikelyCc98Document(root = document) {
+  if (!root?.querySelector) {
+    return false;
+  }
+  if (isOpenIdAuthorizationPage(root)) {
+    return false;
+  }
+  if (/CC98/i.test(document.title || "")) {
+    return true;
+  }
+  if (root.querySelector(".topBarCC98, .topBarLogo, .mainPage, .topicInfo-info, .reply-content, .reply, .boardList, .board-body, .board-postItem-body, .createTopic, #sendTopicInfo, .message-root, .message, .user-center, .sign-in, .login, .errorState")) {
+    return true;
+  }
+  return Array.from(root.querySelectorAll?.("a[href]") || [])
+    .slice(0, 80)
+    .some((link) => /(?:^|\/\/)(?:www\.)?cc98\.org\//i.test(link.getAttribute("href") || link.href || ""));
+}
+
+function shouldBootCc98Reborn() {
+  if (isOpenIdAuthorizationPage() || isPotentialWebVpnOpenIdCallback()) {
+    return false;
+  }
+  if (isDirectCc98Host() || isKnownCc98WebVpnHost()) {
+    return true;
+  }
+  if (!isWebVpnHost()) {
+    return false;
+  }
+  if (isCurrentWebVpnExternalProxyPage()) {
+    return false;
+  }
+  return isLikelyCc98Document(document);
+}
+
+function scheduleWebVpnBootProbe() {
+  if (!isWebVpnHost() || webVpnBootProbeStarted || isOpenIdAuthorizationPage()) {
+    return;
+  }
+  webVpnBootProbeStarted = true;
+  let observer = null;
+  let probeTimer = null;
+  const stopProbing = () => {
+    observer?.disconnect();
+    window.clearTimeout(probeTimer);
+    probeTimer = null;
+  };
+  const tryBoot = () => {
+    if (isOpenIdAuthorizationPage()) {
+      stopProbing();
+      return true;
+    }
+    if (redirectCurrentWebVpnExternalPage()) {
+      stopProbing();
+      return true;
+    }
+    if (normalPageBooted || !shouldBootCc98Reborn()) {
+      return false;
+    }
+    stopProbing();
+    bootNormalPage();
+    return true;
+  };
+  const scheduleProbe = () => {
+    window.clearTimeout(probeTimer);
+    probeTimer = window.setTimeout(() => {
+      probeTimer = null;
+      tryBoot();
+    }, 120);
+  };
+  if (tryBoot()) {
+    return;
+  }
+  document.addEventListener("DOMContentLoaded", tryBoot, { once: true });
+  observer = new MutationObserver(scheduleProbe);
+  observer.observe(document.documentElement || document, {
+    childList: true,
+    subtree: true
+  });
+  [400, 1200, 2600, 5200].forEach((delay) => setTimeout(tryBoot, delay));
+  setTimeout(stopProbing, 8000);
 }
 
 function getPageKind() {
-  if (document.querySelector(".errorState")) {
+  const cc98RoutePath = getCurrentCc98RoutePath();
+  if (isBlacklistRoute()) {
+    return "blacklist";
+  }
+  if (isReadLaterRoute()) {
+    return "readLater";
+  }
+  if (isNativeErrorPage()) {
     return "error";
   }
-  if (/\/topic\/\d+/i.test(location.pathname)) {
+  if (/\/topic\/\d+/i.test(cc98RoutePath)) {
     return "post";
   }
-  if (location.pathname.includes("search")) {
+  if (isWebVpnHost() && document.querySelector(".topicInfo-info, .reply-content, .reply")) {
+    return "post";
+  }
+  if (isBoardSearchPage()) {
+    return "boardSearch";
+  }
+  if (cc98RoutePath.includes("search")) {
     return "search";
   }
-  if (/\/editor\/postTopic\/\d+/i.test(location.pathname) || document.querySelector(".createTopic")) {
+  if (/\/editor\/(?:postTopic|edit)\/\d+/i.test(cc98RoutePath) || document.querySelector(".createTopic")) {
     return "editor";
   }
-  if (/\/logOn/i.test(location.pathname) || document.querySelector(".login")) {
+  if (/\/logOn/i.test(cc98RoutePath) || document.querySelector(".login")) {
     return "login";
   }
-  if (location.pathname.includes("/signin") || document.querySelector(".sign-in")) {
+  if (cc98RoutePath.includes("/signin") || document.querySelector(".sign-in")) {
     return "signin";
   }
-  if (location.pathname.includes("/message") || document.querySelector(".message-root, .message")) {
+  if (cc98RoutePath.includes("/message") || document.querySelector(".message-root, .message")) {
     return "message";
   }
   if (document.querySelector(".boardList")) {
     return "boardList";
   }
-  if (/\/board\/\d+/i.test(location.pathname) && document.querySelector(".board-body, .board-postItem-body")) {
+  if (/\/board\/\d+/i.test(cc98RoutePath) && document.querySelector(".board-body, .board-postItem-body")) {
     return "board";
   }
-  if (document.querySelector(".user-center")) {
+  if (isPublicUserProfilePage() || isUserCenterRoutePath(cc98RoutePath) || document.querySelector(".user-center")) {
     return "userCenter";
+  }
+  if (/^\/(?:newTopics|focus|recommendedTopics)(?:\/|$)/i.test(cc98RoutePath)) {
+    return "topics";
   }
   if (document.querySelector(".focus-topic, .card-topic")) {
     return document.title.includes("搜索") ? "search" : "topics";
@@ -2391,13 +6930,84 @@ function getPageKind() {
   return "generic";
 }
 
+function isReadLaterSidebarTopicsPage() {
+  return /^\/(?:newTopics|focus|recommendedTopics)(?:\/|$)/i.test(getCurrentCc98RoutePath());
+}
+
+function isNewTopicsPage() {
+  return /^\/newTopics(?:\/|$)/i.test(getCurrentCc98RoutePath());
+}
+
+function getNewTopicsRouteAge() {
+  const routeKey = getRoutePageKey();
+  if (newTopicPageRouteKey !== routeKey) {
+    newTopicPageRouteKey = routeKey;
+    newTopicPageRouteFirstSeenAt = Date.now();
+  }
+  return Date.now() - newTopicPageRouteFirstSeenAt;
+}
+
+function hasNativeNewTopicsReadySignal() {
+  return Boolean(document.querySelector(
+    ".focus-topic, .card-topic, .noResultText, #focus-topic-getMore"
+  ));
+}
+
+function shouldDeferNewTopicsRebuild() {
+  if (!isNewTopicsPage() || hasNativeNewTopicsReadySignal()) {
+    return false;
+  }
+  const age = getNewTopicsRouteAge();
+  if (document.readyState === "loading" || age < NEW_TOPICS_INITIAL_GRACE_MS) {
+    return true;
+  }
+  return hasNativeSearchLoadingSignal() && age < NEW_TOPICS_LOADING_GRACE_MS;
+}
+
+function scheduleNewTopicsPendingRecheck() {
+  window.clearTimeout(newTopicPendingRecheckTimer);
+  const age = getNewTopicsRouteAge();
+  const initialRemaining = NEW_TOPICS_INITIAL_GRACE_MS - age;
+  const delay = initialRemaining > 0
+    ? Math.max(120, Math.min(420, initialRemaining))
+    : 520;
+  newTopicPendingRecheckTimer = window.setTimeout(() => {
+    newTopicPendingRecheckTimer = null;
+    scheduleRebuild();
+  }, delay);
+}
+
+function getNativeNewTopicControl(id) {
+  return [...document.querySelectorAll(`#${id}`)]
+    .find((node) => node instanceof HTMLButtonElement && !node.closest("#cc98-comfort-app"))
+    || null;
+}
+
+function getNativeNewTopicViewMode() {
+  if (!isNewTopicsPage()) {
+    return "";
+  }
+  if (getNativeNewTopicControl("new-topic-media-only-button")?.classList.contains("focus-hover")) {
+    return "media";
+  }
+  if (getNativeNewTopicControl("new-topic-card-button")?.classList.contains("focus-hover")) {
+    return "card";
+  }
+  return "classic";
+}
+
+function isBoardSearchPage() {
+  return /\/searchBoard(?:\/|$)/i.test(getCurrentCc98RoutePath());
+}
+
 function getPageTitle() {
   const kind = getPageKind();
+  const cc98RoutePath = getCurrentCc98RoutePath();
   const topicTitle = (() => {
-    if (/\/focus/i.test(location.pathname)) {
+    if (/\/focus/i.test(cc98RoutePath)) {
       return "关注";
     }
-    if (/\/recommendedTopics/i.test(location.pathname)) {
+    if (/\/recommendedTopics/i.test(cc98RoutePath)) {
       return "精选";
     }
     return "新帖";
@@ -2406,13 +7016,16 @@ function getPageTitle() {
     home: "首页",
     boardList: "版面列表",
     board: getFirstText(document, ".board-head-name") || document.title.replace(" - CC98论坛", "") || "版面",
-    editor: "发表主题",
+    editor: /\/editor\/edit\/\d+/i.test(cc98RoutePath) ? "编辑帖子" : "发表主题",
     login: "登录",
     signin: "签到",
     error: getFirstText(document, ".errorText") || document.title.replace(" - CC98论坛", "") || "出错了",
     message: "消息",
+    readLater: "\u7a0d\u540e\u518d\u770b",
+    blacklist: "黑名单",
     topics: topicTitle,
     search: "搜索结果",
+    boardSearch: "版面搜索结果",
     post: document.title.replace(" - CC98论坛", "") || "帖子",
     userCenter: "个人中心",
     generic: document.title.replace(" - CC98论坛", "") || "CC98"
@@ -2442,7 +7055,7 @@ function parseTopicMetaText(text) {
     };
   }
 
-  const cardInfo = raw.match(new RegExp(`^(\\d+)\\s+(\\d+)\\s*最后回复[:：]\\s*(.*?)\\s*(${timePattern})(?:\\s|$)`));
+  const cardInfo = raw.match(new RegExp(`^(\\d+(?:\\.\\d+)?(?:万|[wk])?)\\s+(\\d+)\\s*最后回复[:：]\\s*(.*?)\\s*(${timePattern})(?:\\s|$)`, "i"));
   if (cardInfo) {
     const [, viewCount, replyCount, lastReplyUser, lastReplyAt] = cardInfo;
     return {
@@ -2457,7 +7070,7 @@ function parseTopicMetaText(text) {
     };
   }
 
-  const searchInfo = raw.match(new RegExp(`^(${timePattern})\\s+(\\d+)\\s*最后回复[:：]\\s*(.+?)\\s*$`));
+  const searchInfo = raw.match(new RegExp(`^(${timePattern})\\s+(\\d+(?:\\.\\d+)?(?:万|[wk])?)\\s*最后回复[:：]\\s*(.+?)\\s*$`, "i"));
   if (searchInfo) {
     const [, listedAt, viewCount, lastReplyUser] = searchInfo;
     return {
@@ -2522,6 +7135,10 @@ function getFirstNumber(text) {
   return String(text ?? "").match(/\d+/)?.[0] ?? "";
 }
 
+function getFirstCountText(text) {
+  return String(text ?? "").match(/\d+(?:\.\d+)?\s*(?:万|[wk])?/i)?.[0]?.replace(/\s+/g, "") ?? "";
+}
+
 function isTopicTimeText(text) {
   return TOPIC_TIME_RE.test(normalizeSuggestionText(text));
 }
@@ -2537,7 +7154,7 @@ function parseStructuredTopicMeta(topic) {
   }
   const { info, parts } = parsed;
   if (info.classList.contains("card-topic-info") && parts.length >= 4) {
-    const viewCount = getFirstNumber(parts[0].text);
+    const viewCount = getFirstCountText(parts[0].text);
     const replyCount = getFirstNumber(parts[1].text);
     const lastReplyPart = parts.find((part) => part.text.includes("最后回复"));
     const lastReplyUser = getFirstLink(lastReplyPart?.node ?? info, 'a[href*="/user/"]')?.text
@@ -2564,11 +7181,11 @@ function parseStructuredTopicMeta(topic) {
       if (part === tagPart || part === timePart || part.text.includes("最后回复")) {
         return false;
       }
-      return Boolean(getFirstNumber(part.text));
+      return Boolean(getFirstCountText(part.text));
     });
     const listedAt = timePart?.text || "";
     const tag = stripTopicLabel(tagPart?.text || "");
-    const viewCount = getFirstNumber(viewPart?.text);
+    const viewCount = getFirstCountText(viewPart?.text);
     const lastReplyPart = parts.find((part) => part.text.includes("最后回复"));
     const lastReplyUser = getFirstLink(lastReplyPart?.node ?? info, 'a[href*="/user/"]')?.text
       || lastReplyPart?.text.replace(/最后回复[:：]\s*/, "").trim()
@@ -2595,10 +7212,59 @@ function parseStructuredTopicMeta(topic) {
   return null;
 }
 
+function collectNewTopicCardMedia(topic) {
+  if (!(topic instanceof Element) || !topic.classList.contains("card-topic")) {
+    return [];
+  }
+  const media = [];
+  const seen = new Set();
+  topic.querySelectorAll([
+    ".card-topic-thumbnail img",
+    ".dplayer video[poster]",
+    ".dplayer [style*='background-image']"
+  ].join(",")).forEach((node) => {
+    if (!(node instanceof Element) || node.closest(".card-topic-thumbnail-mini")) {
+      return;
+    }
+    const rawUrl = node instanceof HTMLVideoElement
+      ? (node.getAttribute("poster") || "")
+      : (getRuntimeMediaUrl(node) || getMediaUrl(node));
+    if (!String(rawUrl || "").trim() || /^(?:data:|blob:|about:blank)/i.test(String(rawUrl).trim())) {
+      return;
+    }
+    const src = makeWebVpnCc98ResourceUrl(rawUrl);
+    if (!src
+      || seen.has(src)
+      || (!isProbablyPostImageUrl(src) && !/\/v(?:2|4)-upload\/(?:thumbnail|t)\//i.test(src))
+      || isDecorativeFrameImageUrl(src)
+      || /\/static\/images\/audio_cover\.png(?:[?#]|$)/i.test(src)) {
+      return;
+    }
+    seen.add(src);
+    media.push({
+      src,
+      alt: cleanupPostText(node.getAttribute("alt") || "")
+    });
+  });
+  return media.slice(0, 6);
+}
+
 function getTopicItems(root = document) {
   const items = [];
   const seen = new Set();
-  root.querySelectorAll(".focus-topic, .card-topic").forEach((topic) => {
+  const currentNewTopicMode = root === document && isNewTopicsPage()
+    ? getNativeNewTopicViewMode()
+    : "";
+  const preferredSelector = currentNewTopicMode && currentNewTopicMode !== "classic"
+    ? ".card-topic"
+    : (currentNewTopicMode === "classic" ? ".focus-topic" : ".focus-topic, .card-topic");
+  let topicNodes = [...root.querySelectorAll(preferredSelector)]
+    .filter((topic) => !topic.closest("#cc98-comfort-app"));
+  if (!topicNodes.length && preferredSelector !== ".focus-topic, .card-topic") {
+    topicNodes = [...root.querySelectorAll(".focus-topic, .card-topic")]
+      .filter((topic) => !topic.closest("#cc98-comfort-app"));
+  }
+  topicNodes.forEach((topic) => {
     const titleLink = getFirstLink(topic, ".focus-topic-title, .card-topic-title");
     if (!titleLink?.href || seen.has(titleLink.href)) {
       return;
@@ -2622,7 +7288,206 @@ function getTopicItems(root = document) {
       meta: parsedMeta.meta,
       hoverMeta: parsedMeta.hoverMeta,
       replyCount: parsedMeta.replyCount,
-      viewCount: parsedMeta.viewCount || ""
+      viewCount: parsedMeta.viewCount || "",
+      viewMode: currentNewTopicMode,
+      media: collectNewTopicCardMedia(topic)
+    });
+  });
+  return items;
+}
+
+const SEARCH_SORT_CRITERIA = [
+  { value: "original", label: "原顺序" },
+  { value: "views-desc", label: "浏览数高到低" },
+  { value: "time-desc", label: "时间新到旧" },
+  { value: "time-asc", label: "时间旧到新" }
+];
+
+function normalizeSearchSortCriterion(value, fallback = "original") {
+  return SEARCH_SORT_CRITERIA.some((option) => option.value === value) ? value : fallback;
+}
+
+function normalizeSearchSortSetting(value) {
+  if (typeof value === "string") {
+    return normalizeSearchSortCriterion(value, "original");
+  }
+  if (value && typeof value === "object") {
+    return normalizeSearchSortCriterion(value.primary, "original");
+  }
+  return "original";
+}
+
+function getSearchSortSetting() {
+  try {
+    return normalizeSearchSortSetting(JSON.parse(localStorage.getItem(SEARCH_SORT_STORAGE_KEY) || "null"));
+  } catch {
+    return "original";
+  }
+}
+
+function setSearchSortSetting(nextSetting) {
+  const normalized = normalizeSearchSortSetting(nextSetting);
+  try {
+    localStorage.setItem(SEARCH_SORT_STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+    // Search sorting is a local convenience; ignore storage failures.
+  }
+  scheduleRebuild();
+}
+
+function parseCountValue(value) {
+  const text = String(value ?? "").replace(/,/g, "").trim();
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(万|w|k)?/i);
+  if (!match) {
+    return 0;
+  }
+  const number = Number(match[1]);
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+  const unit = match[2]?.toLowerCase() || "";
+  if (unit === "万" || unit === "w") {
+    return number * 10000;
+  }
+  if (unit === "k") {
+    return number * 1000;
+  }
+  return number;
+}
+
+function parseTopicTimeValue(value) {
+  const text = normalizeSuggestionText(value);
+  if (!text) {
+    return 0;
+  }
+  const now = Date.now();
+  if (text.includes("刚刚")) {
+    return now;
+  }
+  const relative = text.match(/(\d+)\s*(秒前|分钟前|小时前|天前|周前|月前|年前)/);
+  if (relative) {
+    const amount = Number(relative[1]);
+    const unit = relative[2];
+    const unitMs = {
+      秒前: 1000,
+      分钟前: 60 * 1000,
+      小时前: 60 * 60 * 1000,
+      天前: 24 * 60 * 60 * 1000,
+      周前: 7 * 24 * 60 * 60 * 1000,
+      月前: 30 * 24 * 60 * 60 * 1000,
+      年前: 365 * 24 * 60 * 60 * 1000
+    }[unit] || 0;
+    return unitMs ? now - amount * unitMs : 0;
+  }
+  const today = new Date();
+  const dayOffset = text.startsWith("今天") ? 0 : text.startsWith("昨天") ? 1 : text.startsWith("前天") ? 2 : null;
+  if (dayOffset !== null) {
+    const time = text.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (!time) {
+      return 0;
+    }
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOffset, Number(time[1]), Number(time[2]), Number(time[3] || 0));
+    return date.getTime();
+  }
+  const normalized = text.replace(/\//g, "-");
+  const absolute = normalized.match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (absolute) {
+    return new Date(
+      Number(absolute[1]),
+      Number(absolute[2]) - 1,
+      Number(absolute[3]),
+      Number(absolute[4] || 0),
+      Number(absolute[5] || 0),
+      Number(absolute[6] || 0)
+    ).getTime();
+  }
+  const monthDay = normalized.match(/(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (monthDay) {
+    return new Date(today.getFullYear(), Number(monthDay[1]) - 1, Number(monthDay[2]), Number(monthDay[3]), Number(monthDay[4]), Number(monthDay[5] || 0)).getTime();
+  }
+  return 0;
+}
+
+function getTopicSortTime(item) {
+  return parseTopicTimeValue(item.lastReplyAt || item.meta || item.hoverMeta);
+}
+
+function compareSearchSortCriterion(left, right, criterion) {
+  if (criterion === "views-desc") {
+    return parseCountValue(right.item.viewCount) - parseCountValue(left.item.viewCount);
+  }
+  if (criterion === "time-desc") {
+    return getTopicSortTime(right.item) - getTopicSortTime(left.item);
+  }
+  if (criterion === "time-asc") {
+    return getTopicSortTime(left.item) - getTopicSortTime(right.item);
+  }
+  return 0;
+}
+
+function sortSearchTopicItems(items, _keyword, setting = getSearchSortSetting()) {
+  const criterion = normalizeSearchSortSetting(setting);
+  const indexed = (items || []).map((item, index) => ({ item, index }));
+  indexed.sort((left, right) => {
+    const delta = compareSearchSortCriterion(left, right, criterion);
+    if (delta) {
+      return delta;
+    }
+    return left.index - right.index;
+  });
+  return indexed.map((entry) => entry.item);
+}
+
+function createSearchSortControls(totalCount, keyword) {
+  const setting = getSearchSortSetting();
+  const controls = createElement("section", "cc98-rebuild-search-sort");
+  const label = createElement("span", "cc98-rebuild-search-sort-label", `搜索结果排序 · ${totalCount} 条`);
+  const options = createElement("div", "cc98-rebuild-search-sort-options");
+  const wrap = createElement("label", "cc98-rebuild-search-sort-select");
+  wrap.append(createElement("span", "", "排序方式"));
+  const select = document.createElement("select");
+  SEARCH_SORT_CRITERIA.forEach((option) => {
+    const node = document.createElement("option");
+    node.value = option.value;
+    node.textContent = option.label;
+    node.selected = option.value === setting;
+    select.append(node);
+  });
+  select.addEventListener("change", () => {
+    setSearchSortSetting(select.value);
+    syncRebuiltContent();
+  });
+  wrap.append(select);
+  options.append(wrap);
+  if (keyword) {
+    controls.dataset.keyword = keyword;
+  }
+  controls.append(label, options);
+  return controls;
+}
+
+function getBoardSearchItems(root = document) {
+  const items = [];
+  const seen = new Set();
+  root.querySelectorAll(".focus-board-area a[href*='/board/']").forEach((link) => {
+    if (!(link instanceof HTMLAnchorElement)) {
+      return;
+    }
+    const href = makeAbsoluteCc98Url(link.getAttribute("href") || link.href || "");
+    const title = cleanupPostText(link.querySelector(".focus-board")?.textContent || link.textContent);
+    if (!href || !title || seen.has(href)) {
+      return;
+    }
+    seen.add(href);
+    const boardId = href.match(/\/board\/(\d+)/i)?.[1] || "";
+    items.push({
+      type: "board",
+      title,
+      href,
+      board: "版面",
+      boardHref: buildCc98RouteHref("/boardList"),
+      meta: boardId ? `版面 ID: ${boardId}` : "版面搜索结果",
+      hoverMeta: "点击进入版面"
     });
   });
   return items;
@@ -2706,8 +7571,81 @@ function getMediaUrl(node) {
   return "";
 }
 
+function getRuntimeMediaUrl(node) {
+  if (typeof HTMLMediaElement !== "undefined" && node instanceof HTMLMediaElement) {
+    return node.currentSrc || node.src || node.getAttribute("src") || "";
+  }
+  if (typeof HTMLSourceElement !== "undefined" && node instanceof HTMLSourceElement) {
+    return node.src || node.getAttribute("src") || "";
+  }
+  return "";
+}
+
 function isImageUrl(url) {
   return /\.(?:png|jpe?g|gif|webp|bmp|avif)(?:[?#].*)?$/i.test(String(url ?? ""));
+}
+
+function getExtensionAssetUrl(assetPath) {
+  const path = String(assetPath ?? "").replace(/^\/+/, "").replace(/\\/g, "/");
+  if (!path) {
+    return "";
+  }
+  try {
+    if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+      return chrome.runtime.getURL(path);
+    }
+  } catch {
+    // Extension URL resolution is best-effort in content scripts.
+  }
+  return path;
+}
+
+function isDarkComfortTheme() {
+  return document.documentElement.dataset.cc98ComfortTone === "dark"
+    || DARK_THEME_IDS.has(lastSettings?.theme);
+}
+
+function getLocalAcEmojiFolder() {
+  return isDarkComfortTheme() ? "images/ac1" : "images/ac";
+}
+
+function getLocalEmojiAssetUrlFromSrc(src) {
+  const raw = String(src ?? "");
+  if (!raw) {
+    return "";
+  }
+  let value = raw;
+  try {
+    value = decodeURIComponent(raw);
+  } catch {
+    // Keep the raw value when decoding fails.
+  }
+
+  let match = value.match(/(?:^|\/)(?:static\/)?images\/CC98\/CC98(\d{2})\.(gif|png)(?:[?#].*)?$/i);
+  if (match) {
+    return getExtensionAssetUrl(`images/CC98/CC98${match[1]}.${match[2].toLowerCase()}`);
+  }
+  match = value.match(/(?:^|\/)(?:static\/)?images\/ac1?\/(\d{2}|\d{4})\.png(?:[?#].*)?$/i);
+  if (match) {
+    return getExtensionAssetUrl(`${getLocalAcEmojiFolder()}/${match[1]}.png`);
+  }
+  match = value.match(/(?:^|\/)(?:static\/)?images\/mahjong\/(animal2017|carton2017|face2017)\/(\d{3})\.(gif|png)(?:[?#].*)?$/i);
+  if (match) {
+    return getExtensionAssetUrl(`images/mahjong/${match[1].toLowerCase()}/${match[2]}.${match[3].toLowerCase()}`);
+  }
+  match = value.match(/(?:^|\/)(?:static\/)?images\/tb\/tb(\d{2})\.png(?:[?#].*)?$/i);
+  if (match) {
+    return getExtensionAssetUrl(`images/tb/tb${match[1]}.png`);
+  }
+  match = value.match(/(?:^|\/)(?:static\/)?images\/ms\/ms(\d{2})\.png(?:[?#].*)?$/i);
+  if (match) {
+    return getExtensionAssetUrl(`images/ms/ms${match[1]}.png`);
+  }
+  match = value.match(/(?:^|\/)(?:static\/)?images\/em\/em(\d{2})\.gif(?:[?#].*)?$/i);
+  if (match) {
+    return getExtensionAssetUrl(`images/em/em${match[1]}.gif`);
+  }
+  return "";
 }
 
 function isAudioUrl(url) {
@@ -2717,7 +7655,56 @@ function isAudioUrl(url) {
 function isDownloadFileUrl(url) {
   const value = String(url ?? "");
   return /\.(?:pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|csv|tsv|md)(?:[?#].*)?$/i.test(value)
-    || (/\/v4-upload\/d\//i.test(value) && !isAudioUrl(value) && !isImageUrl(value));
+    || (/\/v4-upload\/d\//i.test(value) && !isAudioUrl(value) && !isImageUrl(value) && !isVideoUrl(value));
+}
+
+function isDecorativeFrameImageUrl(url) {
+  const raw = String(url ?? "").replace(/\\/g, "/");
+  if (!raw) {
+    return false;
+  }
+  if (/\/static\/images\/(?:%E7%9B%B8%E6%A1%86|\u76f8\u6846)\//i.test(raw)) {
+    return true;
+  }
+  let pathname = raw;
+  try {
+    pathname = decodeURIComponent(new URL(raw, location.origin).pathname).replace(/\\/g, "/");
+  } catch {
+    try {
+      pathname = decodeURIComponent(raw).replace(/\\/g, "/");
+    } catch {
+      pathname = raw;
+    }
+  }
+  return /\/static\/images\/\u76f8\u6846\//i.test(pathname);
+}
+
+function getNonDecorativeImageSrc(image) {
+  if (!(image instanceof HTMLImageElement)) {
+    return "";
+  }
+  const src = makeAbsoluteCc98Url(getMediaUrl(image) || image.currentSrc || image.src || "");
+  return src && !isDecorativeFrameImageUrl(src) ? src : "";
+}
+
+function removeDecorativeFrameImages(root = document) {
+  const images = [
+    ...(root instanceof HTMLImageElement ? [root] : []),
+    ...(root.querySelectorAll?.("img") ?? [])
+  ];
+  images.forEach((image) => {
+    if (!(image instanceof HTMLImageElement)) {
+      return;
+    }
+    const rawSrc = image.getAttribute("src")
+      || image.getAttribute("data-src")
+      || image.currentSrc
+      || image.src
+      || getOwnMediaUrl(image);
+    if (isDecorativeFrameImageUrl(rawSrc)) {
+      image.remove();
+    }
+  });
 }
 
 function isProbablyPostImageUrl(url) {
@@ -2736,6 +7723,18 @@ function isProbablyPostVideoUrl(url) {
   return isVideoUrl(url) || /(?:^|\/\/)file\.cc98\.org\/.*\/v\//i.test(String(url ?? ""));
 }
 
+function isBilibiliVideoUrl(url) {
+  return /(?:bilibili\.com|b23\.tv)/i.test(String(url ?? ""));
+}
+
+function isUsableNativeVideoUrl(url) {
+  const value = String(url ?? "");
+  return Boolean(value)
+    && !value.startsWith("data:")
+    && !isBilibiliVideoUrl(value)
+    && (/^blob:/i.test(value) || isProbablyPostVideoUrl(value));
+}
+
 function isAPlayerElement(node) {
   return Boolean(node?.closest?.(".aplayer, .cc98-rebuild-audio-player"));
 }
@@ -2749,10 +7748,15 @@ function getAPlayerAudioUrl(player) {
   if (!(player instanceof Element)) {
     return "";
   }
-  const mediaNode = player.querySelector("audio[src], source[src], a[href]");
-  const mediaUrl = mediaNode ? getMediaUrl(mediaNode) : "";
-  if (isAudioUrl(mediaUrl)) {
-    return makeAbsoluteCc98Url(mediaUrl);
+  const mediaNodes = [
+    ...(player.matches("audio, source, a[href], [data-src], [data-original], [data-url], [data-file], [data-href]") ? [player] : []),
+    ...player.querySelectorAll("audio, source, a[href], [data-src], [data-original], [data-url], [data-file], [data-href]")
+  ];
+  for (const mediaNode of mediaNodes) {
+    const mediaUrl = getRuntimeMediaUrl(mediaNode) || getOwnMediaUrl(mediaNode);
+    if (isAudioUrl(mediaUrl)) {
+      return makeAbsoluteCc98Url(mediaUrl);
+    }
   }
   for (const node of player.querySelectorAll(".aplayer-title, .aplayer-list-title, [class*='title']")) {
     const url = extractAudioUrlFromText(node.textContent);
@@ -2772,23 +7776,310 @@ function getAudioTitleFromUrl(url) {
   }
 }
 
-function createAudioPlayerFromUrl(url, title = "") {
+function isLikelyAudioTitleUrl(text) {
+  return Boolean(extractAudioUrlFromText(text));
+}
+
+function getAPlayerTitle(player, src = "") {
+  const title = cleanupPostText(player?.querySelector?.(".aplayer-title, .aplayer-list-title")?.textContent);
+  if (title && !isLikelyAudioTitleUrl(title)) {
+    return title;
+  }
+  return src ? getAudioTitleFromUrl(src) : (title || "\u97f3\u9891");
+}
+
+function getAPlayerPlayTrigger(player) {
+  if (!(player instanceof Element)) {
+    return null;
+  }
+  return player.querySelector(".aplayer-button, .aplayer-icon-play, .aplayer-pic, .aplayer-play");
+}
+
+function getSourceAPlayerPlayingState(sourcePlayer) {
+  if (!(sourcePlayer instanceof Element)) {
+    return null;
+  }
+  const sourceAudio = sourcePlayer.querySelector("audio");
+  if (sourceAudio instanceof HTMLAudioElement && sourceAudio.src) {
+    return !sourceAudio.paused && !sourceAudio.ended;
+  }
+  const stateText = [
+    sourcePlayer.className,
+    sourcePlayer.querySelector(".aplayer-button, .aplayer-icon-play")?.className,
+    sourcePlayer.querySelector(".aplayer-pause")?.className
+  ].filter(Boolean).join(" ");
+  if (/\b(?:aplayer-pause|aplayer-playing)\b/i.test(stateText)) {
+    return true;
+  }
+  if (/\baplayer-play\b/i.test(stateText)) {
+    return false;
+  }
+  return null;
+}
+
+async function toggleSourceAPlayer(sourcePlayer) {
+  if (!(sourcePlayer instanceof Element)) {
+    return null;
+  }
+  const sourceAudio = sourcePlayer.querySelector("audio");
+  if (sourceAudio instanceof HTMLAudioElement && sourceAudio.src) {
+    if (sourceAudio.paused) {
+      await sourceAudio.play();
+      return true;
+    }
+    sourceAudio.pause();
+    return false;
+  }
+  const trigger = getAPlayerPlayTrigger(sourcePlayer);
+  if (trigger instanceof HTMLElement) {
+    const previousState = getSourceAPlayerPlayingState(sourcePlayer);
+    trigger.click();
+    await wait(80);
+    return getSourceAPlayerPlayingState(sourcePlayer)
+      ?? (previousState === null ? null : !previousState);
+  }
+  return null;
+}
+
+function setAudioPlayButtonState(playButton, isPlaying) {
+  playButton.classList.toggle("is-playing", Boolean(isPlaying));
+  playButton.textContent = isPlaying ? "\u275a\u275a" : "\u25b6";
+  playButton.setAttribute("aria-label", isPlaying ? "\u6682\u505c\u97f3\u9891" : "\u64ad\u653e\u97f3\u9891");
+}
+
+function getSourceAPlayerAudio(sourcePlayer) {
+  if (!(sourcePlayer instanceof Element)) {
+    return null;
+  }
+  const audio = sourcePlayer.querySelector("audio");
+  if (audio instanceof HTMLAudioElement && audio.src) {
+    return audio;
+  }
+  for (const key of Object.keys(sourcePlayer)) {
+    if (!/aplayer|player/i.test(key)) {
+      continue;
+    }
+    const value = sourcePlayer[key];
+    const candidate = value?.audio || value?.template?.audio;
+    if (candidate instanceof HTMLAudioElement && candidate.src) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function getAudioProgressPercent(audio) {
+  if (!(audio instanceof HTMLMediaElement) || !Number.isFinite(audio.duration) || audio.duration <= 0) {
+    return { played: 0, loaded: 0 };
+  }
+  let loadedEnd = 0;
+  try {
+    if (audio.buffered?.length) {
+      loadedEnd = audio.buffered.end(audio.buffered.length - 1);
+    }
+  } catch {
+    loadedEnd = 0;
+  }
+  return {
+    played: clampNumber((audio.currentTime / audio.duration) * 100, 0, 100, 0),
+    loaded: clampNumber((loadedEnd / audio.duration) * 100, 0, 100, 0)
+  };
+}
+
+function getAPlayerBarPercent(sourcePlayer, selector) {
+  const node = sourcePlayer?.querySelector?.(selector);
+  if (!(node instanceof HTMLElement)) {
+    return 0;
+  }
+  const width = node.style.width || window.getComputedStyle(node).width || "";
+  const percent = Number(String(width).match(/([\d.]+)\s*%/)?.[1]);
+  return clampNumber(percent, 0, 100, 0);
+}
+
+function createAudioPlayerFromUrl(url, title = "", sourcePlayer = null) {
   const src = makeAbsoluteCc98Url(url);
   const player = createElement("div", "cc98-rebuild-audio-player");
-  const cover = createElement("div", "cc98-rebuild-audio-cover", "");
-  cover.setAttribute("aria-hidden", "true");
+  const playButton = createButton("cc98-rebuild-audio-play", "\u25b6", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const audio = player.querySelector("audio");
+    if (audio instanceof HTMLAudioElement && audio.src) {
+      try {
+        if (audio.paused) {
+          await audio.play();
+        } else {
+          audio.pause();
+        }
+      } catch {
+        playButton.classList.add("is-error");
+      }
+      return;
+    }
+    try {
+      const sourceState = await toggleSourceAPlayer(sourcePlayer);
+      const playing = sourceState === null ? playButton.classList.toggle("is-playing") : sourceState;
+      playButton.classList.toggle("is-playing", playing);
+      playButton.textContent = playing ? "\u275a\u275a" : "\u25b6";
+      setAudioPlayButtonState(playButton, playing);
+      syncProgress();
+      if (playing) {
+        startSourceProgressPolling();
+      } else {
+        stopSourceProgressPolling();
+      }
+      playButton.setAttribute("aria-label", playing ? "暂停音频" : "播放音频");
+    } catch {
+      playButton.classList.add("is-error");
+    }
+  });
+  playButton.type = "button";
+  playButton.setAttribute("aria-label", "播放音频");
+  setAudioPlayButtonState(playButton, false);
   const body = createElement("div", "cc98-rebuild-audio-body");
-  body.append(createElement("div", "cc98-rebuild-audio-title", title || getAudioTitleFromUrl(src)));
+  body.append(createElement("div", "cc98-rebuild-audio-title", title || (src ? getAudioTitleFromUrl(src) : "\u97f3\u9891")));
+  const progressTrack = createElement("div", "cc98-rebuild-audio-progress");
+  const loadedBar = createElement("span", "cc98-rebuild-audio-progress-loaded");
+  const playedBar = createElement("span", "cc98-rebuild-audio-progress-played");
+  progressTrack.tabIndex = 0;
+  progressTrack.setAttribute("role", "slider");
+  progressTrack.setAttribute("aria-label", "\u97f3\u9891\u8fdb\u5ea6");
+  progressTrack.setAttribute("aria-valuemin", "0");
+  progressTrack.setAttribute("aria-valuemax", "100");
+  progressTrack.setAttribute("aria-valuenow", "0");
+  progressTrack.append(loadedBar, playedBar);
+  body.append(progressTrack);
   const audio = document.createElement("audio");
   audio.className = "cc98-rebuild-audio-control";
-  audio.src = src;
-  audio.controls = true;
+  if (src) {
+    audio.src = src;
+  }
+  audio.controls = false;
   audio.preload = "metadata";
+  let sourceProgressTimer = null;
+  const getPlayableAudio = () => (audio.src ? audio : getSourceAPlayerAudio(sourcePlayer));
+  const setProgressState = (played, loaded) => {
+    const playedPercent = clampNumber(played, 0, 100, 0);
+    const loadedPercent = clampNumber(loaded, playedPercent, 100, playedPercent);
+    playedBar.style.width = `${playedPercent.toFixed(2)}%`;
+    loadedBar.style.width = `${loadedPercent.toFixed(2)}%`;
+    progressTrack.setAttribute("aria-valuenow", String(Math.round(playedPercent)));
+  };
+  const syncProgress = () => {
+    const playableAudio = getPlayableAudio();
+    if (playableAudio instanceof HTMLMediaElement && Number.isFinite(playableAudio.duration) && playableAudio.duration > 0) {
+      const progress = getAudioProgressPercent(playableAudio);
+      setProgressState(progress.played, progress.loaded);
+      return;
+    }
+    const played = getAPlayerBarPercent(sourcePlayer, ".aplayer-played");
+    const loaded = Math.max(played, getAPlayerBarPercent(sourcePlayer, ".aplayer-loaded"));
+    setProgressState(played, loaded);
+  };
+  const startSourceProgressPolling = () => {
+    if (sourceProgressTimer) {
+      return;
+    }
+    sourceProgressTimer = window.setInterval(syncProgress, 350);
+  };
+  const stopSourceProgressPolling = () => {
+    if (!sourceProgressTimer) {
+      return;
+    }
+    window.clearInterval(sourceProgressTimer);
+    sourceProgressTimer = null;
+  };
+  const seekToRatio = (ratio) => {
+    const playableAudio = getPlayableAudio();
+    if (!(playableAudio instanceof HTMLMediaElement)
+      || !Number.isFinite(playableAudio.duration)
+      || playableAudio.duration <= 0) {
+      return false;
+    }
+    playableAudio.currentTime = clampNumber(ratio, 0, 1, 0) * playableAudio.duration;
+    syncProgress();
+    return true;
+  };
+  const seekFromEvent = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = progressTrack.getBoundingClientRect();
+    if (!rect.width) {
+      return;
+    }
+    seekToRatio((event.clientX - rect.left) / rect.width);
+  };
+  progressTrack.addEventListener("click", seekFromEvent);
+  progressTrack.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const current = Number(progressTrack.getAttribute("aria-valuenow")) || 0;
+    const next = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? 100
+        : current + (event.key === "ArrowRight" ? 5 : -5);
+    seekToRatio(clampNumber(next, 0, 100, current) / 100);
+  });
+  audio.addEventListener("play", () => {
+    playButton.textContent = "\u275a\u275a";
+    playButton.classList.add("is-playing");
+    playButton.setAttribute("aria-label", "暂停音频");
+  });
+  audio.addEventListener("pause", () => {
+    playButton.textContent = "\u25b6";
+    playButton.classList.remove("is-playing");
+    playButton.setAttribute("aria-label", "播放音频");
+  });
+  audio.addEventListener("ended", () => {
+    playButton.textContent = "\u25b6";
+    playButton.classList.remove("is-playing");
+    playButton.setAttribute("aria-label", "播放音频");
+  });
+  audio.addEventListener("play", () => {
+    setAudioPlayButtonState(playButton, true);
+    syncProgress();
+  });
+  audio.addEventListener("pause", () => {
+    setAudioPlayButtonState(playButton, false);
+    syncProgress();
+  });
+  audio.addEventListener("ended", () => {
+    setAudioPlayButtonState(playButton, false);
+    stopSourceProgressPolling();
+    syncProgress();
+  });
+  audio.addEventListener("loadedmetadata", syncProgress);
+  audio.addEventListener("durationchange", syncProgress);
+  audio.addEventListener("progress", syncProgress);
+  audio.addEventListener("timeupdate", syncProgress);
+  const sourceAudio = getSourceAPlayerAudio(sourcePlayer);
+  if (sourceAudio instanceof HTMLAudioElement) {
+    sourceAudio.addEventListener("play", () => {
+      setAudioPlayButtonState(playButton, true);
+      startSourceProgressPolling();
+      syncProgress();
+    });
+    sourceAudio.addEventListener("pause", () => {
+      setAudioPlayButtonState(playButton, false);
+      stopSourceProgressPolling();
+      syncProgress();
+    });
+    sourceAudio.addEventListener("ended", () => {
+      setAudioPlayButtonState(playButton, false);
+      stopSourceProgressPolling();
+      syncProgress();
+    });
+    sourceAudio.addEventListener("loadedmetadata", syncProgress);
+    sourceAudio.addEventListener("durationchange", syncProgress);
+    sourceAudio.addEventListener("progress", syncProgress);
+    sourceAudio.addEventListener("timeupdate", syncProgress);
+  }
+  syncProgress();
   body.append(audio);
-  const download = createLink("cc98-rebuild-download-button cc98-rebuild-audio-download", "\u4e0b\u8f7d\u97f3\u9891", src);
-  download.setAttribute("download", "");
-  body.append(download);
-  player.append(cover, body);
+  player.append(playButton, body);
   return player;
 }
 
@@ -2810,10 +8101,176 @@ function isVideoCarrierNode(node) {
   return /\b(?:video|player|dplayer|media)\b/i.test(haystack);
 }
 
+const LEGACY_VIDEO_PLAYER_SELECTOR = [
+  ".dplayer",
+  "[class*='dplayer' i]",
+  "[id*='dplayer' i]",
+  "[class*='video' i]",
+  "[id*='video' i]",
+  "[class*='player' i]",
+  "[id*='player' i]"
+].join(", ");
+
+const LEGACY_VIDEO_CHROME_SELECTOR = [
+  ".dplayer-controller",
+  ".dplayer-bezel",
+  ".dplayer-mobile-play",
+  ".dplayer-notice",
+  ".dplayer-menu",
+  ".dplayer-icons",
+  ".dplayer-bar-wrap",
+  ".dplayer-mask",
+  ".dplayer-logo",
+  ".dplayer-loading",
+  ".dplayer-setting",
+  ".dplayer-comment",
+  ".dplayer-subtitle",
+  ".dplayer-info-panel",
+  "[class*='dplayer-controller' i]",
+  "[class*='dplayer-bezel' i]",
+  "[class*='dplayer-mobile-play' i]",
+  "[class*='dplayer-notice' i]",
+  "[class*='dplayer-menu' i]",
+  "[class*='dplayer-icons' i]",
+  "[class*='dplayer-bar' i]",
+  "[class*='dplayer-mask' i]",
+  "[class*='dplayer-logo' i]",
+  "[class*='dplayer-loading' i]",
+  "[class*='dplayer-setting' i]",
+  "[class*='dplayer-comment' i]",
+  "[class*='dplayer-subtitle' i]",
+  "[class*='dplayer-info' i]"
+].join(", ");
+
+function isNativeVideoPlayerContainer(node) {
+  if (!(node instanceof Element) || isAPlayerElement(node)) {
+    return false;
+  }
+  const haystack = [
+    node.getAttribute?.("class"),
+    node.getAttribute?.("id"),
+    ...[...node.attributes ?? []].map((attr) => attr.name),
+    ...[...node.attributes ?? []].map((attr) => attr.value)
+  ].join(" ");
+  return /\b(?:dplayer|video|video-player|player|media)\b/i.test(haystack)
+    && !/(?:bilibili|bili|aplayer|audio)/i.test(haystack);
+}
+
+function extractVideoUrlFromText(text) {
+  const match = String(text ?? "").match(/(?:https?:\/\/[^\s<>"']+|\/[^\s<>"']+)\.(?:mp4|webm|ogg|mov|m4v)(?:[?#][^\s<>"']*)?/i);
+  return match ? makeAbsoluteCc98Url(match[0]) : "";
+}
+
+function getVideoSourceFromElement(root) {
+  if (!(root instanceof Element) || isAPlayerElement(root)) {
+    return "";
+  }
+  const runtime = getRuntimeMediaUrl(root);
+  if (isUsableNativeVideoUrl(runtime)) {
+    return makeAbsoluteCc98Url(runtime);
+  }
+  const own = getOwnMediaUrl(root);
+  if (isUsableNativeVideoUrl(own)) {
+    return makeAbsoluteCc98Url(own);
+  }
+  const candidates = [
+    ...(root.matches("video, source, a[href], [data-src], [data-url], [data-file], [data-href]") ? [root] : []),
+    ...root.querySelectorAll("video, source, a[href], [data-src], [data-original], [data-url], [data-file], [data-href]")
+  ];
+  for (const candidate of candidates) {
+    if (!(candidate instanceof Element) || isAPlayerElement(candidate)) {
+      continue;
+    }
+    const src = getRuntimeMediaUrl(candidate) || getOwnMediaUrl(candidate) || getMediaUrl(candidate);
+    if (isUsableNativeVideoUrl(src)) {
+      return makeAbsoluteCc98Url(src);
+    }
+  }
+  const textUrl = extractVideoUrlFromText(root.textContent);
+  return textUrl && !isBilibiliVideoUrl(textUrl) ? textUrl : "";
+}
+
+function getNativeVideoReplacementTarget(node, boundary) {
+  if (!(node instanceof Element)) {
+    return null;
+  }
+  const carrier = node.closest?.(LEGACY_VIDEO_PLAYER_SELECTOR);
+  if (carrier instanceof Element
+    && carrier !== boundary
+    && !carrier.closest?.(".aplayer, .cc98-rebuild-audio-player")
+    && !/bilibili|bili/i.test(`${carrier.className || ""} ${carrier.id || ""}`)
+    && getVideoSourceFromElement(carrier)) {
+    return carrier;
+  }
+  return node;
+}
+
+function replaceNativeVideoPlayers(clone) {
+  const targets = new Set();
+  clone.querySelectorAll(`${LEGACY_VIDEO_PLAYER_SELECTOR}, video, source, a[href], [data-src], [data-original], [data-url], [data-file], [data-href]`).forEach((node) => {
+    if (!(node instanceof Element) || isAPlayerElement(node)) {
+      return;
+    }
+    const src = getVideoSourceFromElement(node);
+    if (!src || !isUsableNativeVideoUrl(src)) {
+      return;
+    }
+    const target = getNativeVideoReplacementTarget(node, clone);
+    if (target instanceof Element) {
+      targets.add(target);
+    }
+  });
+
+  [...targets]
+    .filter((target) => target.isConnected)
+    .sort((a, b) => (a.contains(b) ? -1 : b.contains(a) ? 1 : 0))
+    .forEach((target) => {
+      if (!target.isConnected || isAPlayerElement(target)) {
+        return;
+      }
+      const src = getVideoSourceFromElement(target);
+      if (!src) {
+        return;
+      }
+      target.replaceWith(createContentVideoFromUrl(src));
+    });
+}
+
+function removeLegacyVideoPlayerChrome(root) {
+  root.querySelectorAll(LEGACY_VIDEO_CHROME_SELECTOR).forEach((node) => {
+    if (!(node instanceof Element) || isAPlayerElement(node)) {
+      return;
+    }
+    node.remove();
+  });
+
+  root.querySelectorAll(".dplayer, [class*='dplayer' i], [id*='dplayer' i]").forEach((player) => {
+    if (!(player instanceof Element) || isAPlayerElement(player) || !player.isConnected) {
+      return;
+    }
+    const src = getVideoSourceFromElement(player);
+    if (src) {
+      player.replaceWith(createContentVideoFromUrl(src));
+      return;
+    }
+    const nativeVideo = player.querySelector("video");
+    if (nativeVideo instanceof HTMLVideoElement) {
+      const nativeSrc = getVideoSourceFromElement(nativeVideo);
+      const replacement = nativeSrc ? createContentVideoFromUrl(nativeSrc) : nativeVideo.cloneNode(true);
+      normalizeContentVideoElement(replacement);
+      player.replaceWith(replacement);
+      return;
+    }
+    player.querySelectorAll(LEGACY_VIDEO_CHROME_SELECTOR).forEach((node) => node.remove());
+  });
+}
+
 function createContentImageFromUrl(url, alt = "") {
   const image = document.createElement("img");
-  image.src = url;
+  image.src = makeWebVpnCc98ResourceUrl(url);
   image.alt = alt;
+  image.loading = "lazy";
+  image.decoding = "async";
   return image;
 }
 
@@ -2824,6 +8281,30 @@ function createContentVideoFromUrl(url) {
   video.controls = true;
   video.preload = "metadata";
   video.playsInline = true;
+  video.tabIndex = 0;
+  return video;
+}
+
+function normalizeContentVideoElement(video) {
+  if (!(video instanceof HTMLVideoElement)) {
+    return null;
+  }
+  const source = video.querySelector("source[src]");
+  const src = getRuntimeMediaUrl(video) || getMediaUrl(video) || (source ? getRuntimeMediaUrl(source) || getMediaUrl(source) : "");
+  if (src) {
+    video.src = makeAbsoluteCc98Url(src);
+  }
+  video.querySelectorAll("source[src]").forEach((sourceNode) => {
+    const sourceSrc = getMediaUrl(sourceNode);
+    if (sourceSrc) {
+      sourceNode.src = makeAbsoluteCc98Url(sourceSrc);
+    }
+  });
+  video.classList.add("cc98-rebuild-content-video");
+  video.controls = true;
+  video.preload = video.getAttribute("preload") || "metadata";
+  video.playsInline = true;
+  video.tabIndex = 0;
   return video;
 }
 
@@ -2835,6 +8316,9 @@ function normalizeMediaKey(url) {
 }
 
 function isEmojiImageUrl(url) {
+  if (getLocalEmojiAssetUrlFromSrc(url)) {
+    return true;
+  }
   const filename = decodeURIComponent(String(url ?? "").split(/[/?#]/).filter(Boolean).pop() || "");
   return /^\d{1,6}\.png$/i.test(filename)
     || /^[a-z]{4,6}\.png$/i.test(filename)
@@ -2857,13 +8341,18 @@ function markRebuiltEmojiImage(image, src = image?.src) {
   if (!(image instanceof HTMLImageElement)) {
     return false;
   }
-  if (!isEmojiImageUrl(src)) {
+  const localSrc = getLocalEmojiAssetUrlFromSrc(src);
+  const effectiveSrc = localSrc || src;
+  if (localSrc && image.src !== localSrc) {
+    image.src = localSrc;
+  }
+  if (!isEmojiImageUrl(effectiveSrc)) {
     image.classList.add("cc98-rebuild-content-image");
     return false;
   }
   image.classList.add("cc98-rebuild-inline-emoji");
   image.classList.remove("cc98-rebuild-content-image");
-  if (isTransparentAcEmojiUrl(src)) {
+  if (!localSrc && isTransparentAcEmojiUrl(src)) {
     image.classList.add("cc98-rebuild-invertible-emoji");
   } else {
     image.classList.remove("cc98-rebuild-invertible-emoji");
@@ -2878,10 +8367,84 @@ function markInlineEmojiContainers(root) {
       if (!/^(DIV|SPAN|P)$/i.test(parent.tagName)) {
         break;
       }
+      if (parent.matches([
+        "[contenteditable='true']",
+        ".cc98-rebuild-dual-ubb-visual",
+        ".cc98-rebuild-profile-signature-wysiwyg",
+        ".cc98-rebuild-dual-ubb-visual-pane",
+        ".cc98-rebuild-profile-signature-preview-body"
+      ].join(","))) {
+        break;
+      }
+      if (parent.dataset.cc98UbbTag === "align"
+        || parent.classList.contains("cc98-rebuild-preview-align")) {
+        break;
+      }
       parent.classList.add("cc98-rebuild-inline-emoji-wrap");
       parent = parent.parentElement;
     }
   });
+}
+
+function stabilizeDualUbbLeadingEmojiLayout(root) {
+  if (!(root instanceof HTMLElement) || !root.matches(".cc98-rebuild-dual-ubb-visual")) {
+    return;
+  }
+  root.classList.remove("cc98-rebuild-inline-emoji-wrap");
+  const emojiImages = [...root.querySelectorAll("img.cc98-rebuild-inline-emoji")];
+  let hasOtherContent = false;
+  const inspect = (node) => {
+    [...node.childNodes].forEach((child) => {
+      if (hasOtherContent || child === emojiImages[0]) {
+        return;
+      }
+      if (child.nodeType === Node.TEXT_NODE) {
+        if (String(child.nodeValue || "").replace(/[\s\u200b\uFEFF]/g, "")) {
+          hasOtherContent = true;
+        }
+        return;
+      }
+      if (!(child instanceof HTMLElement) || child.tagName === "BR") {
+        return;
+      }
+      if (child.matches("img, audio, video, iframe, object, embed")) {
+        hasOtherContent = true;
+        return;
+      }
+      inspect(child);
+    });
+  };
+  inspect(root);
+  const isSingleLeadingEmoji = emojiImages.length === 1 && !hasOtherContent;
+  root.classList.toggle("cc98-rebuild-leading-emoji-only", isSingleLeadingEmoji);
+  const styleProperties = ["margin", "padding", "border", "box-sizing"];
+  if (isSingleLeadingEmoji) {
+    if (!root.__cc98LeadingEmojiInlineStyle) {
+      root.__cc98LeadingEmojiInlineStyle = Object.fromEntries(
+        styleProperties.map((property) => [
+          property,
+          [root.style.getPropertyValue(property), root.style.getPropertyPriority(property)]
+        ])
+      );
+    }
+    root.style.setProperty("margin", "5px", "important");
+    root.style.setProperty("padding", "24px 28px", "important");
+    root.style.setProperty("border", "1px solid transparent", "important");
+    root.style.setProperty("box-sizing", "border-box", "important");
+    return;
+  }
+  const previousStyle = root.__cc98LeadingEmojiInlineStyle;
+  if (previousStyle) {
+    styleProperties.forEach((property) => {
+      const [value, priority] = previousStyle[property] || ["", ""];
+      if (value) {
+        root.style.setProperty(property, value, priority);
+      } else {
+        root.style.removeProperty(property);
+      }
+    });
+    delete root.__cc98LeadingEmojiInlineStyle;
+  }
 }
 
 function isEmojiOnlyNode(node) {
@@ -3085,6 +8648,9 @@ function isSkippablePostElement(node) {
     '[role="button"]',
     '[class*="signature"]',
     '[class*="Signature"]',
+    ".awardInfo",
+    '[class*="awardInfo"]',
+    '[class*="AwardInfo"]',
     '[class*="score"]',
     '[class*="Score"]',
     '[class*="rate"]',
@@ -3125,9 +8691,169 @@ function isQuoteElement(node) {
     || (text.includes("以下是引用") && /background-color|border/i.test(style));
 }
 
+function isDeferredPostImageControl(node) {
+  return node instanceof HTMLElement
+    && node.classList.contains("hiddenImage")
+    && cleanupPostText(node.textContent) === "\u70b9\u51fb\u67e5\u770b\u56fe\u7247";
+}
+
+function getDeferredImageControls(root) {
+  if (!(root instanceof Element)) {
+    return [];
+  }
+  return [
+    ...(isDeferredPostImageControl(root) ? [root] : []),
+    ...root.querySelectorAll(".hiddenImage")
+  ].filter(isDeferredPostImageControl);
+}
+
+function getDeferredImageCandidates(scope) {
+  if (!(scope instanceof Element)) {
+    return [];
+  }
+  return [
+    ...(scope instanceof HTMLImageElement ? [scope] : []),
+    ...scope.querySelectorAll(".visibleImage img, img")
+  ].filter((image) => {
+    if (!(image instanceof HTMLImageElement)) {
+      return false;
+    }
+    const src = getMediaUrl(image) || image.currentSrc || image.src || "";
+    return Boolean(src) && !isDecorativeFrameImageUrl(src);
+  });
+}
+
+function createDeferredImageProxy(sourceControl, sourceRoot) {
+  const button = createElement("button", "cc98-rebuild-hidden-image-button", "\u70b9\u51fb\u67e5\u770b\u56fe\u7247");
+  button.type = "button";
+
+  button.addEventListener("click", () => {
+    if (button.dataset.status === "loading") {
+      return;
+    }
+
+    const directSrc = makeWebVpnCc98ResourceUrl(button.dataset.cc98DirectImageSrc || "");
+    if (directSrc) {
+      const replacement = createContentImageFromUrl(directSrc, "");
+      replacement.classList.add("cc98-rebuild-content-image");
+      button.replaceWith(replacement);
+      const app = replacement.closest("#cc98-comfort-app");
+      if (app instanceof HTMLElement) {
+        setupRebuiltImagePlaceholders(app);
+      }
+      return;
+    }
+
+    const sourceParent = sourceControl.parentElement;
+    const scopes = [...new Set([sourceParent, sourceRoot].filter((scope) => scope instanceof Element))];
+    const knownSources = new Set(scopes.flatMap(getDeferredImageCandidates)
+      .map((image) => normalizeMediaKey(getMediaUrl(image) || image.currentSrc || image.src || ""))
+      .filter(Boolean));
+    let settled = false;
+    let observer = null;
+    const timers = [];
+
+    const finish = (image = null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      observer?.disconnect();
+      timers.forEach((timer) => window.clearTimeout(timer));
+
+      if (!(image instanceof HTMLImageElement)) {
+        button.dataset.status = "idle";
+        button.disabled = false;
+        button.textContent = "\u91cd\u8bd5\u67e5\u770b\u56fe\u7247";
+        return;
+      }
+
+      const replacement = image.cloneNode(true);
+      const src = getMediaUrl(image) || image.currentSrc || image.src || "";
+      replacement.src = makeAbsoluteCc98Url(src);
+      replacement.removeAttribute("srcset");
+      replacement.removeAttribute("loading");
+      replacement.removeAttribute("decoding");
+      markRebuiltEmojiImage(replacement, replacement.src);
+      button.replaceWith(replacement);
+      const app = replacement.closest("#cc98-comfort-app");
+      if (app instanceof HTMLElement) {
+        setupRebuiltImagePlaceholders(app);
+      }
+    };
+
+    const findLoadedImage = () => {
+      const candidates = scopes.flatMap(getDeferredImageCandidates);
+      const freshImage = candidates.find((image) => {
+        const key = normalizeMediaKey(getMediaUrl(image) || image.currentSrc || image.src || "");
+        return key && !knownSources.has(key);
+      });
+      if (freshImage) {
+        return freshImage;
+      }
+      if (sourceControl.isConnected && isDeferredPostImageControl(sourceControl)) {
+        return null;
+      }
+      return getDeferredImageCandidates(sourceParent)
+        .find((image) => image.closest(".visibleImage")) || null;
+    };
+
+    const check = () => {
+      const loadedImage = findLoadedImage();
+      if (loadedImage) {
+        finish(loadedImage);
+        return true;
+      }
+      return false;
+    };
+
+    button.dataset.status = "loading";
+    button.disabled = true;
+    button.textContent = "\u6b63\u5728\u52a0\u8f7d\u56fe\u7247...";
+    triggerOriginalControl(sourceControl);
+
+    const observeScope = sourceParent || sourceRoot;
+    if (observeScope instanceof Element) {
+      observer = new MutationObserver(check);
+      observer.observe(observeScope, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["src", "data-src", "class"]
+      });
+    }
+    [40, 120, 280, 560, 1000, 1800, 3000].forEach((delay) => {
+      timers.push(window.setTimeout(check, delay));
+    });
+    timers.push(window.setTimeout(() => finish(), 4200));
+  });
+
+  return button;
+}
+
+function restoreDeferredImageControls(sourceRoot, clone) {
+  if (!(sourceRoot instanceof Element) || !(clone instanceof Element)) {
+    return;
+  }
+  const sourceControls = getDeferredImageControls(sourceRoot);
+  const clonedControls = getDeferredImageControls(clone);
+  clonedControls.forEach((placeholder, index) => {
+    const sourceControl = sourceControls[index];
+    if (!(sourceControl instanceof HTMLElement)) {
+      placeholder.remove();
+      return;
+    }
+    placeholder.replaceWith(createDeferredImageProxy(sourceControl, sourceRoot));
+  });
+}
+
 function normalizeRichContentNode(root, options = {}) {
   const clone = root.cloneNode(true);
-  clone.querySelectorAll("script, style, button, input, textarea, select, [role='button']").forEach((node) => node.remove());
+  clone.querySelectorAll("script, style, button, input, textarea, select, [role='button'], .awardInfo, [class*='awardInfo'], [class*='AwardInfo']").forEach((node) => {
+    if (!isDeferredPostImageControl(node)) {
+      node.remove();
+    }
+  });
   if (!options.keepSignatureChildren) {
     clone.querySelectorAll('[class*="signature"], [class*="Signature"]').forEach((node) => node.remove());
   }
@@ -3141,13 +8867,18 @@ function normalizeRichContentNode(root, options = {}) {
   });
   rewriteOriginalPostQuoteLinks(clone);
   clone.querySelectorAll("img").forEach((image) => {
-    const src = getMediaUrl(image);
+    const src = getNonDecorativeImageSrc(image);
+    if (!src) {
+      image.remove();
+      return;
+    }
     if (src) {
       image.src = makeAbsoluteCc98Url(src);
     }
     image.removeAttribute("srcset");
     markRebuiltEmojiImage(image, image.src);
   });
+  restoreDeferredImageControls(root, clone);
   markInlineEmojiContainers(clone);
   return clone;
 }
@@ -3161,35 +8892,152 @@ function renderQuoteBox(node) {
   return box;
 }
 
-function appendInlineUbbText(target, text) {
+function getCc98EmotionUrl(id) {
+  const code = String(id ?? "").padStart(2, "0");
+  const numericId = Number(code);
+  const extension = (numericId > 14 && numericId < 31) || numericId > 35 ? "png" : "gif";
+  return getExtensionAssetUrl(`images/CC98/CC98${code}.${extension}`);
+}
+
+function getMahjongEmotionUrl(prefix, id) {
+  const code = String(id ?? "").padStart(3, "0");
+  const numericId = Number(code);
+  if (prefix === "a") {
+    return getExtensionAssetUrl(`images/mahjong/animal2017/${code}.png`);
+  }
+  if (prefix === "c") {
+    const gifIds = new Set([18, 49, 96]);
+    return getExtensionAssetUrl(`images/mahjong/carton2017/${code}.${gifIds.has(numericId) ? "gif" : "png"}`);
+  }
+  const faceGifIds = new Set([4, 9, 56, 61, 62, 87, 115, 120, 137, 168, 169, 175, 206]);
+  return getExtensionAssetUrl(`images/mahjong/face2017/${code}.${faceGifIds.has(numericId) ? "gif" : "png"}`);
+}
+
+function getUbbEmotionImageUrl(tag) {
+  const value = String(tag ?? "").trim();
+  let match = value.match(/^cc98(\d{2})$/i);
+  if (match) {
+    return getCc98EmotionUrl(match[1]);
+  }
+  match = value.match(/^ac(\d{2}|\d{4})$/i);
+  if (match) {
+    return getExtensionAssetUrl(`${getLocalAcEmojiFolder()}/${match[1]}.png`);
+  }
+  match = value.match(/^([acf]):(\d{3})$/i);
+  if (match) {
+    return getMahjongEmotionUrl(match[1].toLowerCase(), match[2]);
+  }
+  match = value.match(/^tb(\d{2})$/i);
+  if (match) {
+    return getExtensionAssetUrl(`images/tb/tb${match[1]}.png`);
+  }
+  match = value.match(/^ms(\d{2})$/i);
+  if (match) {
+    return getExtensionAssetUrl(`images/ms/ms${match[1]}.png`);
+  }
+  match = value.match(/^em(\d{2})$/i);
+  if (match) {
+    return getExtensionAssetUrl(`images/em/em${match[1]}.gif`);
+  }
+  return "";
+}
+
+function createUbbEmotionPreviewNode(tag) {
+  const src = getUbbEmotionImageUrl(tag);
+  if (!src) {
+    return document.createTextNode(`[${tag}]`);
+  }
+  const wrap = createElement("span", "cc98-rebuild-inline-emoji-wrap");
+  wrap.dataset.cc98UbbEmotionTag = String(tag || "");
+  wrap.style.display = "inline";
+  const image = createContentImageFromUrl(src, "");
+  markRebuiltEmojiImage(image, src);
+  wrap.append(image);
+  return wrap;
+}
+
+function createUbbMediaPreviewNode(tag, url, title = "") {
+  const src = String(url ?? "").trim();
+  if (!src) {
+    return null;
+  }
+  const normalizedTag = String(tag ?? "").toLowerCase();
+  if (normalizedTag === "audio" || normalizedTag === "mp3") {
+    const audio = createAudioPlayerFromUrl(src, title);
+    audio.dataset.cc98UbbTag = normalizedTag;
+    audio.dataset.cc98UbbValue = src;
+    return audio;
+  }
+  if (normalizedTag === "video") {
+    const video = createContentVideoFromUrl(src);
+    video.dataset.cc98UbbTag = normalizedTag;
+    video.dataset.cc98UbbValue = src;
+    return video;
+  }
+  if (normalizedTag === "bili" || normalizedTag === "bilibili") {
+    const link = createLink("cc98-rebuild-ubb-media-link", `Bilibili 视频：${src}`, makeAbsoluteCc98Url(src));
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.dataset.cc98UbbTag = normalizedTag;
+    link.dataset.cc98UbbValue = src;
+    return link;
+  }
+  return null;
+}
+
+function appendInlineUbbText(target, text, options = {}) {
   const source = String(text ?? "");
-  const tokenPattern = /\[(\/?)(b|i|u|s|del|url|color|size|align)(?:=([^\]]+))?\]|\[img\]([\s\S]*?)\[\/img\]/ig;
+  const preserveLineBreaks = options?.preserveLineBreaks === true;
+  const tokenPattern = /\[(cc98\d{2}|ac(?:\d{2}|\d{4})|[acf]:\d{3}|tb\d{2}|ms\d{2}|em\d{2})\]|\[(\/?)(b|i|u|s|del|url|color|size|align|audio|mp3|video|bili|bilibili)(?:=([^\]]+))?\]|\[img\]([\s\S]*?)\[\/img\]/ig;
   const stack = [{ tag: "", node: target }];
   let lastIndex = 0;
 
   const appendText = (value) => {
-    if (value) {
-      stack.at(-1).node.append(document.createTextNode(value));
+    if (!value) {
+      return;
     }
+    const currentNode = stack.at(-1).node;
+    if (!preserveLineBreaks) {
+      currentNode.append(document.createTextNode(value));
+      return;
+    }
+    const lines = String(value).replace(/\r\n?/g, "\n").split("\n");
+    lines.forEach((line, index) => {
+      if (line) {
+        currentNode.append(document.createTextNode(line));
+      }
+      if (index < lines.length - 1) {
+        currentNode.append(document.createElement("br"));
+      }
+    });
   };
 
   const makeNode = (tag, value = "") => {
+    const markNode = (node) => {
+      if (node instanceof HTMLElement) {
+        node.dataset.cc98UbbTag = tag;
+        if (value) {
+          node.dataset.cc98UbbValue = value;
+        }
+      }
+      return node;
+    };
     if (tag === "b") {
-      return document.createElement("strong");
+      return markNode(document.createElement("strong"));
     }
     if (tag === "i") {
-      return document.createElement("em");
+      return markNode(document.createElement("em"));
     }
     if (tag === "u") {
       const node = document.createElement("span");
       node.style.setProperty("text-decoration", "underline", "important");
-      return node;
+      return markNode(node);
     }
     if (tag === "s") {
-      return document.createElement("s");
+      return markNode(document.createElement("s"));
     }
     if (tag === "del") {
-      return document.createElement("del");
+      return markNode(document.createElement("del"));
     }
     if (tag === "url") {
       const node = document.createElement("a");
@@ -3199,7 +9047,7 @@ function appendInlineUbbText(target, text) {
         node.target = "_blank";
         node.rel = "noreferrer";
       }
-      return node;
+      return markNode(node);
     }
     if (tag === "color") {
       const node = document.createElement("span");
@@ -3217,16 +9065,26 @@ function appendInlineUbbText(target, text) {
       node.style.setProperty("display", "block", "important");
       node.style.setProperty("text-align", value.toLowerCase(), "important");
     }
-    return node;
+    if (/^(?:audio|mp3|video|bili|bilibili)$/i.test(tag)) {
+      node.dataset.cc98UbbMediaTag = tag.toLowerCase();
+      node.dataset.cc98UbbMediaTitle = value || "";
+    }
+    return markNode(node);
   };
 
-  source.replace(tokenPattern, (match, closing, tag, value, imageUrl, offset) => {
+  source.replace(tokenPattern, (match, emotionTag, closing, tag, value, imageUrl, offset) => {
     appendText(source.slice(lastIndex, offset));
     lastIndex = offset + match.length;
+    if (emotionTag) {
+      stack.at(-1).node.append(createUbbEmotionPreviewNode(emotionTag));
+      return match;
+    }
     if (imageUrl) {
       const src = imageUrl.trim();
       if (src) {
         const image = createContentImageFromUrl(makeAbsoluteCc98Url(src), "");
+        image.dataset.cc98UbbTag = "img";
+        image.dataset.cc98UbbValue = src;
         markRebuiltEmojiImage(image, src);
         stack.at(-1).node.append(image);
       }
@@ -3247,6 +9105,16 @@ function appendInlineUbbText(target, text) {
             }
           }
           delete closedNode.dataset.cc98UbbExplicitUrl;
+        }
+        if (closedNode instanceof HTMLElement && /^(?:audio|mp3|video|bili|bilibili)$/i.test(normalizedTag)) {
+          const media = createUbbMediaPreviewNode(
+            closedNode.dataset.cc98UbbMediaTag || normalizedTag,
+            closedNode.textContent || "",
+            closedNode.dataset.cc98UbbMediaTitle || ""
+          );
+          if (media) {
+            closedNode.replaceWith(media);
+          }
         }
         stack.length = index;
       }
@@ -3316,6 +9184,139 @@ function strengthenInlineTextStyles(root) {
   });
 }
 
+function markInlineUbbStyleClasses(root) {
+  if (!root) {
+    return;
+  }
+  const nodes = [
+    ...(root instanceof HTMLElement ? [root] : []),
+    ...(root.querySelectorAll?.("*") ?? [])
+  ].filter((node) => node instanceof HTMLElement);
+  nodes.forEach((node) => {
+    const styleText = node.getAttribute("style") || "";
+    const tagName = node.tagName.toLowerCase();
+    const color = getExplicitTextColor(node);
+    if (color) {
+      node.classList.add("cc98-rebuild-preview-colored");
+      node.style.setProperty("--cc98-preview-color", color);
+      node.querySelectorAll("*").forEach((child) => {
+        if (!(child instanceof HTMLElement) || getExplicitTextColor(child)) {
+          return;
+        }
+        child.classList.add("cc98-rebuild-preview-colored");
+        child.style.setProperty("--cc98-preview-color", color);
+      });
+    }
+    const textDecoration = `${node.style.textDecoration} ${node.style.textDecorationLine} ${styleText}`;
+    if (tagName === "u" || /underline/i.test(textDecoration)) {
+      node.classList.add("cc98-rebuild-preview-underline");
+    }
+    if (tagName === "s" || tagName === "del" || tagName === "strike" || /line-through|text-decoration\s*:\s*.*(?:del|through)/i.test(textDecoration)) {
+      node.classList.add("cc98-rebuild-preview-strike");
+    }
+    if (tagName === "b" || tagName === "strong" || /font-weight\s*:\s*(?:bold|[6-9]00)/i.test(styleText)) {
+      node.classList.add("cc98-rebuild-preview-bold");
+    }
+    if (tagName === "i" || tagName === "em" || /font-style\s*:\s*italic/i.test(styleText)) {
+      node.classList.add("cc98-rebuild-preview-italic");
+    }
+    const textAlign = node.style.textAlign || styleText.match(/text-align\s*:\s*([^;]+)/i)?.[1]?.trim() || "";
+    if (/^(left|center|right)$/i.test(textAlign)) {
+      node.classList.add("cc98-rebuild-preview-align");
+      node.style.setProperty("--cc98-preview-align", textAlign.toLowerCase());
+    }
+    const fontSize = node.style.fontSize || node.getAttribute("size") || "";
+    if (fontSize) {
+      node.classList.add("cc98-rebuild-preview-size");
+      node.style.setProperty("--cc98-preview-size", fontSize);
+    }
+  });
+  synchronizeInlineUbbDecorationColors(root);
+}
+
+/**
+ * CSS text decorations are painted by the element that owns the decoration,
+ * not by the innermost coloured span.  Consequently a structure such as
+ *
+ *   <del><u><span style="color: ...">text</span></u></del>
+ *
+ * can show coloured text with a decoration in the surrounding theme colour.
+ * Resolve the effective colour of the text nodes inside each decoration and
+ * expose it on that decoration as a custom property.  This keeps the UBB DOM
+ * and its serialization unchanged while also handling native HTML produced by
+ * the forum.
+ */
+function synchronizeInlineUbbDecorationColors(root) {
+  if (!(root instanceof HTMLElement)) {
+    return;
+  }
+
+  const nodes = [root, ...(root.querySelectorAll?.("*") ?? [])]
+    .filter((node) => node instanceof HTMLElement);
+  const decorationNodes = nodes.filter((node) => (
+    node.classList.contains("cc98-rebuild-preview-underline")
+    || node.classList.contains("cc98-rebuild-preview-strike")
+  ));
+
+  decorationNodes.forEach((node) => {
+    node.style.removeProperty("--cc98-preview-decoration-color");
+    node.style.removeProperty("text-decoration-color");
+  });
+
+  const decorationSet = new Set(decorationNodes);
+  const colorsByDecoration = new Map(
+    decorationNodes.map((node) => [node, new Map()])
+  );
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode;
+    if (textNode?.nodeType !== Node.TEXT_NODE || !String(textNode.nodeValue || "").trim()) {
+      continue;
+    }
+    let current = textNode.parentElement;
+    let effectiveColor = "";
+    const ancestors = [];
+    while (current) {
+      if (decorationSet.has(current)) {
+        ancestors.push(current);
+      }
+      if (!effectiveColor) {
+        effectiveColor = getExplicitTextColor(current)
+          || current.style.getPropertyValue("--cc98-preview-color").trim();
+      }
+      if (current === root) {
+        break;
+      }
+      current = current.parentElement;
+    }
+    if (!effectiveColor) {
+      continue;
+    }
+    const normalizedColor = effectiveColor.trim().toLowerCase();
+    ancestors.forEach((decorationNode) => {
+      const colors = colorsByDecoration.get(decorationNode);
+      if (colors && !colors.has(normalizedColor)) {
+        colors.set(normalizedColor, effectiveColor.trim());
+      }
+    });
+  }
+
+  colorsByDecoration.forEach((colors, decorationNode) => {
+    if (colors.size === 1) {
+      const color = colors.values().next().value;
+      decorationNode.style.setProperty(
+        "--cc98-preview-decoration-color",
+        color
+      );
+      // The UBB underline node itself may carry an inline
+      // `text-decoration: ... !important`; set the longhand in the same
+      // inline style block so that the browser cannot fall back to the
+      // decoration element's theme colour.
+      decorationNode.style.setProperty("text-decoration-color", color, "important");
+    }
+  });
+}
+
 function buildReadablePostContent(contentNode) {
   const output = document.createElement("article");
   let paragraph = null;
@@ -3353,6 +9354,9 @@ function buildReadablePostContent(contentNode) {
     if (!src) {
       return;
     }
+    if (isDecorativeFrameImageUrl(src)) {
+      return;
+    }
     const image = createContentImageFromUrl(src, alt);
     if (isEmojiImageUrl(src)) {
       markRebuiltEmojiImage(image, src);
@@ -3374,12 +9378,13 @@ function buildReadablePostContent(contentNode) {
 
   const appendAudioPlayer = (node) => {
     const src = getAPlayerAudioUrl(node);
-    if (!src) {
+    const title = getAPlayerTitle(node, src);
+    const hasPlayableSource = Boolean(src || getAPlayerPlayTrigger(node));
+    if (!hasPlayableSource) {
       return false;
     }
-    const title = cleanupPostText(node.querySelector?.(".aplayer-title, .aplayer-list-title")?.textContent);
     flushParagraph();
-    output.append(createAudioPlayerFromUrl(src, title));
+    output.append(createAudioPlayerFromUrl(src, title, node));
     return true;
   };
 
@@ -3454,10 +9459,111 @@ function buildReadablePostContent(contentNode) {
   return output;
 }
 
+function decodeCapturedMediaText(value) {
+  const text = String(value ?? "").trim();
+  if (!text || !text.includes("&")) {
+    return text;
+  }
+  const parser = new DOMParser();
+  return parser.parseFromString(`<body>${text}</body>`, "text/html").body.textContent?.trim() || text;
+}
+
+function normalizeCapturedMediaUrl(value) {
+  const decoded = decodeCapturedMediaText(value)
+    .replace(/^<|>$/g, "")
+    .replace(/^["']|["']$/g, "")
+    .trim();
+  if (!decoded || /^(?:data|blob|javascript):/i.test(decoded)) {
+    return "";
+  }
+  return makeWebVpnCc98ResourceUrl(decoded);
+}
+
+function extractCapturedPostMediaSources(rawContent) {
+  const raw = String(rawContent ?? "");
+  if (!raw) {
+    return [];
+  }
+  const sources = [];
+  const seen = new Set();
+  const append = (value, kind, alt = "") => {
+    const src = normalizeCapturedMediaUrl(value);
+    const key = normalizeMediaKey(src);
+    if (!src || !key || seen.has(key)) {
+      return;
+    }
+    if (kind === "image" && isDecorativeFrameImageUrl(src)) {
+      return;
+    }
+    seen.add(key);
+    sources.push({ src, alt: cleanupPostText(alt), kind, captured: true });
+  };
+  let ubbMatch;
+  const ubbMediaPattern = /\[(img|video)(?:=[^\]]*)?(?:\s+[^\]]*)?\]([\s\S]*?)\[\/\1\]/gi;
+  while ((ubbMatch = ubbMediaPattern.exec(raw))) {
+    append(ubbMatch[2], ubbMatch[1].toLowerCase() === "video" ? "video" : "image");
+  }
+
+  let markdownMatch;
+  const markdownImagePattern = /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+["'][^)]*["'])?\s*\)/g;
+  while ((markdownMatch = markdownImagePattern.exec(raw))) {
+    append(markdownMatch[2], "image", markdownMatch[1]);
+  }
+
+  if (/<(?:img|video|source)\b/i.test(raw)) {
+    const template = document.createElement("template");
+    template.innerHTML = raw;
+    template.content.querySelectorAll("img[src], video[src], video source[src]").forEach((node) => {
+      append(node.getAttribute("src"), node.closest("video") ? "video" : "image", node.getAttribute("alt") || "");
+    });
+  }
+  return sources;
+}
+
+function hydrateCapturedLazyMediaSlots(clone, mediaSources) {
+  if (!(clone instanceof Element) || !mediaSources?.length) {
+    return;
+  }
+  const present = new Set([...clone.querySelectorAll("img, video, source")]
+    .map((node) => normalizeMediaKey(getMediaUrl(node) || node.currentSrc || node.src || ""))
+    .filter(Boolean));
+  const missing = mediaSources.filter((item) => {
+    const key = normalizeMediaKey(item.src);
+    return key && !present.has(key);
+  });
+  if (!missing.length) {
+    return;
+  }
+
+  const slots = [...clone.querySelectorAll(".lazyload-placeholder, .cc98-rebuild-hidden-image-button")];
+  let sourceIndex = 0;
+  slots.forEach((slot) => {
+    const item = missing[sourceIndex];
+    if (!item) {
+      return;
+    }
+    if (slot.classList.contains("cc98-rebuild-hidden-image-button") && item.kind === "image") {
+      slot.dataset.cc98DirectImageSrc = item.src;
+      present.add(normalizeMediaKey(item.src));
+      sourceIndex += 1;
+      return;
+    }
+    const media = item.kind === "video"
+      ? createContentVideoFromUrl(item.src)
+      : createContentImageFromUrl(item.src, item.alt);
+    if (media instanceof HTMLImageElement) {
+      media.classList.add("cc98-rebuild-content-image");
+    }
+    slot.replaceWith(media);
+    present.add(normalizeMediaKey(item.src));
+    sourceIndex += 1;
+  });
+}
+
 function collectPostMediaSources(root) {
   const sources = [];
   const seen = new Set();
-  root.querySelectorAll("img, a[href], [style*='url('], [data-src], [data-original], [data-url], [data-img], [data-image], [data-full], [data-full-src], [data-file], [data-href]").forEach((node) => {
+  root.querySelectorAll("img, video, source, a[href], [style*='url('], [data-src], [data-original], [data-url], [data-img], [data-image], [data-full], [data-full-src], [data-file], [data-href]").forEach((node) => {
     if (!(node instanceof Element) || node.closest('[class*="signature"], [class*="Signature"]')) {
       return;
     }
@@ -3465,7 +9571,15 @@ function collectPostMediaSources(root) {
       return;
     }
     const src = getMediaUrl(node);
-    if (!src || isEmojiImageUrl(src) || isDownloadFileUrl(src) || (!isProbablyPostImageUrl(src) && !isImageCarrierNode(node))) {
+    const isVideoSource = node.tagName === "VIDEO"
+      || (node.tagName === "SOURCE" && Boolean(node.closest("video")))
+      || isProbablyPostVideoUrl(src)
+      || isVideoCarrierNode(node);
+    if (!src
+      || isDecorativeFrameImageUrl(src)
+      || isEmojiImageUrl(src)
+      || isDownloadFileUrl(src)
+      || (!isProbablyPostImageUrl(src) && !isImageCarrierNode(node) && !isVideoSource)) {
       return;
     }
     const key = normalizeMediaKey(src);
@@ -3473,28 +9587,74 @@ function collectPostMediaSources(root) {
       return;
     }
     seen.add(key);
-    sources.push({ src, alt: cleanupPostText(node.textContent) });
+    sources.push({ src, alt: cleanupPostText(node.textContent), kind: isVideoSource ? "video" : "image" });
   });
   return sources;
 }
 
-function materializeAudioPlayers(clone) {
-  clone.querySelectorAll(".aplayer").forEach((player) => {
-    const src = getAPlayerAudioUrl(player);
+function getAPlayerElements(root) {
+  if (!(root instanceof Element)) {
+    return [];
+  }
+  return [
+    ...(root.matches(".aplayer") ? [root] : []),
+    ...root.querySelectorAll(".aplayer")
+  ];
+}
+
+function materializeAudioPlayers(clone, sourceRoot = null) {
+  const sourcePlayers = getAPlayerElements(sourceRoot);
+  getAPlayerElements(clone).forEach((player, index) => {
+    const sourcePlayer = sourcePlayers[index] || null;
+    const src = getAPlayerAudioUrl(player) || getAPlayerAudioUrl(sourcePlayer);
+    const title = getAPlayerTitle(player, src) || getAPlayerTitle(sourcePlayer, src);
+    if (!src && !sourcePlayer) {
+      return;
+    }
+    player.replaceWith(createAudioPlayerFromUrl(src, title, sourcePlayer));
+  });
+  clone.querySelectorAll("audio").forEach((audio) => {
+    if (!(audio instanceof HTMLAudioElement) || audio.closest(".cc98-rebuild-audio-player")) {
+      return;
+    }
+    const source = audio.querySelector("source[src]");
+    const src = getRuntimeMediaUrl(audio)
+      || getMediaUrl(audio)
+      || (source ? getRuntimeMediaUrl(source) || getMediaUrl(source) : "");
     if (!src) {
       return;
     }
-    const title = cleanupPostText(player.querySelector(".aplayer-title, .aplayer-list-title")?.textContent);
-    player.replaceWith(createAudioPlayerFromUrl(src, title));
+    audio.replaceWith(createAudioPlayerFromUrl(src, audio.getAttribute("title") || ""));
   });
 }
 
 function materializePostMedia(clone) {
+  replaceNativeVideoPlayers(clone);
+  removeLegacyVideoPlayerChrome(clone);
+
+  clone.querySelectorAll("video").forEach((video) => {
+    normalizeContentVideoElement(video);
+  });
+
+  clone.querySelectorAll("source[src]").forEach((source) => {
+    if (!(source instanceof HTMLSourceElement) || source.closest("video, audio")) {
+      return;
+    }
+    const src = getMediaUrl(source);
+    if (isProbablyPostVideoUrl(src)) {
+      source.replaceWith(createContentVideoFromUrl(src));
+    }
+  });
+
   clone.querySelectorAll("img").forEach((image) => {
     if (isAPlayerElement(image)) {
       return;
     }
     const src = getMediaUrl(image);
+    if (isDecorativeFrameImageUrl(src)) {
+      image.remove();
+      return;
+    }
     if (src) {
       image.src = src;
     }
@@ -3506,6 +9666,14 @@ function materializePostMedia(clone) {
       return;
     }
     const href = link.href || link.getAttribute("href") || "";
+    if (isDecorativeFrameImageUrl(href)) {
+      link.remove();
+      return;
+    }
+    if (isProbablyPostVideoUrl(href) && !link.querySelector("video")) {
+      link.replaceWith(createContentVideoFromUrl(href));
+      return;
+    }
     if ((!isProbablyPostImageUrl(href) && !isImageCarrierNode(link)) || link.querySelector("img")) {
       return;
     }
@@ -3521,12 +9689,19 @@ function materializePostMedia(clone) {
     if (isAPlayerElement(node)) {
       return;
     }
+    if (node.matches("iframe, embed, object") || /bilibili|bili/i.test(`${node.className || ""} ${node.id || ""} ${getOwnMediaUrl(node)}`)) {
+      return;
+    }
     if (node.querySelector("img")) {
       return;
     }
     const src = getOwnMediaUrl(node);
     const hasBackgroundImage = /url\(/i.test(node.getAttribute("style") || "");
-    if (!src || (!isProbablyPostImageUrl(src) && !isImageCarrierNode(node) && !hasBackgroundImage)) {
+    if (src && (isProbablyPostVideoUrl(src) || isVideoCarrierNode(node)) && !node.querySelector("video")) {
+      node.replaceChildren(createContentVideoFromUrl(src));
+      return;
+    }
+    if (!src || isDecorativeFrameImageUrl(src) || (!isProbablyPostImageUrl(src) && !isImageCarrierNode(node) && !hasBackgroundImage)) {
       return;
     }
     const image = createContentImageFromUrl(src, cleanupPostText(node.textContent));
@@ -3536,6 +9711,8 @@ function materializePostMedia(clone) {
     }
     node.replaceChildren(image);
   });
+
+  removeLegacyVideoPlayerChrome(clone);
 }
 
 function classifyPostImages(clone) {
@@ -3545,13 +9722,19 @@ function classifyPostImages(clone) {
       return;
     }
     const src = getMediaUrl(image);
+    if (isDecorativeFrameImageUrl(src)) {
+      image.remove();
+      return;
+    }
     if (isDownloadFileUrl(src)) {
       removeDownloadImageFrame(image);
       return;
     }
     if (src) {
-      image.src = src;
+      image.src = makeWebVpnCc98ResourceUrl(src);
     }
+    image.loading = "lazy";
+    image.decoding = "async";
     markRebuiltEmojiImage(image, src);
   });
   markInlineEmojiContainers(clone);
@@ -3562,12 +9745,23 @@ function ensurePostMediaCoverage(clone, originalSources) {
     return;
   }
 
-  const present = new Set([...clone.querySelectorAll("img")]
-    .map((image) => normalizeMediaKey(getMediaUrl(image) || image.src))
+  const present = new Set([...clone.querySelectorAll("img, video, source, .cc98-rebuild-hidden-image-button[data-cc98-direct-image-src]")]
+    .map((node) => normalizeMediaKey(
+      node.dataset?.cc98DirectImageSrc || getMediaUrl(node) || node.src
+    ))
     .filter(Boolean));
   const missing = originalSources.filter((item) => !present.has(normalizeMediaKey(item.src)));
-  const imageMissing = missing.filter((item) => !isDownloadFileUrl(item.src) && isProbablyPostImageUrl(item.src));
-  if (!imageMissing.length) {
+  const imageMissing = missing.filter((item) => (
+    !isDecorativeFrameImageUrl(item.src)
+    && !isDownloadFileUrl(item.src)
+    && (item.kind === "image" || isProbablyPostImageUrl(item.src))
+  ));
+  const videoMissing = missing.filter((item) => (
+    !isDecorativeFrameImageUrl(item.src)
+    && !isDownloadFileUrl(item.src)
+    && (item.kind === "video" || isProbablyPostVideoUrl(item.src))
+  ));
+  if (!imageMissing.length && !videoMissing.length) {
     return;
   }
 
@@ -3576,6 +9770,9 @@ function ensurePostMediaCoverage(clone, originalSources) {
     const image = createContentImageFromUrl(item.src, item.alt);
     image.classList.add("cc98-rebuild-content-image");
     wrap.append(image);
+  });
+  videoMissing.forEach((item) => {
+    wrap.append(createContentVideoFromUrl(item.src));
   });
   clone.append(wrap);
 }
@@ -3612,6 +9809,9 @@ function removePostChromeNodes(clone) {
     '[role="button"]',
     '[class*="signature"]',
     '[class*="Signature"]',
+    ".awardInfo",
+    '[class*="awardInfo"]',
+    '[class*="AwardInfo"]',
     '[class*="score"]',
     '[class*="Score"]',
     '[class*="rate"]',
@@ -3626,7 +9826,11 @@ function removePostChromeNodes(clone) {
     '[class*="Operation"]',
     '[class*="toolbar"]',
     '[class*="Toolbar"]'
-  ].join(",")).forEach((node) => node.remove());
+  ].join(",")).forEach((node) => {
+    if (!isDeferredPostImageControl(node)) {
+      node.remove();
+    }
+  });
 }
 
 function normalizePostContentClone(clone) {
@@ -3710,6 +9914,34 @@ function forceLegacyQuoteStyle(node) {
   node.style.setProperty("color", "var(--cc98-comfort-text, rgb(229, 236, 242))", "important");
 }
 
+function isMarkdownPostNode(node) {
+  return node instanceof Element
+    && (node.classList.contains("cc98-rebuild-markdown-post")
+      || Boolean(node.closest(".cc98-rebuild-markdown-post")));
+}
+
+function markMarkdownPostContent(node) {
+  if (!(node instanceof HTMLElement)) {
+    return;
+  }
+  node.classList.add("cc98-rebuild-markdown-post");
+  node.dataset.cc98ContentMode = "markdown";
+}
+
+function stripMarkdownInlineBackgrounds(root) {
+  if (!(root instanceof HTMLElement)) {
+    return;
+  }
+  [root, ...(root.querySelectorAll?.("[style]") ?? [])].forEach((node) => {
+    if (!(node instanceof HTMLElement) || node.matches("pre, code") || node.closest("pre, code")) {
+      return;
+    }
+    node.style.setProperty("background", "transparent", "important");
+    node.style.setProperty("background-color", "transparent", "important");
+    node.style.setProperty("background-image", "none", "important");
+  });
+}
+
 function isForcedLegacyQuoteNode(node) {
   if (!(node instanceof HTMLElement) || !node.classList.contains("cc98-rebuild-legacy-quote")) {
     return false;
@@ -3723,6 +9955,9 @@ function forceLegacyQuotesInRebuiltRoot(root = document) {
   const candidates = new Set();
   const addCandidates = (scope) => {
     if (!(scope instanceof Element)) {
+      return;
+    }
+    if (isMarkdownPostNode(scope)) {
       return;
     }
     if (scope.matches(".cc98-rebuild-post-body") || Boolean(scope.closest(".cc98-rebuild-post-body"))) {
@@ -3749,7 +9984,7 @@ function forceLegacyQuotesInRebuiltRoot(root = document) {
 
   let changed = 0;
   candidates.forEach((node) => {
-    if (!(node instanceof HTMLElement) || isForcedLegacyQuoteNode(node)) {
+    if (!(node instanceof HTMLElement) || isForcedLegacyQuoteNode(node) || isMarkdownPostNode(node)) {
       return;
     }
     const style = node.getAttribute("style") || "";
@@ -3789,7 +10024,7 @@ function rewriteLegacyQuoteInlineStyles(root) {
     ...(root.querySelectorAll?.("[style]") ?? [])
   ];
   styledNodes.forEach((node) => {
-    if (!(node instanceof HTMLElement)) {
+    if (!(node instanceof HTMLElement) || isMarkdownPostNode(node)) {
       return;
     }
     const style = node.getAttribute("style") || "";
@@ -3809,7 +10044,7 @@ function rewriteLegacyQuoteInlineStyles(root) {
 
 function stabilizePostQuoteBlocks(root) {
   root.querySelectorAll?.("div").forEach((node) => {
-    if (!(node instanceof HTMLElement)) {
+    if (!(node instanceof HTMLElement) || isMarkdownPostNode(node)) {
       return;
     }
     const style = node.getAttribute("style") || "";
@@ -3831,21 +10066,41 @@ function stabilizePostQuoteBlocks(root) {
 }
 
 function isMeaningfulPostContent(root) {
-  return Boolean(root?.querySelector?.("img, video, source, iframe, a[href], blockquote, pre, code"))
+  return Boolean(root?.querySelector?.("img, video, audio, source, iframe, .aplayer, .cc98-rebuild-audio-player, .cc98-rebuild-content-video, a[href], blockquote, pre, code"))
     || cleanupPostText(root?.textContent).length > 0;
 }
 
-function sanitizeClonedPostContent(contentNode) {
+function hasRenderedPostContent(root) {
+  if (!(root instanceof Element)) {
+    return false;
+  }
+  return cleanupPostText(root.innerText || root.textContent).length > 0
+    || Boolean(root.querySelector("img, video, audio, source, iframe, .aplayer, .cc98-rebuild-audio-player, .cc98-rebuild-content-video, .cc98-rebuild-restored-media, a[href], blockquote, pre, code"));
+}
+
+function sanitizeClonedPostContent(contentNode, options = {}) {
   const clone = contentNode.cloneNode(true);
+  repairWebVpnExternalProxyLinks(clone);
+  if (options.markdown) {
+    markMarkdownPostContent(clone);
+    stripMarkdownInlineBackgrounds(clone);
+  }
+  removeDecorativeFrameImages(clone);
   removePostChromeNodes(clone);
+  restoreDeferredImageControls(contentNode, clone);
+  hydrateCapturedLazyMediaSlots(clone, options.mediaSources || []);
   rewriteLegacyQuoteInlineStyles(clone);
-  materializeAudioPlayers(clone);
+  materializeAudioPlayers(clone, contentNode);
   materializePostMedia(clone);
   normalizePostContentClone(clone);
+  parseInlineUbbTextNodes(clone);
+  materializeAudioPlayers(clone, contentNode);
+  materializePostMedia(clone);
   rewriteLegacyQuoteInlineStyles(clone);
   classifyPostImages(clone);
   stabilizePostQuoteBlocks(clone);
   stabilizeEmojiRendering(clone);
+  repairWebVpnExternalProxyLinks(clone);
   return isMeaningfulPostContent(clone) ? clone : null;
 }
 
@@ -3859,34 +10114,72 @@ function getMarkdownPreviewContentNode(root) {
   return root.querySelector(".markdown-container .mde-preview-content, .mde-preview .mde-preview-content, .mde-preview-content, .markdown-body, .markdown-preview");
 }
 
-function sanitizePostContent(contentNode) {
+function sanitizePostContent(contentNode, supplementalMediaSources = []) {
+  removeDecorativeFrameImages(contentNode);
   const originalMediaSources = collectPostMediaSources(contentNode);
+  const mediaSources = [];
+  const mediaKeys = new Set();
+  [...supplementalMediaSources, ...originalMediaSources].forEach((item) => {
+    const key = normalizeMediaKey(item?.src);
+    if (!key || mediaKeys.has(key)) {
+      return;
+    }
+    mediaKeys.add(key);
+    mediaSources.push(item);
+  });
   const markdownPreview = getMarkdownPreviewContentNode(contentNode);
 
   if (markdownPreview) {
-    const markdownClone = sanitizeClonedPostContent(markdownPreview);
+    const markdownClone = sanitizeClonedPostContent(markdownPreview, {
+      markdown: true,
+      mediaSources: supplementalMediaSources
+    });
     if (markdownClone) {
-      ensurePostMediaCoverage(markdownClone, originalMediaSources);
+      markMarkdownPostContent(markdownClone);
+      stripMarkdownInlineBackgrounds(markdownClone);
+      ensurePostMediaCoverage(markdownClone, mediaSources);
       stabilizeEmojiRendering(markdownClone);
       return markdownClone;
     }
   }
 
-  const clone = sanitizeClonedPostContent(contentNode);
+  const clone = sanitizeClonedPostContent(contentNode, {
+    mediaSources: supplementalMediaSources
+  });
   if (clone) {
-    ensurePostMediaCoverage(clone, originalMediaSources);
+    ensurePostMediaCoverage(clone, mediaSources);
     stabilizeEmojiRendering(clone);
     return clone;
   }
 
   const readable = buildReadablePostContent(contentNode);
-  ensurePostMediaCoverage(readable, originalMediaSources);
+  hydrateCapturedLazyMediaSlots(readable, supplementalMediaSources);
+  ensurePostMediaCoverage(readable, mediaSources);
   stabilizeEmojiRendering(readable);
   return readable;
 }
 
+function getTopicPageNumberFromHref(href, topicId) {
+  if (!href || !topicId) {
+    return null;
+  }
+  try {
+    const routePath = getCc98RoutePathFromHref(href) || href;
+    const url = new URL(routePath, "https://www.cc98.org");
+    const match = url.pathname.match(new RegExp(`^/topic/${topicId}(?:/(\\d+))?/?$`, "i"));
+    if (!match) {
+      return null;
+    }
+    return Math.max(1, Number(match[1] || 1));
+  } catch {
+    const match = String(href).match(new RegExp(`/topic/${topicId}(?:/(\\d+))?/?(?:[?#]|$)`, "i"));
+    return match ? Math.max(1, Number(match[1] || 1)) : null;
+  }
+}
+
 function getTopicPageInfo() {
-  const match = location.pathname.match(/\/topic\/(\d+)(?:\/(\d+))?/i);
+  const currentRoute = getCc98RoutePathFromHref(location.href) || `${location.pathname}${location.search}`;
+  const match = currentRoute.match(/\/topic\/(\d+)(?:\/(\d+))?/i);
   if (!match) {
     return null;
   }
@@ -3896,11 +10189,10 @@ function getTopicPageInfo() {
   const pages = new Map([[1, buildTopicPageHref(topicId, 1)]]);
   document.querySelectorAll(`a[href*="/topic/${topicId}"]`).forEach((link) => {
     const href = link.href || link.getAttribute("href") || "";
-    const pageMatch = href.match(new RegExp(`/topic/${topicId}(?:/(\\d+))?`, "i"));
-    if (!pageMatch) {
+    const page = getTopicPageNumberFromHref(href, topicId);
+    if (!page) {
       return;
     }
-    const page = Math.max(1, Number(pageMatch[1] || 1));
     pages.set(page, stripUrlHash(href));
   });
 
@@ -3921,7 +10213,7 @@ function getTopicPageInfo() {
 function buildTopicPageHref(topicId, page) {
   const normalizedPage = Math.max(1, Number(page) || 1);
   const suffix = normalizedPage === 1 ? "" : `/${normalizedPage}`;
-  return `${location.origin}/topic/${topicId}${suffix}`;
+  return buildCc98RouteHref(`/topic/${topicId}${suffix}`);
 }
 
 function getBoardPageHref(page) {
@@ -3931,7 +10223,7 @@ function getBoardPageHref(page) {
   }
   const normalizedPage = Math.max(1, Number(page) || 1);
   const suffix = normalizedPage === 1 ? "" : `/${normalizedPage}`;
-  return `${location.origin}/board/${match[1]}${suffix}`;
+  return buildCc98RouteHref(`/board/${match[1]}${suffix}`);
 }
 
 function findPostContentNode(post) {
@@ -3949,6 +10241,18 @@ function findPostContentNode(post) {
     || post.querySelector(".markdown-container .mde-preview-content, .mde-preview .mde-preview-content, .mde-preview-content")
     || [...post.querySelectorAll("article")].find((article) => !article.closest(".signature"))
     || null;
+}
+
+function findPostVoteContentNode(post) {
+  if (!(post instanceof Element)) {
+    return null;
+  }
+  const replyContent = post.querySelector(".reply-content");
+  const voteContent = replyContent?.querySelector(":scope > .vote-content")
+    || post.querySelector(".vote-content");
+  return voteContent instanceof HTMLElement && !voteContent.closest("#cc98-comfort-app")
+    ? voteContent
+    : null;
 }
 
 function getPostFloorNumber(post, index) {
@@ -4052,9 +10356,18 @@ function isLightDefaultAvatarUrl(src) {
 }
 
 function getPostAvatar(post, userHref = "") {
-  const avatar = post.querySelector(".userPortrait, img[class*='portrait'], img[class*='avatar']");
-  if (avatar?.src) {
-    return avatar.src;
+  const findImageSrc = (selector) => {
+    for (const image of post.querySelectorAll(selector)) {
+      const src = getNonDecorativeImageSrc(image);
+      if (src) {
+        return src;
+      }
+    }
+    return "";
+  };
+  const avatar = findImageSrc(".userPortrait, img[class*='portrait'], img[class*='avatar']");
+  if (avatar) {
+    return avatar;
   }
   let userPath = "";
   try {
@@ -4062,11 +10375,28 @@ function getPostAvatar(post, userHref = "") {
   } catch {
     userPath = "";
   }
-  const linkedAvatar = userPath ? post.querySelector(`a[href*="${userPath}"] img`) : null;
-  if (linkedAvatar?.src) {
-    return linkedAvatar.src;
+  const linkedAvatar = userPath ? findImageSrc(`a[href*="${userPath}"] img`) : "";
+  if (linkedAvatar) {
+    return linkedAvatar;
   }
-  return post.querySelector("img")?.src ?? "";
+  return findImageSrc("img");
+}
+
+function getPostAuthorCardInfo(post) {
+  const userMessage = post?.querySelector?.(".userMessage");
+  if (!(userMessage instanceof HTMLElement)) {
+    return null;
+  }
+  const stats = [...userMessage.querySelectorAll(".userMessageOpt")]
+    .map((node) => cleanupPostText(node.textContent))
+    .filter(Boolean)
+    .slice(0, 8);
+  const genderIcon = userMessage.querySelector(".userGender i");
+  const genderClasses = genderIcon?.classList ? [...genderIcon.classList] : [];
+  const gender = genderClasses.includes("fa-mars")
+    ? "\u2642"
+    : (genderClasses.includes("fa-venus") ? "\u2640" : "");
+  return { stats, gender };
 }
 
 function getAnonymousPostCode(post) {
@@ -4142,6 +10472,146 @@ function setCachedOriginalPosterIdentity(topicId, identity) {
   }
 }
 
+function getHotReplyFingerprintCacheKey(topicId) {
+  return topicId ? `${HOT_REPLY_FINGERPRINT_CACHE_PREFIX}${topicId}` : "";
+}
+
+function normalizeHotReplyFingerprintText(value) {
+  return cleanupPostText(value)
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function getContentMediaFingerprint(root) {
+  if (!root?.querySelectorAll) {
+    return "";
+  }
+  return [...root.querySelectorAll("img, video, source, audio, a[href]")]
+    .map((node) => {
+      const url = node instanceof HTMLAnchorElement
+        ? (node.getAttribute("href") || node.href || "")
+        : getMediaUrl(node);
+      return normalizeMediaKey(makeAbsoluteCc98Url(url || ""));
+    })
+    .filter(Boolean)
+    .filter((url) => !/\/static\/images\/(?:hot|相框)\//i.test(url))
+    .join("|");
+}
+
+function getPostContentFingerprintFromContent(content) {
+  if (!content) {
+    return "";
+  }
+  const text = normalizeHotReplyFingerprintText(content.textContent || content.innerText || "");
+  const media = getContentMediaFingerprint(content);
+  const fingerprint = `${text}|${media}`.slice(0, 720);
+  return fingerprint.replace(/[|]+$/g, "").length >= 8 ? fingerprint : "";
+}
+
+function getPostContentFingerprintFromNode(post) {
+  const contentNode = findPostContentNode(post);
+  return getPostContentFingerprintFromContent(contentNode);
+}
+
+function makeHotReplyFingerprintKey(identity, fingerprint) {
+  const normalizedIdentity = String(identity || "").trim();
+  const normalizedFingerprint = String(fingerprint || "").trim();
+  return normalizedIdentity && normalizedFingerprint
+    ? `${normalizedIdentity}${HOT_REPLY_FINGERPRINT_KEY_SEPARATOR}${normalizedFingerprint}`
+    : "";
+}
+
+function splitHotReplyFingerprintKey(value) {
+  const text = String(value || "");
+  const index = text.indexOf(HOT_REPLY_FINGERPRINT_KEY_SEPARATOR);
+  if (index <= 0) {
+    return null;
+  }
+  const identity = text.slice(0, index).trim();
+  const fingerprint = text.slice(index + HOT_REPLY_FINGERPRINT_KEY_SEPARATOR.length).trim();
+  return identity && fingerprint ? { identity, fingerprint } : null;
+}
+
+function getHotReplyFingerprintKeyFromNode(post) {
+  return makeHotReplyFingerprintKey(
+    getPostIdentityFromNode(post),
+    getPostContentFingerprintFromNode(post)
+  );
+}
+
+function getHotReplyFingerprintKeyFromItem(item) {
+  return makeHotReplyFingerprintKey(
+    getPostAuthorIdentity(item),
+    getPostContentFingerprintFromContent(item?.content)
+  );
+}
+
+function normalizeHotReplyFingerprintEntry(value) {
+  if (typeof value === "string") {
+    return splitHotReplyFingerprintKey(value) ? value : "";
+  }
+  if (value && typeof value === "object") {
+    return makeHotReplyFingerprintKey(value.identity, value.fingerprint);
+  }
+  return "";
+}
+
+function readCachedHotReplyFingerprints(topicId) {
+  const key = getHotReplyFingerprintCacheKey(topicId);
+  if (!key) {
+    return [];
+  }
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || "null");
+    const values = Array.isArray(raw) ? raw : raw?.fingerprints;
+    return [...new Set((values || []).map(normalizeHotReplyFingerprintEntry).filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedHotReplyFingerprints(topicId, fingerprints) {
+  const key = getHotReplyFingerprintCacheKey(topicId);
+  const values = [...new Set((fingerprints || []).map(normalizeHotReplyFingerprintEntry).filter(Boolean))];
+  if (!key || !values.length) {
+    return;
+  }
+  try {
+    const storedFingerprints = values.slice(0, 80).map((value) => splitHotReplyFingerprintKey(value)).filter(Boolean);
+    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), fingerprints: storedFingerprints }));
+  } catch {
+    // Hot reply cache is best-effort.
+  }
+}
+
+function mergeCachedHotReplyFingerprints(topicId, fingerprints) {
+  if (!topicId || !fingerprints?.length) {
+    return [];
+  }
+  const merged = [...new Set([...readCachedHotReplyFingerprints(topicId), ...fingerprints])];
+  writeCachedHotReplyFingerprints(topicId, merged);
+  return merged;
+}
+
+function getHotReplyFingerprintsFromRoot(root) {
+  if (!root?.querySelectorAll) {
+    return [];
+  }
+  return [...new Set([...root.querySelectorAll(".reply")]
+    .filter((node) => !node.closest("#cc98-comfort-app"))
+    .filter((node) => node instanceof HTMLElement && isHotPostNode(node))
+    .map(getHotReplyFingerprintKeyFromNode)
+    .filter(Boolean))];
+}
+
+function cacheHotReplyFingerprintsFromRoot(topicId, root) {
+  const fingerprints = getHotReplyFingerprintsFromRoot(root);
+  if (fingerprints.length) {
+    mergeCachedHotReplyFingerprints(topicId, fingerprints);
+  }
+  return fingerprints;
+}
+
 function getPostIdentityFromNode(post) {
   const user = getFirstLink(post, 'a[href*="/user/id/"], a[href*="/user/name/"]');
   const uidMatch = user?.href?.match(/\/user\/id\/(\d+)/);
@@ -4183,7 +10653,11 @@ function fetchOriginalPosterIdentityFromHtml(topicInfo) {
     cache: "no-store"
   })
     .then((response) => response.ok ? response.text() : "")
-    .then(readOriginalPosterIdentityFromStaticHtml)
+    .then((html) => {
+      const doc = new DOMParser().parseFromString(html || "", "text/html");
+      cacheHotReplyFingerprintsFromRoot(topicInfo.topicId, doc);
+      return getOriginalPosterIdentityFromRoot(doc);
+    })
     .catch(() => "");
 }
 
@@ -4234,6 +10708,7 @@ function fetchOriginalPosterIdentityFromRenderedPage(topicInfo) {
       } catch {
         return "";
       }
+      cacheHotReplyFingerprintsFromRoot(topicInfo.topicId, doc);
       return getOriginalPosterIdentityFromRoot(doc);
     };
 
@@ -4264,7 +10739,12 @@ async function fetchOriginalPosterIdentityFromFirstPage(topicInfo) {
 }
 
 function scheduleOriginalPosterIdentityPrefetch(topicInfo) {
-  if (!topicInfo?.topicId || getCachedOriginalPosterIdentity(topicInfo.topicId)) {
+  if (!topicInfo?.topicId) {
+    return;
+  }
+  const hasOriginalPoster = Boolean(getCachedOriginalPosterIdentity(topicInfo.topicId));
+  const hasHotReplies = readCachedHotReplyFingerprints(topicInfo.topicId).length > 0;
+  if (hasOriginalPoster && hasHotReplies) {
     return;
   }
   if (originalPosterIdentityPrefetches.has(topicInfo.topicId)) {
@@ -4272,12 +10752,18 @@ function scheduleOriginalPosterIdentityPrefetch(topicInfo) {
   }
   const promise = fetchOriginalPosterIdentityFromFirstPage(topicInfo)
     .then((identity) => {
-      if (!identity) {
-        return;
+      let shouldRefresh = false;
+      if (identity) {
+        setCachedOriginalPosterIdentity(topicInfo.topicId, identity);
+        shouldRefresh = true;
       }
-      setCachedOriginalPosterIdentity(topicInfo.topicId, identity);
-      scheduleRebuild();
-      setTimeout(scheduleSync, 180);
+      if (!hasHotReplies && readCachedHotReplyFingerprints(topicInfo.topicId).length > 0) {
+        shouldRefresh = true;
+      }
+      if (shouldRefresh) {
+        scheduleRebuild();
+        setTimeout(scheduleSync, 180);
+      }
     })
     .catch(() => {
       // If the first page cannot be fetched, simply avoid showing a false OP badge.
@@ -4315,6 +10801,32 @@ function markOriginalPosterItems(items) {
   return items;
 }
 
+function markHotReplyItems(items) {
+  const topicInfo = getTopicPageInfo();
+  if (!topicInfo?.topicId || !items?.length) {
+    return items;
+  }
+  const visibleHotFingerprints = items
+    .filter((item) => item.isHot)
+    .map(getHotReplyFingerprintKeyFromItem)
+    .filter(Boolean);
+  const hotFingerprints = visibleHotFingerprints.length
+    ? mergeCachedHotReplyFingerprints(topicInfo.topicId, visibleHotFingerprints)
+    : readCachedHotReplyFingerprints(topicInfo.topicId);
+
+  if (!hotFingerprints.length) {
+    scheduleOriginalPosterIdentityPrefetch(topicInfo);
+    return items;
+  }
+
+  const hotSet = new Set(hotFingerprints);
+  items.forEach((item) => {
+    const fingerprint = getHotReplyFingerprintKeyFromItem(item);
+    item.isHotHighlight = Boolean(item.isHot || (fingerprint && hotSet.has(fingerprint)));
+  });
+  return items;
+}
+
 function getActionText(control) {
   const title = control.querySelector?.("[title]")?.getAttribute("title") || control.getAttribute?.("title") || "";
   const text = cleanupPostText(control.textContent);
@@ -4330,13 +10842,15 @@ function getActionText(control) {
 }
 
 function collectPostActions(post) {
+  const nativePostId = getCapturedPostIdCandidates(post)[0] || "";
+  const nativePostFloor = getPostFloorNumber(post, 0);
   const controls = [
     ...post.querySelectorAll(".upup, .downdown, .operation1, button, a")
   ].filter((control) => {
     if (!(control instanceof HTMLElement) || control.closest(".signature")) {
       return false;
     }
-    if (control.tagName === "BUTTON" && control.closest("a")) {
+    if (control.tagName !== "A" && control.closest("a[href]")) {
       return false;
     }
     if (control.classList.contains("operation1") && control.querySelector("a[href]")) {
@@ -4351,15 +10865,24 @@ function collectPostActions(post) {
     const text = getActionText(control);
     const href = control instanceof HTMLAnchorElement ? makeAbsoluteCc98Url(control.href || control.getAttribute("href") || "") : "";
     const normalized = text.replace(/\s+\d+$/, "");
-    if (!/^(赞|踩|关注|私信|评分|追踪)$/.test(normalized)) {
+    if (!/^(赞|踩|关注|取关|取消关注|私信|评分|引用|追踪|编辑)$/.test(normalized)) {
       return;
     }
-    const key = normalized === "私信" ? "私信" : `${normalized}:${href || control.id || actions.length}`;
+    const stableKind = /^(关注|取关|取消关注)$/.test(normalized) ? "关注" : normalized;
+    const key = stableKind === "私信" ? "私信" : `${stableKind}:${href || control.id || actions.length}`;
     if (seen.has(key)) {
       return;
     }
     seen.add(key);
-    actions.push({ text, href, control, scope: "post" });
+    actions.push({
+      text,
+      href,
+      control,
+      scope: "post",
+      sourcePost: post,
+      nativePostId,
+      nativePostFloor
+    });
   });
   const voteGroup = {};
   actions.forEach((action) => {
@@ -4376,7 +10899,48 @@ function collectPostActions(post) {
       }
     });
   }
-  return actions.slice(0, 8);
+  const quoteIndex = actions.findIndex((action) => cleanupPostText(action.text).replace(/\s+\d+$/, "") === "引用");
+  const scoreIndex = actions.findIndex((action) => cleanupPostText(action.text).replace(/\s+\d+$/, "").includes("评分"));
+  if (quoteIndex >= 0 && scoreIndex >= 0 && quoteIndex !== scoreIndex + 1) {
+    const [quoteAction] = actions.splice(quoteIndex, 1);
+    const nextScoreIndex = actions.findIndex((action) => cleanupPostText(action.text).replace(/\s+\d+$/, "").includes("评分"));
+    actions.splice(nextScoreIndex + 1, 0, quoteAction);
+  }
+  return actions.slice(0, 10);
+}
+
+function isFollowPostAction(action) {
+  const text = cleanupPostText(action?.text || action?.control?.textContent || "");
+  return /^(?:\u5173\u6ce8|\u53d6\u5173|\u53d6\u6d88\u5173\u6ce8)$/.test(text);
+}
+
+function isPrivateMessagePostAction(action) {
+  const text = cleanupPostText(action?.text || action?.control?.textContent || "")
+    .replace(/\s+\d+\s*$/, "");
+  return text === "\u79c1\u4fe1";
+}
+
+function isCurrentWebUserPostItem(item) {
+  const uid = normalizeCc98AccountId(item?.uid || "");
+  if (!uid) {
+    return false;
+  }
+  return uid === getCc98AccountId(getStoredCc98UserInfo());
+}
+
+function hasTopicLockedNotice() {
+  const root = document.querySelector("#root") || document.body;
+  if (!root) {
+    return false;
+  }
+  return [...root.querySelectorAll("div, p, span")]
+    .some((node) => {
+      if (!(node instanceof HTMLElement) || node.closest("#cc98-comfort-app")) {
+        return false;
+      }
+      const text = cleanupPostText(node.textContent);
+      return text === "\u8be5\u5e16\u5df2\u88ab\u9501\u5b9a" || text.includes("\u8be5\u5e16\u5df2\u88ab\u9501\u5b9a");
+    });
 }
 
 function hasRenderablePostContent(contentNode) {
@@ -4384,27 +10948,418 @@ function hasRenderablePostContent(contentNode) {
     return false;
   }
   const text = cleanupPostText(contentNode.innerText || contentNode.textContent);
-  return text.length > 0 || Boolean(contentNode.querySelector("img, a[href], [style*='url('], [data-src], [data-original], [data-url], [data-img], [data-image]"));
+  return text.length > 0 || Boolean(contentNode.querySelector("img, video, audio, source, .aplayer, a[href], [style*='url('], [data-src], [data-original], [data-url], [data-img], [data-image], .lazyload-placeholder, .hiddenImage"));
 }
 
-function getPostSignatureContent(post) {
-  const signatureArticle = post.querySelector(".signature > article, .signature article");
-  if (!signatureArticle) {
+function isRenderableSignatureCandidate(node) {
+  return node instanceof HTMLElement
+    && (Boolean(cleanupPostText(node.textContent))
+      || Boolean(node.querySelector("img, video, audio, source, .aplayer, a[href], [style*='url('], .lazyload-placeholder, .hiddenImage")));
+}
+
+function isSignatureNoticeTag(tag) {
+  return tag instanceof HTMLElement
+    && cleanupPostText(tag.textContent).includes("通知本主题所有回复用户");
+}
+
+function normalizeSignatureLayout(signature) {
+  if (!(signature instanceof HTMLElement)) {
+    return;
+  }
+  ["align-self", "margin", "margin-top", "margin-bottom", "margin-left", "margin-right"].forEach((prop) => {
+    signature.style.removeProperty(prop);
+  });
+  signature.querySelectorAll(".ant-tag").forEach((tag) => {
+    if (!isSignatureNoticeTag(tag)) {
+      return;
+    }
+    tag.classList.add("cc98-rebuild-signature-notice-tag");
+    const holder = tag.closest("div, p, section, article");
+    if (holder instanceof HTMLElement && signature.contains(holder)) {
+      holder.classList.add("cc98-rebuild-signature-notice");
+      ["align-self", "margin", "margin-top", "margin-bottom", "margin-left", "margin-right"].forEach((prop) => {
+        holder.style.removeProperty(prop);
+      });
+    }
+  });
+}
+
+function appendSignatureNoticeTags(signature, post, signatureSource) {
+  if (!(signature instanceof HTMLElement) || !(post instanceof Element)) {
+    return;
+  }
+  const existingTexts = new Set([...signature.querySelectorAll(".ant-tag")]
+    .map((tag) => cleanupPostText(tag.textContent))
+    .filter(Boolean));
+  [...post.querySelectorAll(".ant-tag")].forEach((tag) => {
+    if (!isSignatureNoticeTag(tag) || tag.closest("#cc98-comfort-app")) {
+      return;
+    }
+    const text = cleanupPostText(tag.textContent);
+    if (!text || existingTexts.has(text)) {
+      return;
+    }
+    const source = tag.closest(".cc98-rebuild-signature-content, .signature, [class*='signature'], div, p") || tag;
+    if (signatureSource instanceof Element && signatureSource.contains(source)) {
+      return;
+    }
+    const notice = normalizeRichContentNode(source, { keepSignatureChildren: true });
+    notice.classList.add("cc98-rebuild-signature-notice");
+    normalizeSignatureLayout(notice);
+    signature.append(notice);
+    existingTexts.add(text);
+  });
+}
+
+function getPostSignatureContent(post, supplementalMediaSources = []) {
+  if (!(post instanceof Element)) {
     return null;
   }
-  const signature = normalizeRichContentNode(signatureArticle, { keepSignatureChildren: true });
+  const primarySignatureSelectors = [
+    ".signature > article",
+    ".signature article",
+    ".signature",
+    "[class*='Signature'] > article",
+    "[class*='Signature'] article",
+    "[class*='Signature']",
+    "[class*='signature'] > article",
+    "[class*='signature'] article",
+    "[class*='signature']",
+    "[class*='userSign']",
+    "[class*='usersign']",
+    "[id*='signature']",
+    "[id*='Signature']",
+    "[id*='userSign']"
+  ].join(",");
+  const fallbackSignatureSelectors = [
+    ".reply-content > div:not(.substance):not(.vote-content)"
+  ].join(",");
+  const baseCandidateFilter = (node) => node instanceof HTMLElement
+    && !node.closest("#cc98-comfort-app")
+    && node !== post
+    && !node.matches(".vote-content")
+    && !node.closest(".vote-content")
+    && !node.closest(".reply-content .substance, .substance")
+    && isRenderableSignatureCandidate(node);
+  const signatureSource = [...post.querySelectorAll(primarySignatureSelectors)]
+    .filter((node) => node instanceof HTMLElement)
+    .filter(baseCandidateFilter)[0]
+    || [...post.querySelectorAll(fallbackSignatureSelectors)]
+      .filter((node) => node instanceof HTMLElement)
+      .filter(baseCandidateFilter)[0];
+  if (!signatureSource) {
+    return null;
+  }
+  const signaturePayload = signatureSource.matches("article")
+    ? signatureSource
+    : (signatureSource.querySelector("article") || signatureSource);
+  const signature = normalizeRichContentNode(signaturePayload, { keepSignatureChildren: true });
+  hydrateCapturedLazyMediaSlots(signature, supplementalMediaSources);
+  ensurePostMediaCoverage(signature, supplementalMediaSources);
+  materializeAudioPlayers(signature, signaturePayload);
+  materializePostMedia(signature);
   parseInlineUbbTextNodes(signature);
+  materializeAudioPlayers(signature, signaturePayload);
+  materializePostMedia(signature);
+  classifyPostImages(signature);
   strengthenInlineTextStyles(signature);
+  markInlineUbbStyleClasses(signature);
   markInlineEmojiContainers(signature);
   stabilizeEmojiRendering(signature);
+  appendSignatureNoticeTags(signature, post, signatureSource);
+  normalizeSignatureLayout(signature);
   signature.classList.add("cc98-rebuild-signature-content");
   return signature;
+}
+
+function getPostAwardRows(post) {
+  const awardInfo = post.querySelector(".awardInfo, [class*='awardInfo'], [class*='AwardInfo']");
+  if (!(awardInfo instanceof Element)) {
+    return [];
+  }
+  const rows = [...awardInfo.querySelectorAll(".tagSize")];
+  const rowNodes = rows.length
+    ? rows
+    : [...awardInfo.children].filter((node) => node.matches?.(".good, .bad"));
+  return rowNodes.map((row) => {
+    const user = cleanupPostText(row.querySelector?.(".userName")?.textContent);
+    const operation = cleanupPostText(row.querySelector?.(".grades")?.textContent);
+    const reason = cleanupPostText(row.querySelector?.(".credit")?.textContent);
+    return { user, operation, reason };
+  }).filter((row) => row.user || row.operation || row.reason);
+}
+
+function getPostAwardState(post) {
+  if (!(post instanceof Element)) {
+    return {
+      rows: [],
+      toggleControl: null,
+      toggleText: "",
+      collapsible: false,
+      expanded: false
+    };
+  }
+  const awardInfo = post.querySelector(".awardInfo, [class*='awardInfo'], [class*='AwardInfo']");
+  const toggleControl = awardInfo instanceof Element
+    ? [...awardInfo.querySelectorAll("button")].find((button) => /^(?:\u663e\u793a\u5168\u90e8|\u6536\u8d77)$/.test(cleanupPostText(button.textContent))) || null
+    : null;
+  const toggleText = cleanupPostText(toggleControl?.textContent);
+  return {
+    rows: getPostAwardRows(post),
+    toggleControl,
+    toggleText,
+    collapsible: Boolean(toggleControl),
+    expanded: toggleText === "\u6536\u8d77"
+  };
+}
+
+function ensurePostAwardExpanded(post, awardState = null) {
+  if (!(post instanceof HTMLElement)) {
+    return false;
+  }
+  const state = awardState || getPostAwardState(post);
+  if (!state.collapsible || state.expanded || !(state.toggleControl instanceof HTMLElement)) {
+    return false;
+  }
+  if (state.toggleControl.dataset.cc98RebuildAutoExpanded === "true") {
+    return false;
+  }
+  state.toggleControl.dataset.cc98RebuildAutoExpanded = "true";
+  triggerOriginalControl(state.toggleControl);
+  window.setTimeout(scheduleRebuild, 220);
+  return true;
+}
+
+function populatePostAwardTableBody(tbody, rows) {
+  if (!(tbody instanceof HTMLTableSectionElement)) {
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  (rows || []).forEach((row) => {
+    const tr = document.createElement("tr");
+    const operationClass = /-\s*\d/.test(row.operation) ? "cc98-rebuild-award-negative" : (/\+\s*\d/.test(row.operation) ? "cc98-rebuild-award-positive" : "");
+    tr.append(createElement("td", "", row.user || "-"));
+    tr.append(createElement("td", operationClass, row.operation || "-"));
+    tr.append(createElement("td", "", row.reason || "-"));
+    fragment.append(tr);
+  });
+  tbody.replaceChildren(fragment);
+}
+
+function syncAwardDeltaActions(actions, rows, awardKey = "") {
+  const delta = getAwardReputationDelta(rows);
+  if (awardKey) {
+    postAwardDeltaCache.set(awardKey, delta);
+  }
+  applyAwardDeltaValueToActions(actions, delta);
+  (actions || []).forEach((action) => {
+    if (getPostActionKind(action.control, action.text) === "score" && action.proxyButton instanceof HTMLElement) {
+      syncProxyControlDisplay(action.proxyButton, action);
+    }
+  });
+}
+
+function renderPostAwardTable(rows, options = {}) {
+  if (!rows?.length) {
+    return null;
+  }
+  const section = createElement("section", "cc98-rebuild-awards");
+  const headerRow = createElement("div", "cc98-rebuild-awards-header");
+  headerRow.append(createElement("div", "cc98-rebuild-awards-title", "\u8bc4\u5206\u8bb0\u5f55"));
+  let toggleButton = null;
+  if (options.collapsible && options.sourcePost instanceof Element) {
+    toggleButton = createButton(
+      "cc98-rebuild-awards-toggle",
+      options.expanded ? "\u6536\u8d77" : "\u663e\u793a\u5168\u90e8",
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const currentState = getPostAwardState(options.sourcePost);
+        if (!(currentState.toggleControl instanceof HTMLElement)) {
+          return;
+        }
+        toggleButton.disabled = true;
+        toggleButton.classList.add("is-pending");
+        const previousToggleText = currentState.toggleText;
+        triggerOriginalControl(currentState.toggleControl);
+        const syncState = () => {
+          const nextState = getPostAwardState(options.sourcePost);
+          if (!nextState.rows.length) {
+            return;
+          }
+          populatePostAwardTableBody(tbody, nextState.rows);
+          toggleButton.textContent = nextState.toggleText || (nextState.expanded ? "\u6536\u8d77" : "\u663e\u793a\u5168\u90e8");
+          toggleButton.setAttribute("aria-expanded", String(nextState.expanded));
+          if (nextState.toggleText && nextState.toggleText !== previousToggleText) {
+            toggleButton.disabled = false;
+            toggleButton.classList.remove("is-pending");
+          }
+          if (nextState.expanded) {
+            syncAwardDeltaActions(options.actions, nextState.rows, options.awardKey);
+          }
+        };
+        [40, 120, 260, 520, 900, 1400].forEach((delay) => {
+          window.setTimeout(syncState, delay);
+        });
+        window.setTimeout(() => {
+          syncState();
+          toggleButton.disabled = false;
+          toggleButton.classList.remove("is-pending");
+        }, 1450);
+      }
+    );
+    toggleButton.type = "button";
+    toggleButton.setAttribute("aria-expanded", String(Boolean(options.expanded)));
+    headerRow.append(toggleButton);
+  }
+  section.append(headerRow);
+  const table = document.createElement("table");
+  table.className = "cc98-rebuild-awards-table";
+  const thead = document.createElement("thead");
+  const header = document.createElement("tr");
+  ["\u7528\u6237", "\u64cd\u4f5c", "\u7406\u7531"].forEach((label) => {
+    header.append(createElement("th", "", label));
+  });
+  thead.append(header);
+  const tbody = document.createElement("tbody");
+  populatePostAwardTableBody(tbody, rows);
+  table.append(thead, tbody);
+  section.append(table);
+  return section;
+}
+
+function getAwardReputationDelta(rows) {
+  return (rows || []).reduce((total, row) => {
+    const operation = cleanupPostText(row.operation);
+    if (!operation.includes("\u98ce\u8bc4\u503c")) {
+      return total;
+    }
+    const match = operation.match(/([+-]?\d+)/);
+    return total + (Number(match?.[1]) || 0);
+  }, 0);
+}
+
+function formatAwardDelta(delta) {
+  const number = Number(delta) || 0;
+  return number > 0 ? `+${number}` : String(number);
+}
+
+function applyAwardDeltaValueToActions(actions, delta) {
+  if (!Array.isArray(actions)) {
+    return actions;
+  }
+  actions.forEach((action) => {
+    const label = cleanupPostText(action.text).replace(/\s+[+-]?\d+\s*$/, "");
+    if (label === "\u8bc4\u5206" || label.includes("\u8bc4\u5206")) {
+      action.displayText = `\u8bc4\u5206 ${formatAwardDelta(delta)}`;
+      action.awardDelta = Number(delta) || 0;
+    }
+  });
+  return actions;
+}
+
+function getPostEditInfo(post) {
+  const text = cleanupPostText(post?.innerText || "");
+  const match = text.match(/该帖最后由\s*(.*?)\s*在\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\s*编辑/);
+  if (!match) {
+    return { editor: "", editedAt: "" };
+  }
+  return {
+    editor: cleanupPostText(match[1]),
+    editedAt: match[2]
+  };
+}
+
+function applyAwardDeltaToActions(actions, rows) {
+  if (!Array.isArray(actions) || !rows?.length) {
+    return actions;
+  }
+  return applyAwardDeltaValueToActions(actions, getAwardReputationDelta(rows));
+}
+
+function getTopicMetricCount(metricId, anchor = null) {
+  const selector = `#${metricId} .timeProp.tagSize`;
+  const localRoot = anchor instanceof Element
+    ? anchor.closest(".topicInfo-info, .topicInfo-title, #essayProp")
+    : null;
+  const candidates = [
+    localRoot?.querySelector?.(selector),
+    ...document.querySelectorAll(selector)
+  ].filter((node) => node instanceof HTMLElement && !node.closest("#cc98-comfort-app"));
+  for (const node of candidates) {
+    const text = cleanupPostText(node.textContent).replace(/,/g, "");
+    const match = text.match(/\d+/);
+    if (match) {
+      return String(Math.max(0, Number(match[0]) || 0));
+    }
+  }
+  return "";
+}
+
+function getTopicFavoriteDisplayText(action) {
+  if (action?.scope !== "topic" || !(action.control instanceof HTMLElement)) {
+    return "";
+  }
+  const label = cleanupPostText(getActionText(action.control) || action.text).replace(/\s+\d+\s*$/, "");
+  if (!/^(?:\u6536\u85cf|\u53d6\u6d88\u6536\u85cf|\u5df2\u6536\u85cf)$/.test(label)) {
+    return "";
+  }
+  const count = getTopicMetricCount("followCount", action.control);
+  return count === "" ? label : `${label} ${count}`;
+}
+
+function getCapturedPostIdCandidates(post) {
+  if (!(post instanceof Element)) {
+    return [];
+  }
+  const values = [
+    post.id,
+    post.getAttribute("data-id"),
+    post.getAttribute("data-post-id"),
+    ...[...post.querySelectorAll("[id], [data-id], [data-post-id]")]
+      .slice(0, 80)
+      .flatMap((node) => [
+        node.id,
+        node.getAttribute("data-id"),
+        node.getAttribute("data-post-id")
+      ])
+  ];
+  const ids = new Set();
+  values.forEach((value) => {
+    const text = String(value || "");
+    const explicit = text.match(/(?:post|reply|like|dislike|awardInfo|comment)(\d{5,})/i)?.[1];
+    if (explicit) {
+      ids.add(explicit);
+      return;
+    }
+    if (/^\d{5,}$/.test(text)) {
+      ids.add(text);
+    }
+  });
+  return [...ids];
+}
+
+function findCapturedTopicPostSnapshot(post, floor) {
+  const topicId = getTopicPageInfo()?.topicId || "";
+  if (!topicId) {
+    return null;
+  }
+  for (const id of getCapturedPostIdCandidates(post)) {
+    const snapshot = capturedTopicPostsById.get(`${topicId}:${id}`);
+    if (snapshot) {
+      return snapshot;
+    }
+  }
+  const normalizedFloor = Math.max(0, Number(floor) || 0);
+  return normalizedFloor
+    ? capturedTopicPostsByFloor.get(`${topicId}:${normalizedFloor}`) || null
+    : null;
 }
 
 function getPostItems() {
   const directReplies = [...document.querySelectorAll(".reply")]
     .filter((node) => !node.closest("#cc98-comfort-app"))
-    .filter((node) => hasRenderablePostContent(findPostContentNode(node)));
+    .filter((node) => hasRenderablePostContent(findPostContentNode(node)) || Boolean(findPostVoteContentNode(node)));
 
   const selectors = [
     '[class*="floor"]',
@@ -4418,7 +11373,7 @@ function getPostItems() {
     ? directReplies
     : [...document.querySelectorAll(selectors)]
       .filter((node) => !node.closest("#cc98-comfort-app"))
-      .filter((node) => hasRenderablePostContent(findPostContentNode(node)));
+      .filter((node) => hasRenderablePostContent(findPostContentNode(node)) || Boolean(findPostVoteContentNode(node)));
 
   const compact = [];
   candidates.forEach((candidate) => {
@@ -4435,22 +11390,46 @@ function getPostItems() {
 
   const items = compact.map((post, index) => {
     const contentNode = findPostContentNode(post);
-    if (!contentNode) {
+    const voteContent = findPostVoteContentNode(post);
+    if (!contentNode && !voteContent) {
       return null;
     }
+    const floorNumber = getPostFloorNumber(post, index);
+    const capturedPost = findCapturedTopicPostSnapshot(post, floorNumber);
+    const capturedMediaSources = extractCapturedPostMediaSources(capturedPost?.content || "");
+    const capturedSignatureMediaSources = extractCapturedPostMediaSources(capturedPost?.signatureCode || "");
     const user = getFirstLink(post, 'a[href*="/user/id/"], a[href*="/user/name/"]');
     const uidMatch = user?.href?.match(/\/user\/id\/(\d+)/);
     const userHref = makeAbsoluteCc98Url(user?.href || (uidMatch?.[1] ? `/user/id/${uidMatch[1]}` : ""));
     const anonymousCode = getAnonymousPostCode(post);
     const avatar = getPostAvatar(post, userHref);
-    const content = sanitizePostContent(contentNode);
-    const signature = getPostSignatureContent(post);
-    const text = cleanupPostText(content.innerText);
+    const authorCard = anonymousCode ? null : getPostAuthorCardInfo(post);
+    const content = contentNode ? sanitizePostContent(contentNode, capturedMediaSources) : null;
+    const signature = getPostSignatureContent(post, capturedSignatureMediaSources);
+    let awardState = getPostAwardState(post);
+    const awardAutoExpanding = ensurePostAwardExpanded(post, awardState);
+    if (awardAutoExpanding) {
+      awardState = getPostAwardState(post);
+    }
+    const awards = awardState.rows;
+    const text = cleanupPostText(content?.innerText || "");
     const publishedAt = cleanupPostText(post.innerText).match(/发表于\s+([0-9:-]+\s+[0-9:]+)/)?.[1] ?? "";
+    const editInfo = getPostEditInfo(post);
     const actions = collectPostActions(post);
+    const followAction = actions.find(isFollowPostAction) || null;
+    const messageAction = actions.find(isPrivateMessagePostAction) || null;
+    const visibleActions = actions.filter((action) => !isFollowPostAction(action));
     const isHot = isHotPostNode(post);
-    const floorNumber = getPostFloorNumber(post, index);
     const id = post.id || post.getAttribute("data-id") || `floor-${floorNumber}-${text.slice(0, 24)}`;
+    const awardKey = `${getTopicPageInfo()?.topicId || location.pathname}:${id}`;
+    const cachedAwardDelta = postAwardDeltaCache.get(awardKey);
+    if (awardState.expanded || !awardState.collapsible) {
+      const delta = getAwardReputationDelta(awards);
+      postAwardDeltaCache.set(awardKey, delta);
+      applyAwardDeltaValueToActions(actions, delta);
+    } else if (Number.isFinite(cachedAwardDelta)) {
+      applyAwardDeltaValueToActions(actions, cachedAwardDelta);
+    }
     applyPrewarmedPostSnapshot(content, findPrewarmedPostSnapshot(id, floorNumber));
     return {
       type: "post",
@@ -4461,15 +11440,33 @@ function getPostItems() {
       uid: uidMatch?.[1] ?? "",
       anonymousCode,
       avatar,
+      authorCard,
       text,
       content,
+      voteContent,
       signature,
+      awards,
+      awardSourcePost: post,
+      awardCollapsible: awardState.collapsible,
+      awardExpanded: awardState.expanded,
+      awardKey,
       publishedAt,
-      actions,
+      editedAt: editInfo.editedAt,
+      editedBy: editInfo.editor,
+      actions: visibleActions,
+      followAction,
+      messageAction,
+      isCurrentUser: Boolean(uidMatch?.[1] && uidMatch[1] === getCc98AccountId(getStoredCc98UserInfo())),
       isHot
     };
-  }).filter((item) => item && (item.text.length > 0 || item.content?.querySelector("img")));
+  }).filter((item) => item && (hasRenderedPostContent(item.content) || item.voteContent));
+  const viewCount = getTopicMetricCount("viewtimes");
+  const firstRegularItem = items.find((item) => !item.isHot) || items[0];
+  if (firstRegularItem && viewCount !== "") {
+    firstRegularItem.viewCount = viewCount;
+  }
   markOriginalPosterItems(items);
+  markHotReplyItems(items);
 
   if (items.length > 0) {
     return items;
@@ -4477,7 +11474,44 @@ function getPostItems() {
 
   const article = document.querySelector("#root article");
   const text = cleanupPostText(article?.innerText);
-  return text ? [{ type: "post", id: "article", index: 1, user: "CC98", uid: "", avatar: "", text, content: sanitizePostContent(article), publishedAt: "", actions: [] }] : [];
+  return text ? [{
+    type: "post",
+    id: "article",
+    index: 1,
+    user: "CC98",
+    uid: "",
+    avatar: "",
+    text,
+    content: sanitizePostContent(article),
+    voteContent: null,
+    signature: null,
+    awards: [],
+    publishedAt: "",
+    viewCount: getTopicMetricCount("viewtimes"),
+    actions: []
+  }] : [];
+}
+
+function getTopicToolbarActions() {
+  const controls = [...document.querySelectorAll(".topicInfo-info .followTopic, .topicInfo-title .followTopic, .topicInfo-info [class~='followTopic'], .topicInfo-title [class~='followTopic']")]
+    .filter((control) => control instanceof HTMLElement && !control.closest("#cc98-comfort-app"));
+  const makeAction = (control, fallbackText) => {
+    if (!(control instanceof HTMLElement)) {
+      return null;
+    }
+    return {
+      text: cleanupPostText(control.textContent) || fallbackText,
+      href: "",
+      control,
+      scope: "topic"
+    };
+  };
+  const favoriteControl = controls.find((control) => /^(?:收藏|取消收藏|已收藏)$/.test(cleanupPostText(control.textContent)));
+  const shareControl = controls.find((control) => cleanupPostText(control.textContent).includes("分享帖子链接"));
+  return {
+    favorite: makeAction(favoriteControl, "收藏"),
+    share: makeAction(shareControl, "分享帖子链接")
+  };
 }
 
 function isHomeAnnouncementDetailText(text) {
@@ -4582,6 +11616,8 @@ function getHomeSections() {
     const items = [...section.querySelectorAll(".mainPageListRow")].map((row) => {
       const titleLink = getFirstLink(row, ".mainPageListTitle a");
       const boardLink = getFirstLink(row, '.mainPageListBoardName a[href*="/board/"]');
+      const userLink = getFirstLink(row, 'a[href*="/user/id/"]');
+      const uidMatch = userLink?.href?.match(/\/user\/id\/(\d+)/i);
       const parsedMeta = parseTopicMetaText(row.textContent);
       return {
         type: "topic",
@@ -4589,7 +11625,8 @@ function getHomeSections() {
         href: titleLink?.href ?? "",
         board: boardLink?.text?.replace(/[【】[\]]/g, "") ?? "",
         boardHref: boardLink?.href ?? "",
-        user: parsedMeta.hasDetails ? parsedMeta.author : "",
+        user: userLink?.text || (parsedMeta.hasDetails ? parsedMeta.author : ""),
+        uid: uidMatch?.[1] ?? "",
         meta: parsedMeta.hasDetails ? parsedMeta.meta : "",
         hoverMeta: parsedMeta.hasDetails ? parsedMeta.hoverMeta : "",
         replyCount: parsedMeta.hasDetails ? parsedMeta.replyCount : ""
@@ -4608,6 +11645,103 @@ function isHotHomeSection(section) {
     || title.includes(normalizeText("\u70ed\u95e8"));
 }
 
+function getHomeHotRankCacheKey(section) {
+  return `${HOME_HOT_RANK_CACHE_KEY_PREFIX}${normalizeText(section?.title || "hot") || "hot"}`;
+}
+
+function getHomeHotRankItemKey(item) {
+  if (item?.href) {
+    try {
+      const url = new URL(item.href, location.origin);
+      return `${url.origin}${url.pathname}`.toLowerCase();
+    } catch {
+      return String(item.href).split(/[?#]/)[0].toLowerCase();
+    }
+  }
+  return `title:${normalizeText(item?.title || "")}`;
+}
+
+function makeHomeHotRankEntries(items) {
+  return (items || []).slice(0, 10).map((item, index) => ({
+    key: getHomeHotRankItemKey(item),
+    title: item.title || "",
+    href: item.href || "",
+    rank: index + 1
+  })).filter((entry) => entry.key && entry.key !== "title:");
+}
+
+function readHomeHotRankCache(section) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getHomeHotRankCacheKey(section)) || "{}");
+    const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+    return entries.filter((entry) => entry?.key && Number(entry.rank) > 0);
+  } catch {
+    return [];
+  }
+}
+
+function writeHomeHotRankCache(section, entries) {
+  try {
+    localStorage.setItem(getHomeHotRankCacheKey(section), JSON.stringify({
+      savedAt: Date.now(),
+      entries
+    }));
+  } catch {
+    // Ranking movement is cosmetic; ignore storage failures.
+  }
+}
+
+function getHomeHotRankSignature(entries) {
+  return entries.map((entry) => `${entry.key}:${entry.rank}`).join("|");
+}
+
+function getHomeHotItemsWithRankMovement(section) {
+  const entries = makeHomeHotRankEntries(section.items);
+  const signature = getHomeHotRankSignature(entries);
+  const cacheKey = getHomeHotRankCacheKey(section);
+  const state = homeHotRankingStates.get(cacheKey);
+  if (state?.signature === signature) {
+    return (section.items || []).map((item) => {
+      const movement = state.movements.get(getHomeHotRankItemKey(item));
+      return {
+        ...item,
+        rankMovement: movement?.type || "",
+        rankDelta: movement?.delta || 0,
+        rankMovementAnimated: false
+      };
+    });
+  }
+
+  const previous = readHomeHotRankCache(section);
+  const previousByKey = new Map(previous.map((entry) => [entry.key, entry]));
+  const movements = new Map();
+  if (previous.length > 0) {
+    entries.forEach((entry) => {
+      const oldRank = Number(previousByKey.get(entry.key)?.rank || 0);
+      if (!oldRank) {
+        movements.set(entry.key, { type: "new", delta: 0 });
+        return;
+      }
+      if (oldRank > entry.rank) {
+        movements.set(entry.key, { type: "up", delta: oldRank - entry.rank });
+      } else if (oldRank < entry.rank) {
+        movements.set(entry.key, { type: "down", delta: entry.rank - oldRank });
+      }
+    });
+  }
+  writeHomeHotRankCache(section, entries);
+  homeHotRankingStates.set(cacheKey, { signature, movements, consumed: true });
+  return (section.items || []).map((item) => {
+    const movement = movements.get(getHomeHotRankItemKey(item));
+    return {
+      ...item,
+      rankMovement: movement?.type || "",
+      rankDelta: movement?.delta || 0,
+      rankMovementAnimated: Boolean(movement)
+    };
+  });
+}
+
 function getBoardSections() {
   return [...document.querySelectorAll(".anArea")].map((area) => {
     const title = area.id || getFirstText(area, ".areaName") || "版面";
@@ -4624,6 +11758,51 @@ function getBoardSections() {
     }).filter((board) => board.title);
     return { title, boards };
   }).filter((section) => section.boards.length > 0);
+}
+
+function normalizePinnedBoardHref(href) {
+  const value = String(href ?? "").trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    return new URL(value, location.origin).href.replace(/\/$/, "");
+  } catch {
+    return value.replace(/\/$/, "");
+  }
+}
+
+function readPinnedBoardHrefs() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PINNED_BOARDS_STORAGE_KEY) || "[]");
+    return Array.isArray(value)
+      ? [...new Set(value.map(normalizePinnedBoardHref).filter(Boolean))]
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePinnedBoardHrefs(hrefs) {
+  try {
+    localStorage.setItem(PINNED_BOARDS_STORAGE_KEY, JSON.stringify([...new Set(hrefs.map(normalizePinnedBoardHref).filter(Boolean))]));
+  } catch {
+    // Board pins are a local convenience; ignore storage failures.
+  }
+}
+
+function togglePinnedBoard(board) {
+  const href = normalizePinnedBoardHref(board?.href);
+  if (!href) {
+    return;
+  }
+  const pinned = readPinnedBoardHrefs();
+  if (pinned.includes(href)) {
+    writePinnedBoardHrefs(pinned.filter((item) => item !== href));
+  } else {
+    writePinnedBoardHrefs([href, ...pinned]);
+  }
+  scheduleRebuild();
 }
 
 function getBoardPageStats(head) {
@@ -4694,17 +11873,22 @@ function getBoardTopicItems() {
         .filter((item) => item.text);
       const userLink = getFirstLink(row, '.board-postItem-userName[href*="/user/"], .board-postItem-userName a[href*="/user/"]');
       const userText = userLink?.text || getFirstText(row, ".board-postItem-userName");
+      const uidMatch = userLink?.href?.match(/\/user\/id\/(\d+)/i);
       const tags = [...row.querySelectorAll(".board-postItem-tags .ant-tag")].map((tag) => tag.textContent?.trim() ?? "").filter(Boolean);
       const lastReplyLink = row.querySelector('.board-postItem-lastReply')?.closest("a");
       const lastReplySpans = [...row.querySelectorAll(".board-postItem-lastReply span")].map((span) => span.textContent?.trim() ?? "").filter(Boolean);
-      const icon = row.querySelector(".board-postItem-icon img")?.src ?? "";
+      const iconNode = row.querySelector(".board-postItem-icon img");
+      const icon = iconNode?.currentSrc || iconNode?.src || iconNode?.getAttribute("src") || "";
+      const iconHint = `${iconNode?.getAttribute("src") || ""} ${icon}`;
       const isPinned = /top-/i.test(icon) || titleLink.text.includes("公告");
+      const isLocked = /(?:^|\/)lock\.png(?:[?#]|$)/i.test(iconHint);
       return {
         type: "topic",
         title: titleLink.text,
         href: titleLink.href,
         user: userText,
         userHref: userLink?.href ?? "",
+        uid: uidMatch?.[1] ?? "",
         viewCount: tags[0] ?? "",
         replyCount: tags[1] ?? "",
         lastReplyUser: lastReplySpans[0] ?? "",
@@ -4713,6 +11897,7 @@ function getBoardTopicItems() {
         pageLinks,
         icon,
         isPinned,
+        isLocked,
         board: getFirstText(document, ".board-head-name"),
         boardHref: location.href
       };
@@ -4738,20 +11923,28 @@ function getUserCenterData() {
 }
 
 function getNativeTopbar() {
-  const root = document.querySelector("#root") ?? document;
-  return root.querySelector(".topBar-mainPage, .topBar, .header, .headerWithoutImage");
+  const selector = ".topBar-mainPage, .topBar, .header, .headerWithoutImage";
+  const root = document.querySelector("#root");
+  const rootedTopbar = root?.querySelector?.(selector);
+  if (rootedTopbar instanceof HTMLElement) {
+    return rootedTopbar;
+  }
+  return [...document.querySelectorAll(selector)]
+    .find((node) => node instanceof HTMLElement && !node.closest("#cc98-comfort-app"))
+    || null;
 }
 
 function getNativeUserEntry() {
   const topbar = getNativeTopbar();
-  if (!topbar) {
-    return null;
-  }
-  const topbarRight = topbar.querySelector(".topBarRight");
+  const source = topbar || document;
+  const findOutsideRebuild = (selector) => [...source.querySelectorAll(selector)]
+    .find((node) => node instanceof HTMLElement && !node.closest("#cc98-comfort-app"))
+    || null;
+  const topbarRight = findOutsideRebuild(".topBarRight");
   if (topbarRight instanceof HTMLElement) {
     return topbarRight;
   }
-  const direct = topbar.querySelector([
+  const direct = findOutsideRebuild([
     ".topBarUser",
     ".topBarUserInfo",
     ".topBarUserImg",
@@ -4763,12 +11956,50 @@ function getNativeUserEntry() {
   if (direct instanceof HTMLElement) {
     return direct.closest("a, button, [role='button'], .topBarUser, .topBarUserInfo, .topBarUserImg, [class*='topBarUser'], [class*='userInfo']") || direct;
   }
-  const userImage = topbar.querySelector("a[href*='/user/'] img, img[class*='avatar'], img[class*='portrait'], img[src*='avatar'], img[src*='portrait']");
+  const userImage = findOutsideRebuild("a[href*='/user/'] img, img[class*='avatar'], img[class*='portrait'], img[src*='avatar'], img[src*='portrait']");
   if (userImage instanceof HTMLElement) {
     return userImage.closest("a, button, [role='button'], div, span") || userImage;
   }
-  const userLink = topbar.querySelector("a[href*='/user/'], a[href*='userCenter'], a[href*='usercenter']");
+  const userLink = findOutsideRebuild("a[href*='/user/'], a[href*='userCenter'], a[href*='usercenter']");
   return userLink instanceof HTMLElement ? userLink : null;
+}
+
+function attachHomeTopbarMessageIfMissing(nativeEntry) {
+  const routePath = getCurrentCc98RoutePath().replace(/\/+$/, "") || "/";
+  const isHomePage = routePath === "/" || Boolean(document.querySelector(".mainPage"));
+  if (!(nativeEntry instanceof HTMLElement)
+    || nativeEntry.classList.contains("cc98-rebuild-guest-user-entry")
+    || !isHomePage
+    || nativeEntry.querySelector(".topBarMessage, .messageTopBar, .topBarBell")) {
+    return;
+  }
+  const target = nativeEntry.querySelector(".topBarUserInfo") || nativeEntry;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  const sourceRoots = [getNativeTopbar(), document].filter(Boolean);
+  const candidates = [];
+  sourceRoots.forEach((root) => {
+    root.querySelectorAll?.(".topBarMessage, .messageTopBar, .topBarBell").forEach((node) => {
+      const message = node.closest?.(".topBarMessage") || node.closest?.(".messageTopBar") || node;
+      if (message instanceof HTMLElement && !candidates.includes(message)) {
+        candidates.push(message);
+      }
+    });
+  });
+  const message = candidates.find((node) => node instanceof HTMLElement
+    && !node.closest("#cc98-comfort-app")
+    && !nativeEntry.contains(node)
+    && !node.closest(".topBarUserCenter, .topBarUserCenter-mainPage, .topBarMessageDetails, .topBarMessageDetails-mainPage")
+    && Boolean(node.querySelector?.(".topBarBell") || node.matches?.(".topBarBell")));
+  if (!(message instanceof HTMLElement)) {
+    return;
+  }
+  const beforeSource = target.querySelector(".topBarUserImg, .topBarUserName, .cc98-rebuild-native-user-name-link, img");
+  const before = beforeSource instanceof HTMLElement
+    ? (beforeSource.parentElement === target ? beforeSource : beforeSource.closest(".topBarUserImg, .topBarUserName, .cc98-rebuild-native-user-name-link"))
+    : null;
+  target.insertBefore(message, before instanceof HTMLElement && before.parentElement === target ? before : target.firstChild);
 }
 
 function attachNativeTopbarDropdowns(nativeEntry) {
@@ -4794,6 +12025,9 @@ function attachNativeTopbarDropdowns(nativeEntry) {
     const existingDropdown = nativeEntry.querySelector(selector);
     if (existingDropdown && !existingDropdown.classList.contains("cc98-rebuild-forced-topbar-menu")) {
       normalizeDropdown(existingDropdown);
+      if (baseClass === "topBarUserCenter") {
+        augmentTopbarUserMenu(existingDropdown);
+      }
       return;
     }
     const dropdown = [...document.querySelectorAll(selector)]
@@ -4802,6 +12036,9 @@ function attachNativeTopbarDropdowns(nativeEntry) {
       rememberReparentedNativeNode(dropdown);
       dropdown.classList.add(baseClass);
       normalizeDropdown(dropdown);
+      if (baseClass === "topBarUserCenter") {
+        augmentTopbarUserMenu(dropdown);
+      }
       if (existingDropdown) {
         existingDropdown.replaceWith(dropdown);
       } else {
@@ -4811,6 +12048,30 @@ function attachNativeTopbarDropdowns(nativeEntry) {
   });
 }
 
+function augmentTopbarUserMenu(menu) {
+  if (!(menu instanceof HTMLElement)) {
+    return menu;
+  }
+  const list = menu.querySelector("ul") || menu;
+  const existingText = cleanupPostText(list.textContent);
+  [
+    ["/usercenter/myhistory", "\u6d4f\u89c8\u8bb0\u5f55"],
+    ["/usercenter/myfavorites/order/0/group/0/1", "\u6211\u7684\u6536\u85cf"]
+  ].forEach(([href, text]) => {
+    if (existingText.includes(text) || list.querySelector(`a[href*="${href}"]`)) {
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = makeAbsoluteCc98Url(href);
+    link.classList.add("cc98-rebuild-topbar-extra-link");
+    const item = document.createElement("li");
+    item.textContent = text;
+    link.append(item);
+    list.append(link);
+  });
+  return menu;
+}
+
 function createForcedTopbarUserMenu() {
   const menu = createElement("div", "topBarUserCenter cc98-rebuild-forced-topbar-menu");
   const source = [...document.querySelectorAll(".topBarUserCenter, .topBarUserCenter-mainPage")]
@@ -4818,7 +12079,7 @@ function createForcedTopbarUserMenu() {
   if (source instanceof HTMLElement) {
     rememberReparentedNativeNode(source);
     source.classList.add("topBarUserCenter");
-    return source;
+    return augmentTopbarUserMenu(source);
   }
 
   const list = document.createElement("ul");
@@ -4839,7 +12100,254 @@ function createForcedTopbarUserMenu() {
   logout.dataset.cc98ForcedLogout = "true";
   list.append(logout);
   menu.append(list);
-  return menu;
+  return augmentTopbarUserMenu(menu);
+}
+
+function getTopbarMenuTextByHref(fragment, fallback) {
+  const link = [...document.querySelectorAll(".topBarUserCenter a[href], .topBarUserCenter-mainPage a[href], .topBarMessageDetails a[href], .topBarMessageDetails-mainPage a[href]")]
+    .find((node) => node instanceof HTMLAnchorElement && (node.getAttribute("href") || node.href || "").includes(fragment));
+  const text = cleanupPostText(link?.textContent || "").replace(/\d+$/, "").trim();
+  return text || fallback;
+}
+
+function getTopbarMessageCountByHref(fragment) {
+  const link = [...document.querySelectorAll(".topBarMessageDetails a[href], .topBarMessageDetails-mainPage a[href]")]
+    .find((node) => node instanceof HTMLAnchorElement && (node.getAttribute("href") || node.href || "").includes(fragment));
+  const text = cleanupPostText(link?.querySelector?.(".message-counterLi")?.textContent || "");
+  return /^\d+$/.test(text) ? text : "";
+}
+
+function createSideTopbarMergedLink(item) {
+  const link = document.createElement("a");
+  link.href = buildCc98RouteHref(item.href);
+  link.className = "cc98-rebuild-side-topbar-menu-item";
+  link.dataset.cc98SideMenuKind = item.kind || "";
+  link.append(createElement("span", "cc98-rebuild-side-topbar-menu-label", item.label));
+  if (item.count) {
+    link.append(createElement("span", "cc98-rebuild-side-topbar-menu-count", item.count));
+  }
+  return link;
+}
+
+function createSideTopbarMergedButton(label, dataset = {}) {
+  const button = createElement("button", "cc98-rebuild-side-topbar-menu-item", label);
+  button.type = "button";
+  Object.entries(dataset).forEach(([key, value]) => {
+    button.dataset[key] = value;
+  });
+  return button;
+}
+
+function getTopbarMergedProfile(nativeEntry) {
+  const avatarNode = nativeEntry?.querySelector?.(".topBarUserImg img, .topBarUserInfo img, img[class*='avatar' i], img[class*='portrait' i]");
+  const avatar = makeWebVpnCc98ResourceUrl(
+    getPreferredHomeAvatarUrl(avatarNode)
+      || lastKnownTopbarAvatarUrl
+      || getStoredCc98UserAvatar()
+      || ""
+  );
+  const visibleName = cleanupPostText(nativeEntry?.querySelector?.(
+    ".topBarUserName, .cc98-rebuild-native-user-name-link, [class*='UserName'], [class*='userName']"
+  )?.textContent || "");
+  const candidateName = isLikelyGuestAccountName(visibleName) ? getStoredCc98UserName() : visibleName;
+  const name = isLikelyGuestAccountName(candidateName) ? "CC98 用户" : cleanupPostText(candidateName);
+  return {
+    avatar,
+    name: name || "CC98 用户"
+  };
+}
+
+function createSideTopbarMergedProfile(nativeEntry, profile) {
+  const link = createElement("a", "cc98-rebuild-side-topbar-profile");
+  link.href = buildCc98RouteHref("/usercenter");
+  link.setAttribute("aria-label", `进入 ${profile.name} 的个人中心`);
+  const avatar = createElement("span", "cc98-rebuild-side-topbar-profile-avatar");
+  if (profile.avatar) {
+    const image = document.createElement("img");
+    image.src = profile.avatar;
+    image.alt = "";
+    avatar.append(image);
+  } else {
+    avatar.textContent = profile.name.slice(0, 1).toUpperCase();
+  }
+  link.append(avatar, createElement("strong", "cc98-rebuild-side-topbar-profile-name", profile.name));
+  return link;
+}
+
+function createSideRailUserProfile(profile) {
+  const link = createElement("a", "cc98-rebuild-side-rail-profile");
+  link.href = buildCc98RouteHref("/usercenter");
+  link.setAttribute("aria-label", `进入 ${profile.name} 的个人中心`);
+  const avatar = createElement("span", "cc98-rebuild-side-rail-profile-avatar");
+  if (profile.avatar) {
+    const image = document.createElement("img");
+    image.src = profile.avatar;
+    image.alt = "";
+    avatar.append(image);
+  } else {
+    avatar.textContent = profile.name.slice(0, 1).toUpperCase();
+  }
+  const text = createElement("span", "cc98-rebuild-side-rail-profile-text");
+  text.append(
+    createElement("strong", "cc98-rebuild-side-rail-profile-name", profile.name),
+    createElement("small", "", "CC98 账号")
+  );
+  link.append(avatar, text);
+  return link;
+}
+
+function bindSideTopbarMergedMenuHover(nativeEntry, menu) {
+  if (!(nativeEntry instanceof HTMLElement) || !(menu instanceof HTMLElement)) {
+    return;
+  }
+
+  const cancelClose = () => {
+    const timer = nativeTopbarMenuCloseTimers.get(nativeEntry);
+    if (timer) {
+      window.clearTimeout(timer);
+      nativeTopbarMenuCloseTimers.delete(nativeEntry);
+    }
+  };
+  const setMenusHidden = (hidden) => {
+    nativeEntry.querySelectorAll(".cc98-rebuild-side-topbar-menu, .cc98-rebuild-side-rail-menu").forEach((node) => {
+      node.setAttribute("aria-hidden", hidden ? "true" : "false");
+    });
+  };
+  const trigger = nativeEntry.querySelector(":scope > .topBarUserInfo, .topBarUserInfo") || nativeEntry;
+  const isPointerInside = () => {
+    return nativeEntry.matches(":hover");
+  };
+  const holdOpen = () => {
+    cancelClose();
+    nativeEntry.classList.add("cc98-rebuild-side-menu-open");
+    setMenusHidden(false);
+  };
+  const scheduleClose = (respectFocus = false) => {
+    cancelClose();
+    const timer = window.setTimeout(() => {
+      nativeTopbarMenuCloseTimers.delete(nativeEntry);
+      const focused = nativeEntry.contains(document.activeElement);
+      if (isPointerInside() || (respectFocus && focused)) {
+        holdOpen();
+        return;
+      }
+      if (focused && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      nativeEntry.classList.remove("cc98-rebuild-side-menu-open");
+      setMenusHidden(true);
+    }, 360);
+    nativeTopbarMenuCloseTimers.set(nativeEntry, timer);
+  };
+
+  if (trigger.dataset.cc98MergedMenuTriggerBound !== "true") {
+    trigger.dataset.cc98MergedMenuTriggerBound = "true";
+    trigger.addEventListener("pointerenter", holdOpen);
+  }
+  if (nativeEntry.dataset.cc98MergedMenuBoundaryBound !== "true") {
+    nativeEntry.dataset.cc98MergedMenuBoundaryBound = "true";
+    nativeEntry.addEventListener("pointerenter", () => {
+      if (nativeEntry.classList.contains("cc98-rebuild-side-menu-open")) {
+        holdOpen();
+      }
+    });
+    nativeEntry.addEventListener("pointerleave", () => scheduleClose(false));
+  }
+  if (nativeEntry.dataset.cc98MergedMenuFocusBound !== "true") {
+    nativeEntry.dataset.cc98MergedMenuFocusBound = "true";
+    nativeEntry.addEventListener("focusin", holdOpen);
+    nativeEntry.addEventListener("focusout", () => scheduleClose(true));
+  }
+  if (menu.dataset.cc98HoverLockBound !== "true") {
+    menu.dataset.cc98HoverLockBound = "true";
+    menu.addEventListener("pointerenter", holdOpen);
+    menu.addEventListener("pointermove", holdOpen, { passive: true });
+  }
+  const closePending = nativeTopbarMenuCloseTimers.has(nativeEntry);
+  if (isPointerInside() || (!closePending && nativeEntry.contains(document.activeElement))) {
+    holdOpen();
+  } else if (!nativeEntry.classList.contains("cc98-rebuild-side-menu-open")) {
+    setMenusHidden(true);
+  }
+}
+
+function ensureSideTopbarMergedMenu(nativeEntry) {
+  if (!(nativeEntry instanceof HTMLElement)) {
+    return;
+  }
+  const sourceMenus = nativeEntry.querySelectorAll(".topBarUserCenter, .topBarUserCenter-mainPage, .topBarMessageDetails, .topBarMessageDetails-mainPage");
+  const existing = nativeEntry.querySelector(".cc98-rebuild-side-topbar-menu");
+  const existingSideRail = nativeEntry.querySelector(".cc98-rebuild-side-rail-menu");
+  if (nativeEntry.classList.contains("cc98-rebuild-guest-user-entry")) {
+    nativeEntry.classList.remove("cc98-rebuild-side-menu-ready");
+    sourceMenus.forEach((node) => node.classList?.remove("cc98-rebuild-side-topbar-source"));
+    existing?.remove();
+    existingSideRail?.remove();
+    return;
+  }
+
+  sourceMenus.forEach((node) => node.classList?.add("cc98-rebuild-side-topbar-source"));
+  nativeEntry.classList.add("cc98-rebuild-side-menu-ready");
+  const menu = existing instanceof HTMLElement
+    ? existing
+    : createElement("div", "cc98-rebuild-side-topbar-menu");
+  const sideRailMenu = existingSideRail instanceof HTMLElement
+    ? existingSideRail
+    : createElement("div", "cc98-rebuild-side-rail-menu");
+  const messageItems = [
+    ["/message/response", getTopbarMenuTextByHref("/message/response", "\u56de\u590d\u6211\u7684"), getTopbarMessageCountByHref("/message/response")],
+    ["/message/attme", getTopbarMenuTextByHref("/message/attme", "@ \u6211\u7684"), getTopbarMessageCountByHref("/message/attme")],
+    ["/message/system", getTopbarMenuTextByHref("/message/system", "\u7cfb\u7edf\u901a\u77e5"), getTopbarMessageCountByHref("/message/system")],
+    ["/message/message", getTopbarMenuTextByHref("/message/message", "\u6211\u7684\u79c1\u4fe1"), getTopbarMessageCountByHref("/message/message")]
+  ];
+  const userItems = [
+    ["/usercenter", getTopbarMenuTextByHref("/usercenter", "\u4e2a\u4eba\u4e2d\u5fc3")],
+    ["/signin", getTopbarMenuTextByHref("/signin", "\u7b7e\u5230")],
+    ["/usercenter/myhistory", "\u6d4f\u89c8\u8bb0\u5f55"],
+    ["/usercenter/myfavorites/order/0/group/0/1", "\u6211\u7684\u6536\u85cf"]
+  ];
+  const profile = getTopbarMergedProfile(nativeEntry);
+  const signature = JSON.stringify({ messageItems, userItems, profile });
+  if (menu.dataset.cc98MergedMenuSignature !== signature) {
+    const profileHeader = createSideTopbarMergedProfile(nativeEntry, profile);
+    const itemGrid = createElement("div", "cc98-rebuild-side-topbar-menu-grid");
+    messageItems.forEach(([href, label, count]) => {
+      itemGrid.append(createSideTopbarMergedLink({ href, label, count, kind: "message" }));
+    });
+    userItems.forEach(([href, label]) => {
+      itemGrid.append(createSideTopbarMergedLink({ href, label, kind: "user" }));
+    });
+    const logout = createSideTopbarMergedButton("\u9000\u51fa\u767b\u5f55", { cc98ForcedLogout: "true" });
+    logout.classList.add("cc98-rebuild-side-topbar-menu-logout");
+    menu.replaceChildren(profileHeader, itemGrid, logout);
+    menu.dataset.cc98MergedMenuSignature = signature;
+  }
+  if (sideRailMenu.dataset.cc98MergedMenuSignature !== signature) {
+    const profileHeader = createSideRailUserProfile(profile);
+    const itemList = createElement("div", "cc98-rebuild-side-rail-menu-list");
+    messageItems.forEach(([href, label, count]) => {
+      const link = createSideTopbarMergedLink({ href, label, count, kind: "message" });
+      link.classList.add("cc98-rebuild-side-rail-menu-item");
+      itemList.append(link);
+    });
+    userItems.forEach(([href, label]) => {
+      const link = createSideTopbarMergedLink({ href, label, kind: "user" });
+      link.classList.add("cc98-rebuild-side-rail-menu-item");
+      itemList.append(link);
+    });
+    const logout = createSideTopbarMergedButton("\u9000\u51fa\u767b\u5f55", { cc98ForcedLogout: "true" });
+    logout.classList.add("cc98-rebuild-side-rail-menu-item", "cc98-rebuild-side-rail-menu-logout");
+    sideRailMenu.replaceChildren(profileHeader, itemList, logout);
+    sideRailMenu.dataset.cc98MergedMenuSignature = signature;
+  }
+  if (!existing) {
+    nativeEntry.append(menu);
+  }
+  if (!existingSideRail) {
+    nativeEntry.append(sideRailMenu);
+  }
+  bindSideTopbarMergedMenuHover(nativeEntry, menu);
+  bindSideTopbarMergedMenuHover(nativeEntry, sideRailMenu);
 }
 
 function isLogoutMenuText(text) {
@@ -4850,7 +12358,8 @@ function isLogoutMenuText(text) {
 function findNativeLogoutControl() {
   return [...document.querySelectorAll(".topBarUserCenter li, .topBarUserCenter-mainPage li, .topBarUserCenter a, .topBarUserCenter-mainPage a")]
     .find((node) => node instanceof HTMLElement
-      && !node.closest("#cc98-comfort-app")
+      && !node.closest(".cc98-rebuild-side-topbar-menu")
+      && !node.closest("[data-cc98-forced-logout='true']")
       && isLogoutMenuText(node.textContent));
 }
 
@@ -4864,7 +12373,7 @@ function forceTopbarAuthNavigation(authLink, event) {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    location.assign("https://www.cc98.org/logOn");
+    location.assign(buildCc98RouteHref("/logOn"));
     return true;
   }
   if (/account\.cc98\.org/i.test(href) || text.includes("\u6ce8\u518c")) {
@@ -4918,13 +12427,72 @@ function parseStoredJsonLoose(value) {
   return null;
 }
 
+function parseJwtPayloadLoose(token) {
+  const value = String(token ?? "").trim();
+  const part = value.split(".")[1];
+  if (!part) {
+    return null;
+  }
+  try {
+    const normalized = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
+  }
+}
+
+function collectStoredCc98UserCandidates() {
+  const candidates = [];
+  const add = (value) => {
+    if (value && typeof value === "object" && !candidates.includes(value)) {
+      candidates.push(value);
+    }
+  };
+  try {
+    [
+      "userInfo",
+      "currentUser",
+      "current_user",
+      "profile",
+      "me",
+      "loginUser",
+      "access_token",
+      "id_token"
+    ].forEach((key) => {
+      const raw = localStorage.getItem(key);
+      add(parseStoredJsonLoose(raw));
+      add(parseJwtPayloadLoose(raw));
+    });
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index) || "";
+      if (!/(?:user|profile|me|token|login|account|auth)/i.test(key)) {
+        continue;
+      }
+      const raw = localStorage.getItem(key);
+      add(parseStoredJsonLoose(raw));
+      add(parseJwtPayloadLoose(raw));
+    }
+  } catch {
+    // Local storage access is best-effort.
+  }
+  return candidates;
+}
+
 function getStoredCc98UserInfo() {
   try {
-    const parsed = parseStoredJsonLoose(localStorage.getItem("userInfo"));
-    if (!parsed || typeof parsed !== "object") {
-      return null;
+    const candidates = collectStoredCc98UserCandidates();
+    for (const parsed of candidates) {
+      const profile = parsed?.user || parsed?.currentUser || parsed?.profile || parsed?.data || parsed?.me || parsed;
+      const id = readFirstObjectValueDeep(profile, ["id", "userId", "uid", "userID", "user_id", "cc98Id", "cc98UserId", "cc98_user_id", "sub"]);
+      const name = readFirstObjectValueDeep(profile, ["name", "userName", "username", "nickName", "nickname", "displayName", "preferred_username"]);
+      if (id || name) {
+        return profile;
+      }
     }
-    return parsed.user || parsed.currentUser || parsed.profile || parsed.data || parsed;
+    return null;
   } catch {
     return null;
   }
@@ -4943,22 +12511,395 @@ function readFirstObjectValue(source, keys) {
   return "";
 }
 
+function normalizeObjectKey(key) {
+  return String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function readFirstObjectValueDeep(source, keys, depth = 0, seen = new Set()) {
+  if (!source || typeof source !== "object" || depth > 5 || seen.has(source)) {
+    return "";
+  }
+  seen.add(source);
+  const normalizedKeys = new Set(keys.map(normalizeObjectKey));
+  for (const [key, value] of Object.entries(source)) {
+    if (normalizedKeys.has(normalizeObjectKey(key)) && value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  for (const key of ["user", "currentUser", "current_user", "profile", "data", "me", "result", "value"]) {
+    const value = readFirstObjectValueDeep(source[key], keys, depth + 1, seen);
+    if (value) {
+      return value;
+    }
+  }
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      const value = readFirstObjectValueDeep(item, keys, depth + 1, seen);
+      if (value) {
+        return value;
+      }
+    }
+    return "";
+  }
+  for (const value of Object.values(source)) {
+    const found = readFirstObjectValueDeep(value, keys, depth + 1, seen);
+    if (found) {
+      return found;
+    }
+  }
+  return "";
+}
+
+function normalizeCc98AccountId(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizeCc98AccountName(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isLikelyGuestAccountName(value) {
+  const text = cleanupPostText(value);
+  return !text
+    || text === "\u4e2a\u4eba"
+    || text === "\u4e2a\u4eba\u4e2d\u5fc3"
+    || text === "\u767b\u5f55"
+    || text === "\u6ce8\u518c";
+}
+
+function accountsReferToSameCc98User(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  const leftId = normalizeCc98AccountId(left.userId ?? left.id ?? left.uid ?? left.userID ?? left.cc98Id ?? left.cc98UserId ?? left.sub);
+  const rightId = normalizeCc98AccountId(right.userId ?? right.id ?? right.uid ?? right.userID ?? right.cc98Id ?? right.cc98UserId ?? right.sub);
+  if (leftId && rightId) {
+    return leftId === rightId;
+  }
+  const leftName = normalizeCc98AccountName(left.userName ?? left.name ?? left.username ?? left.nickName ?? left.displayName);
+  const rightName = normalizeCc98AccountName(right.userName ?? right.name ?? right.username ?? right.nickName ?? right.displayName);
+  return Boolean(leftName && rightName && leftName === rightName);
+}
+
+function accountsHaveSameCc98UserId(left, right) {
+  const leftId = normalizeCc98AccountId(left?.userId ?? left?.id ?? left?.uid ?? left?.userID ?? left?.cc98Id ?? left?.cc98UserId ?? left?.sub);
+  const rightId = normalizeCc98AccountId(right?.userId ?? right?.id ?? right?.uid ?? right?.userID ?? right?.cc98Id ?? right?.cc98UserId ?? right?.sub);
+  return Boolean(leftId && rightId && leftId === rightId);
+}
+
+function getCc98AccountId(source) {
+  return normalizeCc98AccountId(source?.userId ?? source?.id ?? source?.uid ?? source?.userID ?? source?.cc98Id ?? source?.cc98UserId ?? source?.sub);
+}
+
+function bindingMatchesOrIsIndeterminate(binding, account) {
+  if (!binding || !account) {
+    return false;
+  }
+  const bindingId = getCc98AccountId(binding);
+  const accountId = getCc98AccountId(account);
+  if (bindingId && accountId) {
+    return bindingId === accountId;
+  }
+  if (!accountId) {
+    return accountsReferToSameCc98User(binding, account);
+  }
+  return accountsReferToSameCc98User(binding, account);
+}
+
+function bindingClearlyMismatchesWebAccount(binding, account) {
+  const bindingId = getCc98AccountId(binding);
+  const accountId = getCc98AccountId(account);
+  return Boolean(bindingId && accountId && bindingId !== accountId);
+}
+
+function getCurrentCc98WebAccount() {
+  const info = getStoredCc98UserInfo();
+  const storedUserId = readFirstObjectValueDeep(info, ["id", "userId", "uid", "userID", "user_id", "cc98Id", "cc98UserId", "cc98_user_id", "sub"]);
+  const storedUserName = readFirstObjectValueDeep(info, ["name", "userName", "username", "nickName", "nickname", "displayName", "preferred_username"]);
+  const topbarName = cleanupPostText(document.querySelector(
+    ".topBarUserName, .cc98-rebuild-native-user-name-link, .topBarUserInfo [class*='UserName'], .topBarUserInfo [class*='userName']"
+  )?.textContent || "");
+  const userId = normalizeCc98AccountId(storedUserId);
+  const userName = cleanupPostText(storedUserName || topbarName);
+  const hasGuestLink = Boolean(document.querySelector(
+    ".topBarUserInfo a[href*='/logOn'], .topBarUserInfo a[href*='/logon'], .cc98-rebuild-guest-user-entry a[href*='/logOn'], .cc98-rebuild-guest-user-entry a[href*='/logon']"
+  ));
+  if (hasGuestLink && !userId && isLikelyGuestAccountName(userName)) {
+    return null;
+  }
+  if (!userId && isLikelyGuestAccountName(userName) && !hasFreshCc98LoginSession()) {
+    return null;
+  }
+  if (!userId && !userName) {
+    return null;
+  }
+  return {
+    userId,
+    userName: isLikelyGuestAccountName(userName) ? "" : userName
+  };
+}
+
+function hasVisibleCc98GuestLoginEntry() {
+  return [...document.querySelectorAll(
+    ".topBarUserInfo a[href*='/logOn'], .topBarUserInfo a[href*='/logon'], .topBarText a[href*='/logOn'], .topBarText a[href*='/logon'], .cc98-rebuild-guest-user-entry a[href*='/logOn'], .cc98-rebuild-guest-user-entry a[href*='/logon']"
+  )].some((node) => node instanceof HTMLElement && getComputedStyle(node).display !== "none");
+}
+
+function readOpenIdBindingStateFromStorage() {
+  return new Promise((resolve) => {
+    try {
+      if (!globalThis.chrome?.storage?.local?.get) {
+        resolve(null);
+        return;
+      }
+      globalThis.chrome.storage.local.get(OPENID_BINDING_STORAGE_KEY, (result) => {
+        if (globalThis.chrome.runtime?.lastError) {
+          resolve(null);
+          return;
+        }
+        const binding = result?.[OPENID_BINDING_STORAGE_KEY];
+        resolve(binding?.bound ? binding : null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function syncOpenIdBindingWithWebAccount() {
+  const binding = await readOpenIdBindingStateFromStorage();
+  if (!binding) {
+    scheduleOpenIdBindPromptAfterLogin();
+    return;
+  }
+  const account = getCurrentCc98WebAccount();
+  if (account) {
+    if (bindingClearlyMismatchesWebAccount(binding, account)) {
+      await clearOpenIdBindingForCc98Logout();
+      markOpenIdBindPromptAfterLogin();
+      scheduleOpenIdBindPromptAfterLogin();
+    }
+    return;
+  }
+  if (hasVisibleCc98GuestLoginEntry()) {
+    await clearOpenIdBindingForCc98Logout();
+  }
+}
+
+async function clearOpenIdBindingForCc98Logout() {
+  clearCachedSecurityWatermarkCode();
+  stopSecurityWatermark();
+  try {
+    const result = await sendExtensionMessage({ type: "CC98_REBORN_OPENID_LOGOUT", reason: "cc98-web-logout" });
+    if (result?.ok) {
+      return;
+    }
+    globalThis.chrome?.storage?.local?.remove?.(OPENID_BINDING_STORAGE_KEY);
+  } catch {
+    try {
+      globalThis.chrome?.storage?.local?.remove?.(OPENID_BINDING_STORAGE_KEY);
+    } catch {
+      // Storage cleanup is best-effort during native logout navigation.
+    }
+  }
+}
+
+function markOpenIdBindPromptAfterLogin() {
+  try {
+    sessionStorage.setItem(OPENID_BIND_PROMPT_AFTER_LOGIN_KEY, String(Date.now()));
+  } catch {
+    // The prompt is a convenience; login redirect still works without it.
+  }
+}
+
+function consumeOpenIdBindPromptMark() {
+  try {
+    const markedAt = Number.parseInt(sessionStorage.getItem(OPENID_BIND_PROMPT_AFTER_LOGIN_KEY) || "", 10);
+    if (!Number.isFinite(markedAt) || Date.now() - markedAt > 120000) {
+      sessionStorage.removeItem(OPENID_BIND_PROMPT_AFTER_LOGIN_KEY);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearOpenIdBindPromptMark() {
+  try {
+    sessionStorage.removeItem(OPENID_BIND_PROMPT_AFTER_LOGIN_KEY);
+  } catch {
+    // No-op.
+  }
+}
+
+function dismissOpenIdBindPrompt(prompt) {
+  prompt?.remove?.();
+}
+
+async function bindOpenIdForCurrentWebAccount(prompt, account) {
+  const status = prompt?.querySelector?.(".cc98-rebuild-openid-bind-status");
+  const bindButton = prompt?.querySelector?.(".cc98-rebuild-openid-bind-primary");
+  const refreshButton = prompt?.querySelector?.(".cc98-rebuild-openid-bind-refresh");
+  const exitButton = prompt?.querySelector?.(".cc98-rebuild-openid-bind-exit");
+  if (bindButton) {
+    bindButton.disabled = true;
+  }
+  if (refreshButton) {
+    refreshButton.disabled = true;
+  }
+  if (exitButton) {
+    exitButton.disabled = true;
+  }
+  if (status) {
+    status.textContent = "\u6b63\u5728\u6253\u5f00 CC98 OpenID \u6388\u6743\u7a97\u53e3...";
+    status.dataset.state = "pending";
+  }
+  const result = await sendExtensionMessage({
+    type: "CC98_REBORN_OPENID_LOGIN",
+    expectedAccount: account,
+    authTransport: isWebVpnHost() ? "webvpn" : "direct"
+  });
+  if (result?.ok && result.binding?.bound) {
+    clearOpenIdBindPromptMark();
+    if (status) {
+      status.textContent = "\u7ed1\u5b9a\u5b8c\u6210\u3002";
+      status.dataset.state = "success";
+    }
+    ensureSecurityWatermark({ force: true });
+    window.setTimeout(() => dismissOpenIdBindPrompt(prompt), 450);
+    return;
+  }
+  if (bindButton) {
+    bindButton.disabled = false;
+  }
+  if (refreshButton) {
+    refreshButton.disabled = false;
+  }
+  if (exitButton) {
+    exitButton.disabled = false;
+  }
+  if (status) {
+    status.textContent = `\u7ed1\u5b9a\u5931\u8d25\uff1a${result?.error || "OpenID \u6388\u6743\u672a\u5b8c\u6210"}`;
+    status.dataset.state = "error";
+  }
+}
+
+async function exitCurrentCc98AccountFromOpenIdPrompt(prompt) {
+  const status = prompt?.querySelector?.(".cc98-rebuild-openid-bind-status");
+  prompt?.querySelectorAll?.(".cc98-rebuild-openid-bind-actions button").forEach((button) => {
+    button.disabled = true;
+  });
+  if (status) {
+    status.textContent = "\u6b63\u5728\u9000\u51fa\u6b64\u8d26\u53f7...";
+    status.dataset.state = "pending";
+  }
+  clearOpenIdBindPromptMark();
+  await clearOpenIdBindingForCc98Logout();
+  const nativeLogout = findNativeLogoutControl();
+  if (nativeLogout instanceof HTMLElement) {
+    nativeLogout.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    }));
+  }
+  scheduleLogoutRedirect();
+}
+
+async function maybeShowOpenIdBindPromptAfterLogin() {
+  if (!document.body || isCc98LoginPath() || isOpenIdLoginCenterPage()) {
+    return;
+  }
+  const hadPromptMark = consumeOpenIdBindPromptMark();
+  const account = getCurrentCc98WebAccount();
+  if (!account) {
+    return;
+  }
+  const binding = await readOpenIdBindingStateFromStorage();
+  if (binding && bindingMatchesOrIsIndeterminate(binding, account)) {
+    clearOpenIdBindPromptMark();
+    document.querySelector(".cc98-rebuild-openid-bind-overlay")?.remove();
+    return;
+  }
+  if (binding && bindingClearlyMismatchesWebAccount(binding, account)) {
+    await clearOpenIdBindingForCc98Logout();
+  }
+  if (document.querySelector(".cc98-rebuild-openid-bind-overlay")) {
+    return;
+  }
+
+  const overlay = createElement("div", "cc98-rebuild-openid-bind-overlay");
+  const dialog = createElement("section", "cc98-rebuild-openid-bind-dialog");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", "\u7ed1\u5b9a CC98 OpenID");
+  const title = createElement("h2", "", "\u7ed1\u5b9a CC98 OpenID");
+  const accountLabel = account.userName || (account.userId ? `UID ${account.userId}` : "\u5f53\u524d\u8d26\u53f7");
+  const message = createElement("p", "", `\u5f53\u524d\u7f51\u9875\u8d26\u53f7\uff1a${accountLabel}\u3002\u6839\u636e\u8bba\u575b\u5236\u5ea6\uff0c\u8bf7\u4f7f\u7528\u540c\u4e00\u4e2a CC98 \u8d26\u53f7\u5b8c\u6210 OpenID \u6388\u6743\uff1b\u6269\u5c55\u4f1a\u4ee5 UID \u6821\u9a8c\u8d26\u53f7\u4e00\u81f4\u6027\u3002`);
+  const status = createElement("p", "cc98-rebuild-openid-bind-status", "");
+  const actions = createElement("div", "cc98-rebuild-openid-bind-actions");
+  const bindButton = createButton("cc98-rebuild-openid-bind-primary", "\u7ed1\u5b9a\u540c\u4e00\u8d26\u53f7", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    bindOpenIdForCurrentWebAccount(overlay, account);
+  });
+  const refreshButton = createButton("cc98-rebuild-openid-bind-refresh", "\u5237\u65b0", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    actions.querySelectorAll("button").forEach((button) => {
+      button.disabled = true;
+    });
+    status.textContent = "\u6b63\u5728\u5237\u65b0\u9875\u9762\u4e0e\u7ed1\u5b9a\u72b6\u6001...";
+    status.dataset.state = "pending";
+    window.location.reload();
+  });
+  const exitButton = createButton("cc98-rebuild-openid-bind-exit", "\u9000\u51fa\u6b64\u8d26\u53f7", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    exitCurrentCc98AccountFromOpenIdPrompt(overlay);
+  });
+  if (!account.userId) {
+    bindButton.disabled = true;
+    status.textContent = "\u5f53\u524d\u9875\u9762\u672a\u80fd\u8bfb\u53d6\u5230 UID\uff0c\u8bf7\u5237\u65b0 CC98 \u9875\u9762\u540e\u518d\u7ed1\u5b9a\u3002";
+    status.dataset.state = "error";
+  } else if (!hadPromptMark) {
+    status.textContent = "\u672a\u5b8c\u6210\u7ed1\u5b9a\u524d\uff0c\u9875\u9762\u4f1a\u4fdd\u6301\u906e\u7f69\u72b6\u6001\u3002";
+  }
+  actions.append(refreshButton, exitButton, bindButton);
+  dialog.append(title, message, status, actions);
+  overlay.append(dialog);
+  document.body.append(overlay);
+}
+
+function scheduleOpenIdBindPromptAfterLogin() {
+  if (openIdBindPromptTimer) {
+    window.clearTimeout(openIdBindPromptTimer);
+  }
+  [350, 1200, 2600, 5200].forEach((delay) => {
+    window.setTimeout(maybeShowOpenIdBindPromptAfterLogin, delay);
+  });
+  openIdBindPromptTimer = window.setTimeout(() => {
+    openIdBindPromptTimer = null;
+  }, 5600);
+}
+
 function getStoredCc98UserName() {
   const info = getStoredCc98UserInfo();
-  return readFirstObjectValue(info, ["name", "userName", "username", "nickName", "nickname"]) || "个人中心";
+  return readFirstObjectValueDeep(info, ["name", "userName", "username", "nickName", "nickname", "displayName", "preferred_username"]) || "\u4e2a\u4eba\u4e2d\u5fc3";
 }
 
 function getStoredCc98UserAvatar() {
   const info = getStoredCc98UserInfo();
-  const avatar = readFirstObjectValue(info, ["portraitUrl", "portrait", "avatarUrl", "avatar", "photoUrl", "faceUrl", "face"]);
-  return avatar ? makeAbsoluteCc98Url(avatar) : "";
+  const avatar = readFirstObjectValueDeep(info, ["portraitUrl", "portrait", "avatarUrl", "avatar", "photoUrl", "faceUrl", "face", "picture"]);
+  return avatar ? makeWebVpnCc98ResourceUrl(avatar) : "";
 }
 
 function createForcedTopbarUserEntry() {
   const entry = createElement("div", "cc98-rebuild-native-user-entry cc98-rebuild-forced-user-entry");
   entry.tabIndex = 0;
   const userInfo = createElement("div", "topBarUserInfo cc98-rebuild-forced-user-info");
-  const avatarUrl = getStoredCc98UserAvatar();
+  const avatarUrl = lastKnownTopbarAvatarUrl || getStoredCc98UserAvatar();
   if (avatarUrl) {
     const avatarWrap = createElement("div", "topBarUserImg");
     const avatar = document.createElement("img");
@@ -4975,17 +12916,119 @@ function createForcedTopbarUserEntry() {
   return prepareNativeTopbarUserEntry(entry);
 }
 
+function createPublicProfileTopbarSnapshot() {
+  if (!isPublicUserProfilePage()) {
+    return null;
+  }
+  const source = getNativeUserEntry();
+  if (!(source instanceof HTMLElement) || source.closest("#cc98-comfort-app")) {
+    return null;
+  }
+  const isGuestSource = Boolean(source.querySelector('a[href*="/logOn"], a[href*="/logon"], a[href*="account.cc98.org"]'));
+  const sourceAvatar = source.querySelector(".topBarUserImg > img, .topBarUserInfo img");
+  const sourceName = source.querySelector(".topBarUserName, [class*='UserName'], [class*='userName']");
+  if (!isGuestSource && (!(sourceAvatar instanceof HTMLImageElement) || !cleanupPostText(sourceName?.textContent))) {
+    return null;
+  }
+  const snapshot = source.cloneNode(true);
+  snapshot.querySelectorAll(".cc98-rebuild-side-topbar-menu, .cc98-rebuild-side-rail-menu").forEach((node) => node.remove());
+  [snapshot, ...snapshot.querySelectorAll("*")].forEach((node) => {
+    if (!(node instanceof Element)) {
+      return;
+    }
+    [...node.attributes].forEach((attribute) => {
+      if (attribute.name === "id" || attribute.name.startsWith("data-cc98-")) {
+        node.removeAttribute(attribute.name);
+      }
+    });
+    [...node.classList].forEach((className) => {
+      if (className.startsWith("cc98-rebuild-")) {
+        node.classList.remove(className);
+      }
+    });
+  });
+  snapshot.classList.add("cc98-rebuild-topbar-snapshot");
+  snapshot.querySelectorAll("img").forEach((image) => {
+    const src = getPreferredHomeAvatarUrl(image);
+    if (src) {
+      image.src = src;
+    }
+    image.removeAttribute("srcset");
+    image.loading = "eager";
+    image.decoding = "async";
+  });
+  return prepareNativeTopbarUserEntry(snapshot);
+}
+
+function syncRebuiltTopbarAvatar(app = document.querySelector("#cc98-comfort-app")) {
+  eagerNativeHomeAvatarImages();
+  const actions = app?.querySelector?.(".cc98-rebuild-actions");
+  if (!(actions instanceof HTMLElement) || !lastKnownTopbarAvatarUrl) {
+    return;
+  }
+
+  let nativeEntry = actions.querySelector(".cc98-rebuild-native-user-entry");
+  if (!(nativeEntry instanceof HTMLElement)) {
+    const forcedEntry = createForcedTopbarUserEntry();
+    const fallback = actions.querySelector(".cc98-rebuild-user-fallback");
+    if (fallback) {
+      fallback.replaceWith(forcedEntry);
+    } else {
+      actions.append(forcedEntry);
+    }
+    return;
+  }
+  if (nativeEntry.classList.contains("cc98-rebuild-guest-user-entry")) {
+    return;
+  }
+
+  const userInfo = nativeEntry.querySelector(":scope > .topBarUserInfo, .topBarUserInfo") || nativeEntry;
+  let avatar = userInfo.querySelector(":scope > .topBarUserImg > img, .topBarUserImg > img");
+  if (!(avatar instanceof HTMLImageElement)) {
+    const avatarWrap = createElement("div", "topBarUserImg");
+    avatar = document.createElement("img");
+    avatar.alt = "";
+    avatarWrap.append(avatar);
+    const label = userInfo.querySelector(".topBarUserName, .cc98-rebuild-native-user-name-link");
+    userInfo.insertBefore(avatarWrap, label instanceof Node ? label : userInfo.firstChild);
+  }
+  if (avatar.getAttribute("src") !== lastKnownTopbarAvatarUrl) {
+    avatar.src = lastKnownTopbarAvatarUrl;
+  }
+  avatar.loading = "eager";
+  avatar.decoding = "async";
+  ensureSideTopbarMergedMenu(nativeEntry);
+}
+
 function prepareNativeTopbarUserEntry(nativeEntry) {
   if (!(nativeEntry instanceof HTMLElement)) {
     return null;
   }
-  rememberReparentedNativeNode(nativeEntry);
+  if (!nativeEntry.classList.contains("cc98-rebuild-topbar-snapshot")) {
+    rememberReparentedNativeNode(nativeEntry);
+  }
   nativeEntry.classList.add("cc98-rebuild-native-user-entry");
-  nativeEntry.classList.toggle(
-    "cc98-rebuild-guest-user-entry",
-    Boolean(nativeEntry.querySelector('a[href*="/logOn"], a[href*="/logon"], a[href*="account.cc98.org"]'))
-  );
+  const isGuestEntry = Boolean(nativeEntry.querySelector('a[href*="/logOn"], a[href*="/logon"], a[href*="account.cc98.org"]'));
+  nativeEntry.classList.toggle("cc98-rebuild-guest-user-entry", isGuestEntry);
+  if (isGuestEntry) {
+    lastKnownTopbarAvatarUrl = "";
+  }
+  const avatar = nativeEntry.querySelector(".topBarUserImg > img, .topBarUserInfo img");
+  if (avatar instanceof HTMLImageElement) {
+    const avatarUrl = getPreferredHomeAvatarUrl(avatar);
+    if (avatarUrl && avatar.getAttribute("src") !== avatarUrl) {
+      avatar.src = avatarUrl;
+    }
+    avatar.loading = "eager";
+    avatar.decoding = "async";
+    if (avatar.dataset.cc98TopbarAvatarBound !== "true") {
+      avatar.dataset.cc98TopbarAvatarBound = "true";
+      avatar.addEventListener("load", () => syncRebuiltTopbarAvatar());
+    }
+  }
   attachNativeTopbarDropdowns(nativeEntry);
+  attachHomeTopbarMessageIfMissing(nativeEntry);
+  ensureSideTopbarMergedMenu(nativeEntry);
 
   if (!nativeTopbarUserStabilizers.has(nativeEntry)) {
     nativeTopbarUserStabilizers.add(nativeEntry);
@@ -5000,7 +13043,7 @@ function prepareNativeTopbarUserEntry(nativeEntry) {
         if (/logon|logOn/i.test(href) || text.includes("登录")) {
           event.preventDefault();
           event.stopPropagation();
-          location.href = "https://www.cc98.org/logOn";
+          location.href = buildCc98RouteHref("/logOn");
           return;
         }
         if (/account\.cc98\.org/i.test(href) || text.includes("注册")) {
@@ -5010,8 +13053,8 @@ function prepareNativeTopbarUserEntry(nativeEntry) {
           return;
         }
       }
-      const link = event.target?.closest?.(".messageTopBar[href], .topBarMessage a[href], .topBarUserCenter a[href], .topBarUserCenter-mainPage a[href], .topBarMessageDetails a[href], .topBarMessageDetails-mainPage a[href]");
-      const menuItem = event.target?.closest?.(".topBarUserCenter li, .topBarUserCenter-mainPage li, .topBarUserCenter a, .topBarUserCenter-mainPage a");
+      const link = event.target?.closest?.(".messageTopBar[href], .topBarMessage a[href], .topBarUserCenter a[href], .topBarUserCenter-mainPage a[href], .topBarMessageDetails a[href], .topBarMessageDetails-mainPage a[href], .cc98-rebuild-side-topbar-menu a[href], .cc98-rebuild-side-rail-menu a[href]");
+      const menuItem = event.target?.closest?.(".topBarUserCenter li, .topBarUserCenter-mainPage li, .topBarUserCenter a, .topBarUserCenter-mainPage a, .cc98-rebuild-side-topbar-menu li, .cc98-rebuild-side-topbar-menu a, .cc98-rebuild-side-topbar-menu button, .cc98-rebuild-side-rail-menu a, .cc98-rebuild-side-rail-menu button");
       const forcedLogout = event.target?.closest?.("[data-cc98-forced-logout='true']");
       const isLogoutAction = Boolean(forcedLogout)
         || (menuItem instanceof HTMLElement && isLogoutMenuText(menuItem.textContent));
@@ -5036,7 +13079,7 @@ function prepareNativeTopbarUserEntry(nativeEntry) {
       }
       event.preventDefault();
       event.stopPropagation();
-      location.href = makeAbsoluteCc98Url(link.getAttribute("href") || link.href);
+      navigateToRebuiltHref(link.getAttribute("href") || link.href);
     }, true);
   }
 
@@ -5049,7 +13092,7 @@ function prepareNativeTopbarUserEntry(nativeEntry) {
     const goUserCenter = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      location.href = `${location.origin}/usercenter`;
+      location.href = buildCc98RouteHref("/usercenter");
     };
     userName.addEventListener("click", goUserCenter);
     userName.addEventListener("keydown", (event) => {
@@ -5065,6 +13108,25 @@ function stabilizeTopbarUserEntry(app = document.querySelector("#cc98-comfort-ap
   const actions = app?.querySelector?.(".cc98-rebuild-actions");
   if (!(actions instanceof HTMLElement)) {
     return;
+  }
+  if (isPublicUserProfilePage()) {
+    const existingSnapshot = actions.querySelector(".cc98-rebuild-topbar-snapshot");
+    if (existingSnapshot instanceof HTMLElement) {
+      prepareNativeTopbarUserEntry(existingSnapshot);
+      return;
+    }
+    const snapshot = createPublicProfileTopbarSnapshot();
+    if (snapshot instanceof HTMLElement) {
+      const current = actions.querySelector(
+        ".cc98-rebuild-user-fallback, .cc98-rebuild-forced-user-entry, .cc98-rebuild-native-user-entry"
+      );
+      if (current instanceof HTMLElement) {
+        current.replaceWith(snapshot);
+      } else {
+        actions.append(snapshot);
+      }
+      return;
+    }
   }
   const existing = actions.querySelector(".cc98-rebuild-native-user-entry");
   if (existing instanceof HTMLElement && !existing.classList.contains("cc98-rebuild-forced-user-entry")) {
@@ -5096,7 +13158,29 @@ function stabilizeTopbarUserEntry(app = document.querySelector("#cc98-comfort-ap
   }
 }
 
+function clearTopbarStabilizeTimers() {
+  topbarStabilizeTimers.forEach((timer) => window.clearTimeout(timer));
+  topbarStabilizeTimers = [];
+}
+
+function scheduleTopbarStabilization(app) {
+  clearTopbarStabilizeTimers();
+  const delays = [120, 480, 1200, 2400, 4200, 6500];
+  topbarStabilizeTimers = delays.map((delay, index) => window.setTimeout(() => {
+    if (app?.isConnected && document.querySelector("#cc98-comfort-app") === app) {
+      stabilizeTopbarUserEntry(app);
+    }
+    if (index === delays.length - 1) {
+      topbarStabilizeTimers = [];
+    }
+  }, delay));
+}
+
 function renderTopbarUserEntry() {
+  const publicProfileSnapshot = createPublicProfileTopbarSnapshot();
+  if (publicProfileSnapshot) {
+    return publicProfileSnapshot;
+  }
   const nativeEntry = prepareNativeTopbarUserEntry(getNativeUserEntry());
   if (nativeEntry) {
     return nativeEntry;
@@ -5104,7 +13188,7 @@ function renderTopbarUserEntry() {
   if (hasFreshCc98LoginSession()) {
     return createForcedTopbarUserEntry();
   }
-  const fallback = createLink("cc98-rebuild-user-fallback", "个人", `${location.origin}/userCenter`);
+  const fallback = createLink("cc98-rebuild-user-fallback cc98-rebuild-user-fallback-nav", "个人中心", buildCc98RouteHref("/usercenter"));
   fallback.setAttribute("aria-label", "个人中心");
   return fallback;
 }
@@ -5114,9 +13198,7 @@ function shouldBlockRebuiltItem(item) {
     return "";
   }
 
-  const blockedBoards = parseList(lastSettings.blockedBoards);
-  const blockedKeywords = parseList(lastSettings.blockedTitleKeywords);
-  const blockedUserIds = parseList(lastSettings.blockedUserIds).map((uid) => uid.replace(/\D/g, "")).filter(Boolean);
+  const { boards: blockedBoards, titleKeywords: blockedKeywords, userIds: blockedUserIds } = getBlacklistRules(lastSettings);
   const matchedBoard = blockedBoards.find((rule) => item.board && normalizeText(item.board).includes(normalizeText(rule)));
   if (matchedBoard) {
     return `版面：${matchedBoard}`;
@@ -5125,26 +13207,115 @@ function shouldBlockRebuiltItem(item) {
   if (matchedKeyword) {
     return `关键词：${matchedKeyword}`;
   }
-  const matchedUid = blockedUserIds.find((uid) => item.uid === uid);
-  if (matchedUid) {
-    return `UID：${matchedUid}`;
+  const matchedUserRule = blockedUserIds.find((rule) => userRuleMatchesIdentity(rule, {
+    id: item.user,
+    user: item.user,
+    uid: item.uid
+  }));
+  if (matchedUserRule) {
+    return normalizeBlockedUid(matchedUserRule) ? `UID：${matchedUserRule}` : `用户 ID：${matchedUserRule}`;
   }
   return "";
 }
 
-function renderBlockedPlaceholder(reason) {
+function renderBlockedPlaceholder(reason, options = {}) {
   const placeholder = createElement("article", "cc98-rebuild-card cc98-rebuild-blocked");
   placeholder.append(createElement("div", "cc98-rebuild-card-title", `${lastSettings.placeholderText} · ${reason}`));
+  if (typeof options.onReveal === "function") {
+    const actions = createElement("div", "cc98-rebuild-blocked-actions");
+    actions.append(createButton("cc98-rebuild-mini-action", "显示", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      options.onReveal();
+    }));
+    placeholder.append(actions);
+  }
   return placeholder;
+}
+
+function createCardMetaElement(text) {
+  const meta = createElement("p", "cc98-rebuild-card-meta");
+  const value = String(text ?? "").trim();
+  const boardCountMatch = value.match(/^(\u4eca\u65e5\s*\d+)\s+(\u603b\u6570\s*\d+)$/);
+  if (boardCountMatch) {
+    meta.append(boardCountMatch[1], document.createElement("br"), boardCountMatch[2]);
+    return meta;
+  }
+  meta.textContent = value;
+  return meta;
+}
+
+function createReadLaterCardButton(item) {
+  const readLaterItem = getReadLaterItemFromTopicItem(item);
+  if (!readLaterItem) {
+    return null;
+  }
+  const saved = isReadLaterSaved(readLaterItem.href);
+  const button = createButton(`cc98-rebuild-read-later-button${saved ? " is-saved" : ""}`, "\ud83d\udd57", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isReadLaterSaved(readLaterItem.href)) {
+      removeReadLaterItem(readLaterItem.key);
+      showRebuiltTransientToast(button, "\u5df2\u79fb\u51fa\u7a0d\u540e\u518d\u770b");
+    } else {
+      upsertReadLaterItem(readLaterItem);
+      showRebuiltTransientToast(button, "\u5df2\u52a0\u5165\u7a0d\u540e\u518d\u770b");
+    }
+  });
+  button.type = "button";
+  button.dataset.readLaterKey = readLaterItem.key;
+  button.dataset.readLaterTitle = readLaterItem.title;
+  button.title = saved ? "\u79fb\u51fa\u7a0d\u540e\u518d\u770b" : "\u52a0\u5165\u7a0d\u540e\u518d\u770b";
+  button.setAttribute("aria-label", `${button.title}: ${readLaterItem.title}`);
+  return button;
+}
+
+function renderTopicCardMedia(item) {
+  const mediaItems = Array.isArray(item?.media)
+    ? item.media.filter((media) => media?.src)
+    : [];
+  if (!mediaItems.length) {
+    return null;
+  }
+  const gallery = createElement(
+    "div",
+    `cc98-rebuild-topic-media-grid count-${Math.min(mediaItems.length, 6)}`
+  );
+  gallery.setAttribute("aria-label", "\u4e3b\u9898\u5a92\u4f53\u9884\u89c8");
+  mediaItems.slice(0, 6).forEach((media) => {
+    const image = createElement("img", "cc98-rebuild-content-image cc98-rebuild-topic-media-image");
+    image.src = media.src;
+    image.alt = media.alt || "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    gallery.append(image);
+  });
+  return gallery;
 }
 
 function renderTopicCard(item) {
   const reason = shouldBlockRebuiltItem(item);
-  if (reason) {
-    return renderBlockedPlaceholder(reason);
+  if (reason && !isBlacklistItemRevealed(item)) {
+    return renderBlockedPlaceholder(reason, {
+      onReveal: () => {
+        revealBlacklistItem(item);
+        scheduleRebuild();
+      }
+    });
   }
 
   const card = createElement("article", "cc98-rebuild-card");
+  if (item.viewMode === "card" || item.viewMode === "media") {
+    card.classList.add("cc98-rebuild-topic-card-view");
+  }
+  if (item.viewMode === "media") {
+    card.classList.add("cc98-rebuild-topic-media-only-view");
+  }
+  const readLaterButton = createReadLaterCardButton(item);
+  if (readLaterButton) {
+    card.classList.add("has-read-later");
+    card.append(readLaterButton);
+  }
   const top = createElement("div", "cc98-rebuild-card-top");
   if (item.board) {
     top.append(createLink("cc98-rebuild-chip", item.board, item.boardHref));
@@ -5155,8 +13326,12 @@ function renderTopicCard(item) {
   }
   card.append(top);
   card.append(createLink("cc98-rebuild-card-title", item.title, item.href));
+  const media = renderTopicCardMedia(item);
+  if (media) {
+    card.append(media);
+  }
   if (item.meta) {
-    card.append(createElement("p", "cc98-rebuild-card-meta", item.meta));
+    card.append(createCardMetaElement(item.meta));
   }
   if (item.hoverMeta || item.user || item.replyCount) {
     const hoverMeta = createElement("div", "cc98-rebuild-hover-meta");
@@ -5175,6 +13350,23 @@ function renderTopicCard(item) {
     const rank = createElement("span", "cc98-rebuild-rank", String(item.rank));
     rank.style.setProperty("--cc98-rank-hue", String(((Number(item.rank) - 1) * 32) % 360));
     card.append(rank);
+    if (item.rankMovement) {
+      card.classList.add(`cc98-rebuild-rank-${item.rankMovement}`);
+      const motionText = item.rankMovement === "new"
+        ? "\u65b0"
+        : `${item.rankMovement === "up" ? "\u25b2" : "\u25bc"}${item.rankDelta || ""}`;
+      const motionClass = [
+        "cc98-rebuild-rank-motion",
+        `cc98-rebuild-rank-motion-${item.rankMovement}`,
+        item.rankMovementAnimated ? "is-animated" : ""
+      ].filter(Boolean).join(" ");
+      const motion = createElement("span", motionClass, motionText);
+      const motionLabel = item.rankMovement === "up"
+        ? `\u6392\u540d\u4e0a\u5347 ${item.rankDelta || 0}`
+        : (item.rankMovement === "down" ? `\u6392\u540d\u4e0b\u964d ${item.rankDelta || 0}` : "\u65b0\u589e\u70ed\u95e8");
+      motion.setAttribute("aria-label", motionLabel);
+      card.append(motion);
+    }
   }
   return card;
 }
@@ -5234,10 +13426,180 @@ function renderHighlightedTopicCard(item, terms) {
   return card;
 }
 
+function renderPostVoteContent(voteContent) {
+  if (!(voteContent instanceof HTMLElement)) {
+    return null;
+  }
+  rememberReparentedNativeNode(voteContent);
+  voteContent.classList.add("cc98-rebuild-native-vote");
+  voteContent.querySelectorAll("button").forEach((button) => {
+    button.classList.add("cc98-rebuild-native-vote-button");
+  });
+  return voteContent;
+}
+
+function getPostAuthorFollowState(action) {
+  const text = cleanupPostText(getActionText(action?.control) || action?.text || "");
+  const followed = /^(?:\u53d6\u5173|\u53d6\u6d88\u5173\u6ce8)$/.test(text);
+  return {
+    followed,
+    label: followed ? "\u53d6\u6d88\u5173\u6ce8" : "\u5173\u6ce8"
+  };
+}
+
+function renderPostAuthorFollowAction(action) {
+  let lastActivatedAt = 0;
+  const button = createButton("cc98-rebuild-post-author-action is-follow", "", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const now = Date.now();
+    if (now - lastActivatedAt < 520) {
+      return;
+    }
+    lastActivatedAt = now;
+    const control = resolveCurrentProxyAction(action);
+    if (!(control instanceof HTMLElement)) {
+      showRebuiltTransientToast(button, "\u5173\u6ce8\u63a7\u4ef6\u5df2\u66f4\u65b0\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21");
+      scheduleRebuild();
+      return;
+    }
+    button.classList.add("is-pending");
+    triggerOriginalControl(control);
+    [180, 650, 1400].forEach((delay, index, delays) => {
+      window.setTimeout(() => {
+        if (!button.isConnected) {
+          return;
+        }
+        resolveCurrentProxyAction(action);
+        const state = getPostAuthorFollowState(action);
+        button.textContent = state.label;
+        button.classList.toggle("is-followed", state.followed);
+        button.setAttribute("aria-pressed", String(state.followed));
+        if (index === delays.length - 1) {
+          button.classList.remove("is-pending");
+        }
+      }, delay);
+    });
+    window.setTimeout(scheduleRebuild, 850);
+    scheduleNativeAntUiStabilize();
+  });
+  const state = getPostAuthorFollowState(action);
+  button.textContent = state.label;
+  button.classList.toggle("is-followed", state.followed);
+  button.setAttribute("aria-pressed", String(state.followed));
+  return button;
+}
+
+function renderPostAuthorMessageAction(action) {
+  if (action?.href && action.href !== "#") {
+    return createLink(
+      "cc98-rebuild-post-author-action is-message",
+      "\u79c1\u4fe1",
+      action.href
+    );
+  }
+  return createButton("cc98-rebuild-post-author-action is-message", "\u79c1\u4fe1", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    triggerOriginalControl(action?.control);
+    scheduleNativeAntUiStabilize();
+  });
+}
+
+function renderPostAuthorCard(item) {
+  if (!item?.authorCard || item.anonymousCode) {
+    return null;
+  }
+  const card = createElement("aside", "cc98-rebuild-post-author-card");
+  card.setAttribute("role", "group");
+  card.setAttribute("aria-label", `${item.user || "CC98 \u7528\u6237"}\u7684\u7528\u6237\u4fe1\u606f`);
+
+  const profile = createElement("div", "cc98-rebuild-post-author-card-profile");
+  const avatarUrl = makeWebVpnCc98ResourceUrl(item.avatar) || item.avatar;
+  const avatar = createElement("img", "cc98-rebuild-post-author-card-avatar");
+  avatar.src = avatarUrl;
+  avatar.alt = "";
+  avatar.loading = "eager";
+  avatar.decoding = "async";
+  if (isLightDefaultAvatarUrl(item.avatar)) {
+    avatar.classList.add("cc98-rebuild-avatar-light-default");
+  }
+  const avatarNode = item.userHref
+    ? createLink("cc98-rebuild-post-author-card-avatar-link", "", item.userHref)
+    : createElement("span", "cc98-rebuild-post-author-card-avatar-link");
+  if (avatarNode instanceof HTMLAnchorElement) {
+    avatarNode.textContent = "";
+    avatarNode.setAttribute("aria-label", `${item.user || "CC98 用户"}的主页`);
+  }
+  if (avatarUrl) {
+    avatarNode.style.backgroundImage = `url(${JSON.stringify(avatarUrl)})`;
+  }
+  avatar.addEventListener("error", () => {
+    avatar.classList.add("has-load-error");
+    avatarNode.classList.add("is-fallback-only");
+  });
+  avatarNode.append(avatar);
+
+  const identity = createElement("div", "cc98-rebuild-post-author-card-identity");
+  const name = item.userHref
+    ? createLink("cc98-rebuild-post-author-card-name", item.user, item.userHref)
+    : createElement("strong", "cc98-rebuild-post-author-card-name", item.user);
+  identity.append(name);
+  if (item.authorCard.gender) {
+    identity.append(createElement(
+      "span",
+      "cc98-rebuild-post-author-card-gender",
+      item.authorCard.gender
+    ));
+  }
+  profile.append(avatarNode, identity);
+  card.append(profile);
+
+  if (item.authorCard.stats?.length) {
+    const stats = createElement("div", "cc98-rebuild-post-author-card-stats");
+    item.authorCard.stats.forEach((text) => {
+      const match = text.match(/^(.+?)\s+(.+)$/);
+      const row = createElement(
+        "div",
+        `cc98-rebuild-post-author-card-stat${/^\u6700\u540e\u767b\u5f55/.test(text) ? " is-wide" : ""}`
+      );
+      row.append(
+        createElement("span", "cc98-rebuild-post-author-card-stat-label", match?.[1] || text),
+        createElement("strong", "cc98-rebuild-post-author-card-stat-value", match?.[2] || "")
+      );
+      stats.append(row);
+    });
+    card.append(stats);
+  }
+
+  const actions = createElement("div", "cc98-rebuild-post-author-card-actions");
+  if (item.followAction && !item.isCurrentUser) {
+    actions.append(renderPostAuthorFollowAction(item.followAction));
+  }
+  if (item.messageAction) {
+    actions.append(renderPostAuthorMessageAction(item.messageAction));
+  }
+  if (actions.children.length) {
+    card.append(actions);
+  }
+  return card;
+}
+
 function renderPostCard(item) {
+  const blockReason = shouldBlockRebuiltItem(item);
+  if (blockReason && !isBlacklistItemRevealed(item)) {
+    return renderBlockedPlaceholder(blockReason, {
+      onReveal: () => {
+        revealBlacklistItem(item);
+        scheduleRebuild();
+      }
+    });
+  }
+
   const card = createElement("article", "cc98-rebuild-card cc98-rebuild-post");
   card.dataset.itemKey = `post:${item.id}`;
   card.classList.toggle("cc98-rebuild-hot-post", Boolean(item.isHot));
+  card.classList.toggle("cc98-rebuild-hot-highlight", Boolean(item.isHot || item.isHotHighlight));
   const floor = Number(item.index);
   if (!item.isHot && Number.isFinite(floor) && floor > 0) {
     card.id = getRebuiltFloorAnchorId(floor);
@@ -5248,6 +13610,7 @@ function renderPostCard(item) {
     card.append(originalAnchor);
   }
   const header = createElement("div", "cc98-rebuild-post-header");
+  let authorPopover = null;
   if (item.avatar) {
     const avatar = createElement("img", "cc98-rebuild-avatar");
     avatar.src = item.avatar;
@@ -5264,7 +13627,14 @@ function renderPostCard(item) {
         avatarLink.classList.add("cc98-rebuild-avatar-light-default-link");
       }
       avatarLink.append(avatar);
-      header.append(avatarLink);
+      if (item.authorCard && !item.anonymousCode) {
+        avatarLink.setAttribute("aria-haspopup", "true");
+        authorPopover = createElement("div", "cc98-rebuild-post-author-popover");
+        authorPopover.append(avatarLink);
+        header.append(authorPopover);
+      } else {
+        header.append(avatarLink);
+      }
     } else {
       header.append(avatar);
     }
@@ -5280,6 +13650,13 @@ function renderPostCard(item) {
   if (item.isOriginalPoster) {
     userLine.append(createElement("span", "cc98-rebuild-op-badge", "\u697c\u4e3b"));
   }
+  if (item.followAction && !item.isCurrentUser) {
+    userLine.append(renderNativeFollowControl(item.followAction));
+  }
+  const authorCard = authorPopover ? renderPostAuthorCard(item) : null;
+  if (authorCard) {
+    authorPopover.append(authorCard);
+  }
   byline.append(userLine);
   if (item.isHot) {
     byline.append(createElement("div", "cc98-rebuild-muted cc98-rebuild-hot-label", "🔥热评"));
@@ -5290,6 +13667,10 @@ function renderPostCard(item) {
   card.append(header);
 
   const body = createElement("div", "cc98-rebuild-post-body");
+  const voteContent = renderPostVoteContent(item.voteContent);
+  if (voteContent) {
+    body.append(voteContent);
+  }
   if (item.content) {
     body.append(item.content);
   } else {
@@ -5309,16 +13690,43 @@ function renderPostCard(item) {
   });
   card.append(body);
 
+  const awardTable = renderPostAwardTable(item.awards, {
+    sourcePost: item.awardSourcePost,
+    collapsible: item.awardCollapsible,
+    expanded: item.awardExpanded,
+    actions: item.actions,
+    awardKey: item.awardKey
+  });
+  if (awardTable) {
+    card.append(awardTable);
+  }
+
   if (item.signature) {
     const signatureWrap = createElement("section", "cc98-rebuild-signature");
     signatureWrap.append(item.signature);
     card.append(signatureWrap);
   }
 
-  if (item.publishedAt || item.actions?.length) {
+  const hasViewCount = item.viewCount !== undefined && item.viewCount !== null && item.viewCount !== "";
+  if (item.publishedAt || item.editedAt || hasViewCount || item.actions?.length) {
     const footer = createElement("div", "cc98-rebuild-post-footer");
-    if (item.publishedAt) {
-      footer.append(createElement("span", "cc98-rebuild-muted", `发表于 ${item.publishedAt}`));
+    if (item.publishedAt || item.editedAt || hasViewCount) {
+      const metaRow = createElement("div", "cc98-rebuild-post-meta-row");
+      if (item.publishedAt || item.editedAt) {
+        const meta = createElement("span", "cc98-rebuild-muted cc98-rebuild-post-meta");
+        if (item.publishedAt) {
+          meta.append(document.createTextNode(`发表于 ${item.publishedAt}`));
+        }
+        if (item.editedAt) {
+          const edited = createElement("span", `cc98-rebuild-post-edited${item.publishedAt ? " has-published-at" : ""}`, `${item.editedBy ? `最后由 ${item.editedBy} ` : ""}编辑于 ${item.editedAt}`);
+          meta.append(edited);
+        }
+        metaRow.append(meta);
+      }
+      if (hasViewCount) {
+        metaRow.append(createElement("span", "cc98-rebuild-muted cc98-rebuild-post-views", `浏览 ${item.viewCount}`));
+      }
+      footer.append(metaRow);
     }
     if (item.actions?.length) {
       const actionWrap = createElement("div", "cc98-rebuild-post-actions");
@@ -5401,6 +13809,19 @@ function renderPostPager() {
     navigateToRebuiltHref(pageInfo.pages.get(page) || buildTopicPageHref(pageInfo.topicId, page));
   });
   pager.append(form);
+  const topicActions = getTopicToolbarActions();
+  const shareAction = topicActions.share;
+  if (shareAction) {
+    const shareButton = renderProxyControl(shareAction);
+    shareButton.classList.add("cc98-rebuild-pager-action");
+    pager.append(shareButton);
+  }
+  const favoriteAction = topicActions.favorite;
+  if (favoriteAction) {
+    const favoriteButton = renderProxyControl(favoriteAction);
+    favoriteButton.classList.add("cc98-rebuild-pager-action", "cc98-rebuild-topic-favorite-action");
+    pager.append(favoriteButton);
+  }
 
   return pager;
 }
@@ -5462,8 +13883,16 @@ function renderBoardPager(position = "top") {
     }
     const isDisabled = item.classList.contains("ant-pagination-disabled");
     const isCurrent = item.classList.contains("ant-pagination-item-active");
+    const sourceLink = item.querySelector("a[href]");
+    const sourceHref = sourceLink instanceof HTMLAnchorElement
+      ? (sourceLink.getAttribute("href") || sourceLink.href || "")
+      : "";
     const button = createButton("cc98-rebuild-page-link", label, () => {
       if (isDisabled || isCurrent) {
+        return;
+      }
+      if (sourceHref) {
+        navigateToRebuiltHref(sourceHref);
         return;
       }
       triggerOriginalControl(item);
@@ -5484,17 +13913,28 @@ function renderBoardPager(position = "top") {
 
 function renderBoardTopicCard(item) {
   const reason = shouldBlockRebuiltItem(item);
-  if (reason) {
-    return renderBlockedPlaceholder(reason);
+  if (reason && !isBlacklistItemRevealed(item)) {
+    return renderBlockedPlaceholder(reason, {
+      onReveal: () => {
+        revealBlacklistItem(item);
+        scheduleRebuild();
+      }
+    });
   }
   const card = createElement("article", "cc98-rebuild-card cc98-rebuild-board-topic");
   if (item.isPinned) {
     card.classList.add("is-pinned");
   }
+  if (item.isLocked) {
+    card.classList.add("is-locked");
+  }
   const marker = createElement("span", "cc98-rebuild-board-topic-marker", item.isPinned ? "置顶" : "主题");
   const main = createElement("div", "cc98-rebuild-board-topic-main");
   const titleRow = createElement("div", "cc98-rebuild-board-topic-title-row");
-  titleRow.append(createLink("cc98-rebuild-card-title", item.title, item.href));
+  const title = item.isLocked && !/^🔒\s*/u.test(item.title)
+    ? `🔒 ${item.title}`
+    : item.title;
+  titleRow.append(createLink("cc98-rebuild-card-title", title, item.href));
   if (item.pageLinks?.length) {
     const pages = createElement("div", "cc98-rebuild-board-topic-pages");
     item.pageLinks.slice(0, 8).forEach((page) => pages.append(createLink("cc98-rebuild-chip", page.text, page.href)));
@@ -5522,6 +13962,9 @@ function renderBoardTopicCard(item) {
 
 function renderBoardPage(app) {
   const data = getBoardPageData();
+  if (document.querySelector(".board-body .board-head-name") && data.name) {
+    document.title = `${data.name} - CC98论坛`;
+  }
   const summary = createElement("section", "cc98-rebuild-board-hero");
   if (data.avatar) {
     const avatar = createElement("img", "cc98-rebuild-board-hero-avatar");
@@ -5551,7 +13994,7 @@ function renderBoardPage(app) {
       aside.append(item);
     });
     if (data.followAction) {
-      aside.append(renderProxyControl(data.followAction));
+      aside.append(renderNativeFollowControl(data.followAction));
     }
     summary.append(aside);
   }
@@ -5570,7 +14013,11 @@ function renderBoardPage(app) {
 
   const toolbar = createElement("section", "cc98-rebuild-board-toolbar");
   if (data.postTopic?.href) {
-    toolbar.append(createLink("cc98-rebuild-action", "发主题", data.postTopic.href));
+    toolbar.append(createLink(
+      "cc98-rebuild-action cc98-rebuild-board-post-topic-action",
+      "发主题",
+      data.postTopic.href
+    ));
   }
   data.filters.forEach((filter) => toolbar.append(renderProxyControl(filter)));
   app.append(toolbar);
@@ -5615,6 +14062,35 @@ function restoreNativeNode(node) {
   if (!node) {
     return;
   }
+  if (node.dataset?.cc98EmbeddedBlacklistHidden === "true") {
+    node.hidden = false;
+    delete node.dataset.cc98EmbeddedBlacklistHidden;
+  }
+  if (node.classList?.contains("cc98-rebuild-native-vote")) {
+    node.querySelectorAll?.(".cc98-rebuild-native-vote-button").forEach((button) => {
+      button.classList.remove("cc98-rebuild-native-vote-button");
+    });
+  }
+  if (node.classList?.contains("cc98-rebuild-native-post-follow-action")) {
+    node.classList.remove(
+      "cc98-rebuild-mini-action",
+      "cc98-rebuild-post-follow-action",
+      "cc98-rebuild-native-post-follow-action",
+      "is-pending",
+      "is-pressing"
+    );
+    delete node.dataset.followSymbol;
+    delete node.dataset.followLabel;
+  }
+  if (node.classList?.contains("cc98-rebuild-native-user-nav")) {
+    node.querySelectorAll?.(".cc98-rebuild-blacklist-nav-entry").forEach((entry) => {
+      const parent = entry.parentElement;
+      entry.remove();
+      if (parent instanceof HTMLLIElement && !cleanupPostText(parent.textContent) && !parent.children.length) {
+        parent.remove();
+      }
+    });
+  }
   node.classList.remove(
     "cc98-rebuild-native-editor",
     "cc98-rebuild-native-reply",
@@ -5624,7 +14100,8 @@ function restoreNativeNode(node) {
     "cc98-rebuild-native-message",
     "cc98-rebuild-native-signin",
     "cc98-rebuild-native-login",
-    "cc98-rebuild-native-login-announcement"
+    "cc98-rebuild-native-login-announcement",
+    "cc98-rebuild-native-vote"
   );
   const previous = reparentedNativeNodes.get(node);
   if (previous?.parent?.isConnected) {
@@ -5643,20 +14120,333 @@ function restoreNativeNode(node) {
 }
 
 function restoreReparentedNativeNodes(app) {
-  app?.querySelectorAll?.(".createTopic.cc98-rebuild-native-editor, #sendTopicInfo.cc98-rebuild-native-reply, .user-center-navigation.cc98-rebuild-native-user-nav, .user-center-router.cc98-rebuild-native-user-router, .cc98-rebuild-native-user-entry, .cc98-rebuild-native-message, .cc98-rebuild-native-signin, .cc98-rebuild-native-login, .cc98-rebuild-native-login-announcement")
+  app?.querySelectorAll?.(".createTopic.cc98-rebuild-native-editor, #sendTopicInfo.cc98-rebuild-native-reply, .user-center-navigation.cc98-rebuild-native-user-nav, .user-center-router.cc98-rebuild-native-user-router, .cc98-rebuild-native-user-entry, .cc98-rebuild-native-message, .cc98-rebuild-native-signin, .cc98-rebuild-native-login, .cc98-rebuild-native-login-announcement, .vote-content.cc98-rebuild-native-vote, .cc98-rebuild-native-post-follow-action")
     .forEach((node) => restoreNativeNode(node));
+}
+
+function releaseReparentedNativeNodesForNavigation() {
+  const app = document.querySelector("#cc98-comfort-app");
+  if (!(app instanceof HTMLElement)) {
+    return false;
+  }
+  restoreReparentedNativeNodes(app);
+  return true;
+}
+
+function releaseReparentedNativeEditorForSubmit(kind) {
+  const editor = String(kind || "").toLowerCase() === "reply"
+    ? document.querySelector("#sendTopicInfo")
+    : document.querySelector(".createTopic");
+  if (!(editor instanceof HTMLElement) || !editor.closest("#cc98-comfort-app")) {
+    return false;
+  }
+  editor.dataset.cc98NativeSubmitReleased = "true";
+  restoreNativeNode(editor);
+  return true;
+}
+
+function isEditorAuxiliarySubmitControl(control) {
+  if (!(control instanceof HTMLElement)) {
+    return true;
+  }
+  if (control.matches("#post-topic-changeMode, .changeEditor, .cc98-rebuild-markdown-entry")
+    || Boolean(control.closest(".react-mde"))) {
+    return true;
+  }
+  if (control.matches("button.fa-check, button.fa-remove, button.fa-times, button[class*='fa-check'], button[class*='fa-remove'], button[class*='fa-times'], button[data-cc98-editor-label]")) {
+    return true;
+  }
+  if (control.closest(".cc98-rebuild-color-popover, .cc98-rebuild-font-size-popover, .cc98-rebuild-editor-draftbar, .ubb-emoji, .ubb-extend")) {
+    return true;
+  }
+  if (control.closest(".ubb-editor") && !control.matches('[id^="post-topic-button"], .button.blue')) {
+    return true;
+  }
+  return false;
+}
+
+function isEditorAuxiliarySubmitEvent(event, editor) {
+  const submitter = event?.submitter;
+  if (submitter instanceof HTMLElement && isEditorAuxiliarySubmitControl(submitter)) {
+    return true;
+  }
+  const source = event?.target;
+  if (!(source instanceof Element) || source === editor) {
+    return false;
+  }
+  return Boolean(source.closest(".ubb-extend, .ubb-emoji, .cc98-rebuild-color-popover, .cc98-rebuild-font-size-popover, .cc98-rebuild-editor-draftbar"))
+    || (Boolean(source.closest(".ubb-editor")) && !source.matches('[id^="post-topic-button"], .button.blue'));
+}
+
+function isLikelyEditorSubmitControl(target) {
+  const control = target?.closest?.("#post-topic-button, button, input[type='button'], input[type='submit'], .button, .ant-btn, [role='button']");
+  if (!(control instanceof HTMLElement) || isEditorAuxiliarySubmitControl(control)) {
+    return false;
+  }
+  const signature = [
+    control.id,
+    control.className,
+    control.getAttribute("type"),
+    control.getAttribute("title"),
+    control.getAttribute("aria-label"),
+    control.textContent
+  ].filter(Boolean).join(" ");
+  return /post-topic-button|submit|\u53d1\u8868|\u53d1\u5e16|\u56de\u590d|\u63d0\u4ea4|\u7f16\u8f91|\u4fdd\u5b58|\u66f4\u65b0|\u53d1\u5e03|\u786e\u5b9a/i.test(signature);
+}
+
+function getNativeEditorSubmitContext(options = {}) {
+  const editor = options.editor || document.querySelector(".createTopic, #sendTopicInfo");
+  return {
+    startedRouteKey: options.startedRouteKey || getRoutePageKey(),
+    startedOnTopic: Boolean(options.startedOnTopic ?? getTopicRouteInfo()),
+    destinationHref: options.destinationHref || getEditorSubmitTargetHref(),
+    draftKey: options.draftKey || getNativeEditorDraftKey(editor),
+    submitKind: options.submitKind || getNativeEditorDraftKind(editor)
+  };
+}
+
+function findNativeEditorSubmitControl(editor, preferred) {
+  if (!(editor instanceof HTMLElement)) {
+    return null;
+  }
+  if (preferred instanceof HTMLElement && editor.contains(preferred) && !isEditorAuxiliarySubmitControl(preferred)) {
+    return preferred;
+  }
+  const primary = editor.querySelector("#post-topic-button, .button.blue, button[type='submit'], input[type='submit']");
+  if (primary instanceof HTMLElement && !isEditorAuxiliarySubmitControl(primary)) {
+    return primary;
+  }
+  return [...editor.querySelectorAll("button, input[type='button'], input[type='submit'], .button, .ant-btn, [role='button']")]
+    .find((control) => control instanceof HTMLElement && isLikelyEditorSubmitControl(control)) || null;
+}
+
+function isNativePostSubmitEditor(editor) {
+  if (!(editor instanceof HTMLElement)) {
+    return false;
+  }
+  if (editor.matches(".sign-in") || editor.closest(".sign-in")) {
+    return false;
+  }
+  return editor.matches(".createTopic, #sendTopicInfo")
+    || Boolean(editor.closest(".createTopic, #sendTopicInfo"))
+    || Boolean(editor.querySelector("#post-topic-button"));
+}
+
+function beginNativeEditorSubmitTransaction(editor, control, context = {}) {
+  if (!(editor instanceof HTMLElement)) {
+    return false;
+  }
+  const submitControl = findNativeEditorSubmitControl(editor, control);
+  if (!(submitControl instanceof HTMLElement)) {
+    return false;
+  }
+  const startedAt = Number(editor.dataset.cc98SubmitTransactionStartedAt || 0);
+  if (editor.dataset.cc98SubmitTransactionActive === "true"
+    && startedAt
+    && Date.now() - startedAt < 2500) {
+    return false;
+  }
+  const payload = getNativeEditorSubmitContext(context);
+  const transactionStartedAt = Date.now();
+  editor.dataset.cc98SubmitTransactionActive = "true";
+  editor.dataset.cc98SubmitTransactionStartedAt = String(transactionStartedAt);
+  submitControl.dataset.cc98SubmitPending = "true";
+  markEditorSubmitIntent(payload);
+  schedulePostSubmitPageRefresh(payload);
+  window.setTimeout(() => {
+    if (editor.dataset.cc98SubmitTransactionStartedAt !== String(transactionStartedAt)) {
+      return;
+    }
+    delete editor.dataset.cc98SubmitTransactionActive;
+    delete editor.dataset.cc98SubmitTransactionStartedAt;
+    delete submitControl.dataset.cc98SubmitPending;
+  }, 2600);
+  return true;
+}
+
+function ensurePendingNativeEditorSubmitRecovery(editor) {
+  if (!(editor instanceof HTMLElement) || !isNativePostSubmitEditor(editor)) {
+    return;
+  }
+  const pendingControl = [...editor.querySelectorAll(
+    "#post-topic-button, [id^='post-topic-button-'], button, input[type='button'], input[type='submit']"
+  )].find((control) => {
+    if (!(control instanceof HTMLElement) || isEditorAuxiliarySubmitControl(control)) {
+      return false;
+    }
+    const label = cleanupPostText(
+      control instanceof HTMLInputElement ? control.value : control.textContent
+    ).replace(/\*/g, "").trim();
+    return label === "...";
+  });
+  if (!pendingControl || hasRecentEditorSubmitIntent(90000)) {
+    return;
+  }
+  const context = getNativeEditorSubmitContext({ editor });
+  markEditorSubmitIntent({
+    ...context,
+    pendingButtonRecovered: true
+  });
+  schedulePostSubmitPageRefresh(context);
+}
+
+function isAnonymousReplySubmitControl(control) {
+  if (!(control instanceof HTMLElement)) {
+    return false;
+  }
+  const signature = [
+    control.id,
+    control.getAttribute("name"),
+    control.getAttribute("value"),
+    control.getAttribute("title"),
+    control.getAttribute("aria-label"),
+    control.textContent
+  ].filter(Boolean).join(" ");
+  return /anonymous|\u533f\u540d/i.test(signature);
+}
+
+function isAnonymousOnlyReplyEditor(editor) {
+  if (!(editor instanceof HTMLElement)) {
+    return false;
+  }
+  const submitControls = [...editor.querySelectorAll('[id^="post-topic-button"]')]
+    .filter((control) => control instanceof HTMLElement);
+  return submitControls.some((control) => isAnonymousReplySubmitControl(control))
+    && !submitControls.some((control) => !isAnonymousReplySubmitControl(control));
+}
+
+function isSoulBoardReplyContext() {
+  const boardNodes = [
+    ...document.querySelectorAll(".board-head-name"),
+    ...document.querySelectorAll('#root a[href*="/board/"]')
+  ];
+  return boardNodes.some((node) => {
+    if (!(node instanceof HTMLElement)
+      || node.closest("#cc98-comfort-app, .reply, .reply-content, .substance, .signature, .focus-topic, .card-topic")) {
+      return false;
+    }
+    return normalizeText(node.textContent) === "\u5fc3\u7075\u4e4b\u7ea6";
+  });
+}
+
+function stripRebornReplyTail(value) {
+  let nextValue = String(value || "").trimEnd();
+  const tails = [
+    REPLY_REBORN_TAIL_UBB,
+    REPLY_REBORN_TAIL_LEGACY_RIGHT_UBB,
+    REPLY_REBORN_TAIL_LEGACY_ALIGN_UBB
+  ];
+  let changed = false;
+  tails.forEach((tail) => {
+    if (!nextValue.endsWith(tail)) {
+      return;
+    }
+    nextValue = nextValue.slice(0, -tail.length).replace(/\n+$/, "");
+    changed = true;
+  });
+  return changed ? nextValue : String(value || "");
+}
+
+function appendRebornReplyTailIfNeeded(editor, submitControl = null) {
+  if (!lastSettings?.replyRebornTail || !(editor instanceof HTMLElement)) {
+    return false;
+  }
+  if (getNativeEditorDraftKind(editor) !== "reply") {
+    return false;
+  }
+  const textarea = getNativeEditorTextarea(editor);
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return false;
+  }
+  const value = String(textarea.value || "");
+  if (isAnonymousReplySubmitControl(submitControl)
+    || isAnonymousOnlyReplyEditor(editor)
+    || isSoulBoardReplyContext()) {
+    const strippedValue = stripRebornReplyTail(value);
+    if (strippedValue !== value) {
+      setNativeMessageInputValue(textarea, strippedValue);
+      return true;
+    }
+    return false;
+  }
+  if (!value.trim()) {
+    return false;
+  }
+  if (value.includes(REPLY_REBORN_TAIL_MARKER)) {
+    return false;
+  }
+  if (value.includes(REPLY_REBORN_TAIL_LEGACY_MARKER)) {
+    const upgradedValue = value
+      .replace(REPLY_REBORN_TAIL_LEGACY_RIGHT_UBB, REPLY_REBORN_TAIL_UBB)
+      .replace(REPLY_REBORN_TAIL_LEGACY_ALIGN_UBB, REPLY_REBORN_TAIL_UBB);
+    if (upgradedValue !== value) {
+      setNativeMessageInputValue(textarea, upgradedValue);
+      return true;
+    }
+    return false;
+  }
+  const separator = value.endsWith("\n") ? "" : "\n";
+  setNativeMessageInputValue(textarea, `${value}${separator}${REPLY_REBORN_TAIL_UBB}`);
+  return true;
+}
+
+function getRebornReplyTailEditorFromTarget(target) {
+  const control = target?.closest?.("#post-topic-button, button, input[type='button'], input[type='submit'], .button, .ant-btn, [role='button']");
+  if (!(control instanceof HTMLElement) || !isLikelyEditorSubmitControl(control)) {
+    return null;
+  }
+  const editor = control.closest("#sendTopicInfo");
+  return editor instanceof HTMLElement ? editor : null;
+}
+
+function ensureRebornReplyTailSubmitGuard() {
+  if (rebornReplyTailSubmitGuardBound) {
+    return;
+  }
+  rebornReplyTailSubmitGuardBound = true;
+  const handleSubmitPointer = (event) => {
+    const submitControl = event.target?.closest?.("#post-topic-button, button, input[type='button'], input[type='submit'], .button, .ant-btn, [role='button']");
+    const editor = getRebornReplyTailEditorFromTarget(event.target);
+    if (editor) {
+      appendRebornReplyTailIfNeeded(editor, submitControl);
+    }
+  };
+  document.addEventListener("pointerdown", handleSubmitPointer, true);
+  document.addEventListener("click", handleSubmitPointer, true);
+  document.addEventListener("submit", (event) => {
+    const editor = event.target?.closest?.("#sendTopicInfo");
+    if (editor instanceof HTMLElement) {
+      appendRebornReplyTailIfNeeded(editor, event.submitter);
+    }
+  }, true);
+}
+
+function isNativeEditorInsideReactRoot(editor) {
+  return Boolean(editor?.closest?.("#root"));
 }
 
 function getEditorPageData() {
   const editor = document.querySelector(".createTopic");
+  const isEdit = /\/editor\/edit\/\d+/i.test(location.pathname)
+    || Boolean(editor && /编辑/.test(cleanupPostText(editor.textContent)));
   const breadcrumbLinks = [...(editor?.querySelectorAll(".row:first-child a[href]") ?? [])]
     .map((link) => ({ text: link.textContent?.trim() ?? "", href: link.href }))
     .filter((item) => item.text);
   const board = [...breadcrumbLinks].reverse().find((item) => /\/board\/\d+/i.test(item.href));
+  const titleInput = editor?.querySelector(".createTopicTitle input");
+  const editorHeading = [...(editor?.querySelectorAll(".row:first-child div") ?? [])]
+    .map((node) => cleanupPostText(node.textContent))
+    .reverse()
+    .find((text) => /编辑|发表|回复/.test(text));
+  const submitLabel = cleanupPostText(editor?.querySelector("#post-topic-button, .button.blue")?.textContent);
   return {
     editor,
     board,
-    titlePlaceholder: editor?.querySelector(".createTopicTitle input")?.getAttribute("placeholder") ?? "请输入标题"
+    isEdit,
+    pageTitle: isEdit ? (editorHeading || "编辑帖子") : "发表主题",
+    modeLabel: isEdit ? "Edit" : "Compose",
+    titlePlaceholder: titleInput?.getAttribute("placeholder") || titleInput?.value || (isEdit ? "正在编辑已有内容" : "请输入标题"),
+    submitLabel
   };
 }
 
@@ -5735,8 +14525,20 @@ function labelEditorToolbarButtonsWithUnicode(editor) {
   });
 }
 
-function hideMarkdownEditorEntrances(editor) {
-  editor.querySelectorAll("#post-topic-changeMode, .changeEditor, button, a, [role='button']").forEach((control) => {
+function stabilizeMarkdownEditor(editor) {
+  if (!(editor instanceof HTMLElement)) {
+    return;
+  }
+  const markdownEditor = editor.querySelector(".react-mde");
+  if (!markdownEditor || markdownEditor.querySelector(".mde-preview, .mde-preview-content")) {
+    removeLocalMarkdownPreview(editor);
+  }
+  editor.classList.toggle("cc98-rebuild-markdown-editor-active", Boolean(markdownEditor));
+  editor.dataset.cc98EditorMode = markdownEditor ? "markdown" : "ubb";
+  editor.querySelectorAll("#post-topic-changeMode, .changeEditor, .cc98-rebuild-markdown-entry").forEach((control) => {
+    if (!(control instanceof HTMLElement)) {
+      return;
+    }
     const signature = [
       control.id,
       control.className,
@@ -5748,9 +14550,366 @@ function hideMarkdownEditorEntrances(editor) {
       return;
     }
     control.classList.add("cc98-rebuild-markdown-entry");
-    control.hidden = true;
-    control.style.setProperty("display", "none", "important");
+    control.hidden = false;
+    control.style.removeProperty("display");
+    control.setAttribute("role", "button");
+    control.tabIndex = 0;
+    const label = cleanupPostText(control.textContent) || (markdownEditor ? "切换到UBB编辑器" : "切换到Markdown编辑器");
+    control.setAttribute("aria-label", label);
+    control.title = label;
+    control.dataset.cc98EditorTargetMode = /ubb/i.test(label) ? "ubb" : "markdown";
+    const parent = control.parentElement;
+    const contentHeading = control.closest(".createTopicContent");
+    if (contentHeading instanceof HTMLElement) {
+      const hint = [...contentHeading.children].find((child) => {
+        if (!(child instanceof HTMLElement)
+          || child === control
+          || child.classList.contains("createTopicListName")
+          || child.classList.contains("ubb-editor")) {
+          return false;
+        }
+        return /\u63d0\u793a|CC98|\u5fae\u4fe1\u5c0f\u7a0b\u5e8f|\u89c6\u9891/i.test(cleanupPostText(child.textContent));
+      });
+      if (hint instanceof HTMLElement) {
+        contentHeading.classList.add("cc98-rebuild-editor-heading-with-switch");
+        hint.classList.add("cc98-rebuild-editor-heading-hint");
+      }
+    }
+    if (parent instanceof HTMLElement && parent.classList.contains("row")) {
+      parent.classList.add("cc98-rebuild-editor-mode-switch-row");
+    }
   });
+}
+
+function getMarkdownEditorInputState(editor) {
+  let state = markdownEditorInputStates.get(editor);
+  if (!state) {
+    state = {
+      composing: false,
+      lastActivityAt: 0
+    };
+    markdownEditorInputStates.set(editor, state);
+  }
+  return state;
+}
+
+function isMarkdownEditorTextEvent(event) {
+  const target = event?.target;
+  return target instanceof Element && Boolean(target.closest(".react-mde .mde-text"));
+}
+
+function bindMarkdownEditorInputTracking(editor) {
+  if (!(editor instanceof HTMLElement) || editor.dataset.cc98MarkdownInputTrackingBound === "true") {
+    return;
+  }
+  editor.dataset.cc98MarkdownInputTrackingBound = "true";
+  const markActivity = (event, composing = null) => {
+    if (!isMarkdownEditorTextEvent(event)) {
+      return;
+    }
+    const state = getMarkdownEditorInputState(editor);
+    if (typeof composing === "boolean") {
+      state.composing = composing;
+    } else if (typeof event.isComposing === "boolean" && event.isComposing) {
+      state.composing = true;
+    }
+    state.lastActivityAt = Date.now();
+  };
+  editor.addEventListener("compositionstart", (event) => markActivity(event, true), true);
+  editor.addEventListener("compositionupdate", (event) => markActivity(event, true), true);
+  editor.addEventListener("compositionend", (event) => markActivity(event, false), true);
+  editor.addEventListener("beforeinput", (event) => markActivity(event), true);
+  editor.addEventListener("input", (event) => markActivity(event, Boolean(event.isComposing)), true);
+  editor.addEventListener("focusout", (event) => {
+    if (!isMarkdownEditorTextEvent(event)) {
+      return;
+    }
+    const state = getMarkdownEditorInputState(editor);
+    if (state.composing) {
+      state.lastActivityAt = Date.now();
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (!(active instanceof Element) || !active.closest(".react-mde .mde-text")) {
+          state.composing = false;
+          state.lastActivityAt = Date.now();
+        }
+      }, 0);
+    }
+  }, true);
+}
+
+function waitForMarkdownEditorInputToSettle(editor, options = {}) {
+  const quietPeriod = Math.max(80, Number(options.quietPeriod) || 120);
+  const timeout = Math.max(quietPeriod, Number(options.timeout) || 1200);
+  const startedAt = Date.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      const state = getMarkdownEditorInputState(editor);
+      const now = Date.now();
+      const quietFor = state.lastActivityAt ? now - state.lastActivityAt : quietPeriod;
+      if ((!state.composing && quietFor >= quietPeriod) || now - startedAt >= timeout) {
+        window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+        return;
+      }
+      window.setTimeout(check, 24);
+    };
+    check();
+  });
+}
+
+function getMarkdownEditorVisibleText(editor) {
+  const content = editor?.querySelector?.(".react-mde .public-DraftEditor-content");
+  if (!(content instanceof HTMLElement)) {
+    return "";
+  }
+  const blocks = [...content.querySelectorAll("[data-block='true']")]
+    .filter((block) => block instanceof HTMLElement);
+  const text = blocks.length
+    ? blocks.map((block) => block.innerText || block.textContent || "").join("\n")
+    : content.innerText || content.textContent || "";
+  return text.replace(/\u200b/g, "").replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n");
+}
+
+function appendLocalMarkdownInline(target, source) {
+  const text = String(source ?? "");
+  const pattern = /(`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\[([^\]\n]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\*([^*\n]+)\*|_([^_\n]+)_)/g;
+  let cursor = 0;
+  let match;
+  const appendText = (value) => {
+    if (value) {
+      target.append(document.createTextNode(value));
+    }
+  };
+  while ((match = pattern.exec(text))) {
+    appendText(text.slice(cursor, match.index));
+    let node = null;
+    if (match[2] !== undefined) {
+      node = createElement("code", "", match[2]);
+    } else if (match[3] !== undefined || match[4] !== undefined) {
+      node = createElement("strong", "", match[3] ?? match[4]);
+    } else if (match[5] !== undefined) {
+      node = createElement("del", "", match[5]);
+    } else if (match[6] !== undefined && match[7] !== undefined) {
+      try {
+        const url = new URL(match[7], location.href);
+        if (/^https?:$/i.test(url.protocol)) {
+          node = createLink("", match[6], url.href);
+        }
+      } catch {
+        node = null;
+      }
+      if (!node) {
+        appendText(match[0]);
+      }
+    } else if (match[8] !== undefined || match[9] !== undefined) {
+      node = createElement("em", "", match[8] ?? match[9]);
+    }
+    if (node) {
+      target.append(node);
+    }
+    cursor = match.index + match[0].length;
+  }
+  appendText(text.slice(cursor));
+}
+
+function buildLocalMarkdownPreview(text) {
+  const article = createElement("article", "cc98-rebuild-markdown-local-preview-content");
+  const lines = String(text ?? "").split("\n");
+  let paragraphLines = [];
+  let codeLines = [];
+  let inCode = false;
+  const flushParagraph = () => {
+    if (!paragraphLines.length) {
+      return;
+    }
+    const paragraph = document.createElement("p");
+    paragraphLines.forEach((line, index) => {
+      if (index) {
+        paragraph.append(document.createElement("br"));
+      }
+      appendLocalMarkdownInline(paragraph, line);
+    });
+    article.append(paragraph);
+    paragraphLines = [];
+  };
+  const flushCode = () => {
+    const pre = document.createElement("pre");
+    pre.append(createElement("code", "", codeLines.join("\n")));
+    article.append(pre);
+    codeLines = [];
+  };
+  lines.forEach((line) => {
+    if (/^\s*```/.test(line)) {
+      flushParagraph();
+      if (inCode) {
+        flushCode();
+      }
+      inCode = !inCode;
+      return;
+    }
+    if (inCode) {
+      codeLines.push(line);
+      return;
+    }
+    if (!line.trim()) {
+      flushParagraph();
+      return;
+    }
+    const heading = line.match(/^\s*(#{1,6})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      const node = document.createElement(`h${heading[1].length}`);
+      appendLocalMarkdownInline(node, heading[2]);
+      article.append(node);
+      return;
+    }
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      flushParagraph();
+      article.append(document.createElement("hr"));
+      return;
+    }
+    const quote = line.match(/^\s*>\s?(.*)$/);
+    if (quote) {
+      flushParagraph();
+      const node = document.createElement("blockquote");
+      appendLocalMarkdownInline(node, quote[1]);
+      article.append(node);
+      return;
+    }
+    const list = line.match(/^\s*(?:[-+*]|(\d+)\.)\s+(.+)$/);
+    if (list) {
+      flushParagraph();
+      const node = createElement("div", "cc98-rebuild-markdown-local-list-line");
+      node.append(createElement("span", "cc98-rebuild-markdown-local-list-marker", list[1] ? `${list[1]}.` : "•"));
+      const value = createElement("span");
+      appendLocalMarkdownInline(value, list[2]);
+      node.append(value);
+      article.append(node);
+      return;
+    }
+    paragraphLines.push(line);
+  });
+  if (inCode || codeLines.length) {
+    flushParagraph();
+    flushCode();
+  } else {
+    flushParagraph();
+  }
+  if (!article.children.length) {
+    article.append(createElement("p", "cc98-rebuild-muted", "暂无可预览内容"));
+  }
+  return article;
+}
+
+function removeLocalMarkdownPreview(editor) {
+  const preview = markdownEditorLocalPreviews.get(editor);
+  if (!(preview instanceof HTMLElement)) {
+    return;
+  }
+  preview.__cc98PreviewObserver?.disconnect?.();
+  if (preview.__cc98PreviewTimeout) {
+    window.clearTimeout(preview.__cc98PreviewTimeout);
+  }
+  preview.remove();
+  markdownEditorLocalPreviews.delete(editor);
+}
+
+function showLocalMarkdownPreview(editor) {
+  const markdownEditor = editor?.querySelector?.(".react-mde");
+  const sourceSurface = markdownEditor?.querySelector?.(".mde-text");
+  if (!(markdownEditor instanceof HTMLElement) || !(sourceSurface instanceof HTMLElement)) {
+    return null;
+  }
+  const rect = sourceSurface.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) {
+    return null;
+  }
+  let preview = markdownEditorLocalPreviews.get(editor);
+  if (!(preview instanceof HTMLElement)) {
+    preview = createElement("section", "cc98-rebuild-markdown-local-preview");
+    preview.setAttribute("aria-live", "polite");
+    preview.append(createElement("div", "cc98-rebuild-markdown-local-preview-label", "本地预览"));
+    document.body.append(preview);
+    markdownEditorLocalPreviews.set(editor, preview);
+    const observer = new MutationObserver(() => {
+      if (markdownEditor.querySelector(".mde-preview, .mde-preview-content")) {
+        window.requestAnimationFrame(() => removeLocalMarkdownPreview(editor));
+      }
+    });
+    observer.observe(markdownEditor, { childList: true, subtree: true });
+    preview.__cc98PreviewObserver = observer;
+  }
+  preview.querySelector(".cc98-rebuild-markdown-local-preview-content")?.remove();
+  preview.append(buildLocalMarkdownPreview(getMarkdownEditorVisibleText(editor)));
+  const left = Math.max(8, rect.left);
+  const top = Math.max(8, rect.top);
+  const width = Math.max(1, Math.min(rect.width, window.innerWidth - left - 8));
+  const height = Math.max(1, Math.min(rect.height, window.innerHeight - top - 8));
+  preview.style.setProperty("left", `${left}px`, "important");
+  preview.style.setProperty("top", `${top}px`, "important");
+  preview.style.setProperty("width", `${width}px`, "important");
+  preview.style.setProperty("height", `${height}px`, "important");
+  if (preview.__cc98PreviewTimeout) {
+    window.clearTimeout(preview.__cc98PreviewTimeout);
+  }
+  preview.__cc98PreviewTimeout = window.setTimeout(() => removeLocalMarkdownPreview(editor), 3000);
+  return preview;
+}
+
+function getMarkdownPreviewTabControl(target) {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+  const control = target.closest(".react-mde .mde-tabs button");
+  if (!(control instanceof HTMLButtonElement)) {
+    return null;
+  }
+  const label = cleanupPostText(control.textContent);
+  return /^(?:preview|预览)$/i.test(label) ? control : null;
+}
+
+function blurMarkdownEditorBeforePreview(editor, target) {
+  const control = getMarkdownPreviewTabControl(target);
+  if (!(control instanceof HTMLButtonElement) || control.classList.contains("selected")) {
+    return false;
+  }
+  showLocalMarkdownPreview(editor);
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active.closest(".react-mde .mde-text")) {
+    active.blur();
+  }
+  return true;
+}
+
+function deferMarkdownPreviewUntilInputSettles(editor, event) {
+  const control = getMarkdownPreviewTabControl(event?.target);
+  if (!(control instanceof HTMLButtonElement)
+    || control.classList.contains("selected")
+    || control.dataset.cc98PreviewInputSettled === "true") {
+    return false;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation?.();
+  if (control.dataset.cc98PreviewInputPending === "true") {
+    return true;
+  }
+  control.dataset.cc98PreviewInputPending = "true";
+  blurMarkdownEditorBeforePreview(editor, control);
+  waitForMarkdownEditorInputToSettle(editor).then(() => {
+    delete control.dataset.cc98PreviewInputPending;
+    if (!control.isConnected || control.classList.contains("selected")) {
+      removeLocalMarkdownPreview(editor);
+      return;
+    }
+    showLocalMarkdownPreview(editor);
+    control.dataset.cc98PreviewInputSettled = "true";
+    control.click();
+    window.setTimeout(() => {
+      delete control.dataset.cc98PreviewInputSettled;
+    }, 0);
+  });
+  return true;
 }
 
 function getNativeEditorPassthroughControl(target) {
@@ -5772,12 +14931,145 @@ function getNativeEditorPassthroughControl(target) {
     control.dataset.cc98ToolbarLabel,
     control.textContent
   ].filter(Boolean).join(" ");
-  return /(?:fa-link|fa-picture-o|fa-film|fa-music|fa-file|bilibili|bili|url|image|picture|video|audio|file|upload|ubbFileUpload)/i.test(signature)
+  return /(?:fa-link|fa-picture-o|fa-film|fa-video|fa-video-camera|fa-play|fa-youtube-play|fa-music|fa-file|bilibili|bili|url|link|image|picture|video|audio|file|upload|ubbFileUpload|插入(?:url|链接|图片|视频|音频)|上传文件|链|图|影|▶|音|文|🔗|♪)/i.test(signature)
     ? control
     : null;
 }
 
+function getNativeEditorToolbarControlSignature(control) {
+  if (!(control instanceof HTMLElement)) {
+    return "";
+  }
+  return [
+    control.className,
+    control.getAttribute("title"),
+    control.getAttribute("aria-label"),
+    control.getAttribute("for"),
+    control.dataset.cc98ToolbarLabel,
+    control.textContent
+  ].filter(Boolean).join(" ");
+}
+
+function getNativeEditorInsertControlKind(control) {
+  const signature = getNativeEditorToolbarControlSignature(control);
+  if (/ubbFileUpload|上传文件|upload|file|fa-file|文件|文/i.test(signature)) {
+    return "file";
+  }
+  if (/bilibili|bili|哔哩|Bili/i.test(signature)) {
+    return "bilibili";
+  }
+  if (/fa-music|audio|音频|音乐|音|♪/i.test(signature)) {
+    return "audio";
+  }
+  if (/fa-film|fa-video|fa-video-camera|fa-play|video|视频|影|▶/i.test(signature)) {
+    return "video";
+  }
+  if (/fa-picture-o|image|picture|图片|图/i.test(signature)) {
+    return "image";
+  }
+  if (/fa-link|url|link|链接|链|🔗/i.test(signature)) {
+    return "link";
+  }
+  return "";
+}
+
+function getNativeEditorUploadInput(editor, control = null) {
+  if (control instanceof HTMLLabelElement) {
+    const forId = control.getAttribute("for");
+    if (forId) {
+      const input = control.ownerDocument?.getElementById(forId)
+        || editor?.querySelector?.(`#${CSS.escape(forId)}`);
+      if (input instanceof HTMLInputElement && input.type === "file") {
+        return input;
+      }
+    }
+  }
+  const nested = control?.querySelector?.("input[type='file']");
+  if (nested instanceof HTMLInputElement) {
+    return nested;
+  }
+  const input = editor?.querySelector?.("#ubbFileUpload, input[type='file']");
+  return input instanceof HTMLInputElement ? input : null;
+}
+
+function triggerNativeEditorUpload(editor, control) {
+  const input = getNativeEditorUploadInput(editor, control);
+  if (input instanceof HTMLInputElement) {
+    input.click();
+    return true;
+  }
+  if (control instanceof HTMLElement) {
+    triggerOriginalControl(control);
+    return true;
+  }
+  return false;
+}
+
+function stopNativeEditorToolbarEvent(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  event?.stopImmediatePropagation?.();
+}
+
+function handleNativeEditorInsertControl(editor, target, event) {
+  if (!(editor instanceof HTMLElement)) {
+    return false;
+  }
+  const control = getNativeEditorPassthroughControl(target);
+  if (!(control instanceof HTMLElement)) {
+    return false;
+  }
+  const kind = getNativeEditorInsertControlKind(control);
+  if (!kind) {
+    return false;
+  }
+  stopNativeEditorToolbarEvent(event);
+  closeEditorColorPopovers();
+  closeEditorFontSizePopovers();
+  setEditorEmojiPanelOpen(editor, false);
+  if (kind === "file") {
+    triggerNativeEditorUpload(editor, control);
+    return true;
+  }
+  if (kind === "link" && typeof editor.__cc98WysiwygInsertLink === "function") {
+    editor.__cc98WysiwygInsertLink();
+    scheduleNativeEditorDraftSave(editor);
+    return true;
+  }
+  if (typeof editor.__cc98WysiwygInsertMedia === "function") {
+    const mediaTag = kind === "bilibili" ? "bilibili" : kind;
+    editor.__cc98WysiwygInsertMedia(mediaTag);
+    scheduleNativeEditorDraftSave(editor);
+    return true;
+  }
+  const textarea = getNativeEditorTextarea(editor);
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return true;
+  }
+  if (kind === "link") {
+    insertPrivateMessageLink(textarea);
+  } else if (kind === "image") {
+    insertPrivateMessageTaggedUrl(textarea, "img", "请输入图片地址");
+  } else if (kind === "video") {
+    insertPrivateMessageTaggedUrl(textarea, "video", "请输入视频地址");
+  } else if (kind === "bilibili") {
+    insertPrivateMessageTaggedUrl(textarea, "bilibili", "请输入 Bilibili 地址或 BV 号");
+  } else if (kind === "audio") {
+    insertPrivateMessageTaggedUrl(textarea, "audio", "请输入音频地址");
+  }
+  scheduleNativeEditorDraftSave(editor);
+  scheduleNativeEditorStabilize(editor);
+  return true;
+}
+
 function getNativeEditorTextarea(editor) {
+  const boundTextarea = editor?.querySelector?.("textarea[data-cc98-dual-ubb-native='true']");
+  if (
+    boundTextarea instanceof HTMLTextAreaElement
+    && !editor?.classList?.contains("cc98-rebuild-markdown-editor-active")
+  ) {
+    return boundTextarea;
+  }
   const textareas = [...editor.querySelectorAll("textarea")]
     .filter((textarea) => textarea instanceof HTMLTextAreaElement);
   return textareas.find((textarea) => {
@@ -5787,13 +15079,494 @@ function getNativeEditorTextarea(editor) {
   }) || textareas[0] || null;
 }
 
+function getNativeEditorTitleInput(editor) {
+  if (!(editor instanceof HTMLElement)) {
+    return null;
+  }
+  return editor.querySelector(".createTopicTitle input, input[name='title'], input[placeholder*='标题']");
+}
+
+function normalizeEditorDraftKeyPart(value) {
+  return encodeURIComponent(String(value || "").trim() || "unknown");
+}
+
+function getNativeEditorDraftKind(editor) {
+  if (!(editor instanceof HTMLElement)) {
+    return "editor";
+  }
+  if (editor.matches("#sendTopicInfo") || editor.closest("#sendTopicInfo")) {
+    return "reply";
+  }
+  if (getEditorEditPostId()) {
+    return "edit";
+  }
+  return "post";
+}
+
+function getNativeEditorDraftKey(editor) {
+  if (!(editor instanceof HTMLElement)) {
+    return "";
+  }
+  const kind = getNativeEditorDraftKind(editor);
+  if (kind === "edit") {
+    const postId = getEditorEditPostId();
+    return postId ? `${EDITOR_DRAFT_STORAGE_PREFIX}edit:${normalizeEditorDraftKeyPart(postId)}` : "";
+  }
+  if (kind === "reply") {
+    const topicId = getTopicRouteInfo()?.topicId
+      || location.pathname.match(/\/topic\/(\d+)/i)?.[1]
+      || "";
+    return `${EDITOR_DRAFT_STORAGE_PREFIX}reply:${normalizeEditorDraftKeyPart(topicId || getRoutePageKey())}`;
+  }
+  const boardId = location.pathname.match(/\/editor\/postTopic\/(\d+)/i)?.[1]
+    || editor.querySelector('a[href*="/board/"]')?.getAttribute("href")?.match(/\/board\/(\d+)/i)?.[1]
+    || "";
+  return `${EDITOR_DRAFT_STORAGE_PREFIX}post:${normalizeEditorDraftKeyPart(boardId || getRoutePageKey())}`;
+}
+
+function getNativeEditorDraftSnapshot(editor) {
+  const titleInput = getNativeEditorTitleInput(editor);
+  const textarea = getNativeEditorTextarea(editor);
+  return {
+    key: getNativeEditorDraftKey(editor),
+    kind: getNativeEditorDraftKind(editor),
+    title: titleInput instanceof HTMLInputElement ? titleInput.value : "",
+    content: textarea instanceof HTMLTextAreaElement ? textarea.value : "",
+    href: location.href,
+    updatedAt: Date.now()
+  };
+}
+
+function hasNativeEditorDraftContent(draft) {
+  return Boolean(String(draft?.title || "").trim() || String(draft?.content || "").trim());
+}
+
+function readNativeEditorDraftByKey(key) {
+  if (!key) {
+    return null;
+  }
+  try {
+    const draft = JSON.parse(localStorage.getItem(key) || "null");
+    if (!draft || typeof draft !== "object") {
+      return null;
+    }
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function readNativeEditorDraft(editor) {
+  return readNativeEditorDraftByKey(getNativeEditorDraftKey(editor));
+}
+
+function clearNativeEditorDraftByKey(key) {
+  if (!key) {
+    return false;
+  }
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearNativeEditorDraft(editor) {
+  return clearNativeEditorDraftByKey(getNativeEditorDraftKey(editor));
+}
+
+function formatEditorDraftTime(timestamp) {
+  if (!Number(timestamp)) {
+    return "";
+  }
+  try {
+    return new Date(Number(timestamp)).toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch {
+    return "";
+  }
+}
+
+function setNativeEditorFieldValue(field, value) {
+  if (!(field instanceof HTMLTextAreaElement) && !(field instanceof HTMLInputElement)) {
+    return;
+  }
+  setNativeMessageInputValue(field, String(value ?? ""));
+}
+
+function updateNativeEditorDraftStatus(editor, text = "") {
+  const bar = editor?.querySelector?.(".cc98-rebuild-editor-draftbar");
+  const status = bar?.querySelector?.(".cc98-rebuild-editor-draft-status");
+  if (!(status instanceof HTMLElement)) {
+    return;
+  }
+  if (text) {
+    status.textContent = text;
+    return;
+  }
+  const draft = readNativeEditorDraft(editor);
+  const time = formatEditorDraftTime(draft?.updatedAt);
+  status.textContent = draft && hasNativeEditorDraftContent(draft)
+    ? `有草稿 · ${time || "刚刚"}`
+    : "本地草稿";
+}
+
+function saveNativeEditorDraft(editor, options = {}) {
+  const draft = getNativeEditorDraftSnapshot(editor);
+  if (!draft.key) {
+    return false;
+  }
+  if (!hasNativeEditorDraftContent(draft)) {
+    clearNativeEditorDraftByKey(draft.key);
+    updateNativeEditorDraftStatus(editor, options.manual ? "没有可保存内容" : "");
+    return false;
+  }
+  try {
+    localStorage.setItem(draft.key, JSON.stringify(draft));
+    updateNativeEditorDraftStatus(editor, `${options.manual ? "已保存" : "自动保存"} · ${formatEditorDraftTime(draft.updatedAt)}`);
+    return true;
+  } catch {
+    updateNativeEditorDraftStatus(editor, "草稿保存失败");
+    return false;
+  }
+}
+
+function scheduleNativeEditorDraftSave(editor) {
+  if (!(editor instanceof HTMLElement) || !isNativePostSubmitEditor(editor)) {
+    return;
+  }
+  const existing = editorDraftAutosaveTimers.get(editor);
+  if (existing) {
+    window.clearTimeout(existing);
+  }
+  const timer = window.setTimeout(() => {
+    editorDraftAutosaveTimers.delete(editor);
+    saveNativeEditorDraft(editor, { manual: false });
+  }, 650);
+  editorDraftAutosaveTimers.set(editor, timer);
+}
+
+function restoreNativeEditorDraft(editor, anchor = editor) {
+  const draft = readNativeEditorDraft(editor);
+  if (!draft || !hasNativeEditorDraftContent(draft)) {
+    updateNativeEditorDraftStatus(editor, "没有可恢复草稿");
+    return false;
+  }
+  const titleInput = getNativeEditorTitleInput(editor);
+  const textarea = getNativeEditorTextarea(editor);
+  if (titleInput instanceof HTMLInputElement) {
+    setNativeEditorFieldValue(titleInput, draft.title || "");
+  }
+  if (textarea instanceof HTMLTextAreaElement) {
+    setNativeEditorFieldValue(textarea, draft.content || "");
+    textarea.focus({ preventScroll: true });
+    const caret = textarea.value.length;
+    textarea.setSelectionRange(caret, caret);
+  }
+  updateNativeEditorDraftStatus(editor, `已恢复 · ${formatEditorDraftTime(draft.updatedAt) || "本地草稿"}`);
+  showRebuiltTransientToast(anchor, "已恢复草稿");
+  return true;
+}
+
+function removeNativeEditorDraftControls(editor) {
+  editor?.querySelector?.(".cc98-rebuild-editor-draftbar")?.remove();
+}
+
+function ensureNativeEditorDraftControls(editor) {
+  if (!(editor instanceof HTMLElement) || !isNativePostSubmitEditor(editor)) {
+    return;
+  }
+  if (editor.dataset.cc98DraftAutosaveBound !== "true") {
+    editor.dataset.cc98DraftAutosaveBound = "true";
+    const handleInput = (event) => {
+      const target = event.target;
+      if (target === getNativeEditorTextarea(editor) || target === getNativeEditorTitleInput(editor)) {
+        scheduleNativeEditorDraftSave(editor);
+      }
+    };
+    editor.addEventListener("input", handleInput, true);
+    editor.addEventListener("change", handleInput, true);
+  }
+  let bar = editor.querySelector(".cc98-rebuild-editor-draftbar");
+  if (!(bar instanceof HTMLElement)) {
+    bar = createElement("div", "cc98-rebuild-editor-draftbar");
+    const status = createElement("span", "cc98-rebuild-editor-draft-status");
+    const actions = createElement("div", "cc98-rebuild-editor-draft-actions");
+    const save = createButton("cc98-rebuild-editor-draft-button", "保存草稿", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const ok = saveNativeEditorDraft(editor, { manual: true });
+      showRebuiltTransientToast(save, ok ? "草稿已保存" : "没有可保存内容");
+    });
+    const restore = createButton("cc98-rebuild-editor-draft-button", "恢复草稿", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      restoreNativeEditorDraft(editor, restore);
+    });
+    const clear = createButton("cc98-rebuild-editor-draft-button cc98-rebuild-editor-draft-clear", "清除草稿", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      clearNativeEditorDraft(editor);
+      updateNativeEditorDraftStatus(editor, "草稿已清除");
+      showRebuiltTransientToast(clear, "草稿已清除");
+    });
+    actions.append(save, restore, clear);
+    bar.append(status, actions);
+    const first = editor.firstElementChild;
+    editor.insertBefore(bar, first || null);
+  }
+  updateNativeEditorDraftStatus(editor);
+}
+
 const EDITOR_COLOR_PRESETS = [
   "#000000", "#666666", "#ffffff", "#ff0000",
   "#ff7a00", "#f2c200", "#00a65a", "#00a1d6",
   "#1677ff", "#722ed1", "#eb2f96", "#8b5a2b"
 ];
 
+const EDITOR_GRADIENT_PRESETS = [
+  ["#ff4d4f", "#faad14"],
+  ["#13c2c2", "#1677ff"],
+  ["#1677ff", "#722ed1"],
+  ["#eb2f96", "#722ed1"],
+  ["#52c41a", "#13c2c2"],
+  ["#ff4d4f", "#faad14", "#52c41a", "#1677ff", "#722ed1"]
+];
+
 const EDITOR_FONT_SIZE_VALUES = ["1", "2", "3", "4", "5", "6", "7"];
+const EDITOR_TYPOGRAPHY_RESET_VALUE = "__cc98_reset__";
+
+const EDITOR_FONT_FAMILY_GROUPS = [
+  ["常用中文", [
+    ["SimSun", "宋体"],
+    ["SimHei", "黑体"],
+    ["Microsoft YaHei", "微软雅黑"],
+    ["Microsoft JhengHei", "微软正黑体"],
+    ["NSimSun", "新宋体"],
+    ["FangSong", "仿宋"],
+    ["KaiTi", "楷体"],
+    ["FangSong_GB2312", "仿宋_GB2312"],
+    ["KaiTi_GB2312", "楷体_GB2312"]
+  ]],
+  ["Windows / Office", [
+    ["PMingLiU", "新细明体"],
+    ["MingLiU", "细明体"],
+    ["DFKai-SB", "标楷体"],
+    ["LiSu", "隶书"],
+    ["YouYuan", "幼圆"],
+    ["FZShuTi", "方正舒体"],
+    ["FZYaoti", "方正姚体"]
+  ]],
+  ["华文字体", [
+    ["STHeiti Light", "华文细黑（Light）"],
+    ["STXihei", "华文细黑"],
+    ["STHeiti", "华文黑体"],
+    ["STKaiti", "华文楷体"],
+    ["STSong", "华文宋体"],
+    ["STZhongsong", "华文中宋"],
+    ["STFangsong", "华文仿宋"],
+    ["STCaiyun", "华文彩云"],
+    ["STHupo", "华文琥珀"],
+    ["STLiti", "华文隶书"],
+    ["STXingkai", "华文行楷"],
+    ["STXinwei", "华文新魏"]
+  ]],
+  ["繁体 / macOS", [
+    ["BiauKai", "标楷体（繁）"],
+    ["LiHei Pro Medium", "俪黑 Pro"],
+    ["LiSong Pro Light", "俪宋 Pro"],
+    ["Apple LiGothic Medium", "苹果俪中黑"],
+    ["Apple LiSung Light", "苹果俪细宋"]
+  ]],
+  ["西文 / 等宽", [
+    ["Arial", "Arial"],
+    ["Consolas", "Consolas"]
+  ]]
+];
+
+const EDITOR_FONT_FAMILY_VALUES = new Set(
+  EDITOR_FONT_FAMILY_GROUPS.flatMap(([, fonts]) => fonts.map(([value]) => value))
+);
+
+function normalizeEditorFontFamilyValue(value) {
+  const normalized = String(value || "").trim();
+  return EDITOR_FONT_FAMILY_VALUES.has(normalized) ? normalized : "";
+}
+
+function rememberEditorFontFamilySelection(editor, select) {
+  if (!(editor instanceof HTMLElement) || !(select instanceof HTMLSelectElement)) {
+    return;
+  }
+  if (typeof editor.__cc98WysiwygRememberSelection === "function") {
+    editor.__cc98WysiwygRememberSelection({ preserveNonCollapsed: true });
+    return;
+  }
+  const textarea = getNativeEditorTextarea(editor);
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return;
+  }
+  select.dataset.cc98FontSelectionStart = String(
+    Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length
+  );
+  select.dataset.cc98FontSelectionEnd = String(
+    Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : textarea.selectionStart
+  );
+}
+
+function applyEditorFontFamily(editor, fontFamily, select = null) {
+  const normalized = normalizeEditorFontFamilyValue(fontFamily);
+  if (!(editor instanceof HTMLElement) || !normalized) {
+    return false;
+  }
+  if (typeof editor.__cc98WysiwygApplyFontFamily === "function") {
+    return editor.__cc98WysiwygApplyFontFamily(normalized);
+  }
+  const textarea = getNativeEditorTextarea(editor);
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return false;
+  }
+  const storedStart = Number(select?.dataset?.cc98FontSelectionStart);
+  const storedEnd = Number(select?.dataset?.cc98FontSelectionEnd);
+  const start = Number.isFinite(storedStart)
+    ? Math.max(0, Math.min(textarea.value.length, storedStart))
+    : (Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length);
+  const end = Number.isFinite(storedEnd)
+    ? Math.max(start, Math.min(textarea.value.length, storedEnd))
+    : (Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start);
+  const result = window.CC98RebornExtendedUbbCore?.applyFontToSource(
+    textarea.value, { start, end }, normalized
+  );
+  if (!result) {
+    return false;
+  }
+  setNativeMessageInputValue(textarea, result.value);
+  textarea.focus({ preventScroll: true });
+  textarea.setSelectionRange(result.start, result.end);
+  scheduleNativeEditorStabilize(editor);
+  scheduleNativeEditorDraftSave(editor);
+  return true;
+}
+
+function createEditorFontFamilySelect(editor, extraClassName = "") {
+  const select = document.createElement("select");
+  select.className = `cc98-rebuild-editor-font-select ${extraClassName}`.trim();
+  select.title = "字体";
+  select.setAttribute("aria-label", "字体");
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "字体";
+  placeholder.selected = true;
+  select.append(placeholder);
+  EDITOR_FONT_FAMILY_GROUPS.forEach(([groupLabel, fonts]) => {
+    const group = document.createElement("optgroup");
+    group.label = groupLabel;
+    fonts.forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = `${label} · ${value}`;
+      option.style.fontFamily = value;
+      group.append(option);
+    });
+    select.append(group);
+  });
+  select.value = normalizeEditorFontFamilyValue(editor.__cc98CurrentFontFamily);
+  const rememberSelection = () => rememberEditorFontFamilySelection(editor, select);
+  select.addEventListener("pointerdown", rememberSelection);
+  select.addEventListener("keydown", (event) => {
+    if (["Enter", " ", "ArrowUp", "ArrowDown"].includes(event.key)) {
+      rememberSelection();
+    }
+  });
+  select.addEventListener("change", () => {
+    const fontFamily = normalizeEditorFontFamilyValue(select.value);
+    if (fontFamily) {
+      editor.__cc98CurrentFontFamily = fontFamily;
+      applyEditorFontFamily(editor, fontFamily, select);
+    }
+    select.closest(".cc98-rebuild-font-family-control")?.querySelector(".cc98-rebuild-font-family-apply")?.toggleAttribute("disabled", !fontFamily);
+  });
+  return select;
+}
+
+function getStoredEditorFontFamilySelection(select, textarea) {
+  const start = Number(select?.dataset?.cc98FontSelectionStart);
+  const end = Number(select?.dataset?.cc98FontSelectionEnd);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return null;
+  }
+  return {
+    start: Math.max(0, Math.min(textarea.value.length, start)),
+    end: Math.max(0, Math.min(textarea.value.length, end))
+  };
+}
+
+function createEditorFontFamilyControl(editor, extraClassName = "") {
+  const control = createElement("span", "cc98-rebuild-font-family-control");
+  const select = createEditorFontFamilySelect(editor, extraClassName);
+  const apply = createButton("cc98-rebuild-font-family-apply", "字", (event) => {
+    event.preventDefault();
+    const fontFamily = normalizeEditorFontFamilyValue(select.value || editor.__cc98CurrentFontFamily);
+    if (fontFamily) {
+      applyEditorFontFamily(editor, fontFamily, select);
+    }
+  });
+  apply.type = "button";
+  apply.title = "应用当前字体";
+  apply.setAttribute("aria-label", apply.title);
+  apply.disabled = !normalizeEditorFontFamilyValue(select.value);
+  apply.addEventListener("pointerdown", (event) => {
+    rememberEditorFontFamilySelection(editor, select);
+    event.preventDefault();
+  });
+  const reset = createButton("cc98-rebuild-font-family-reset", "取消字体", (event) => {
+    event.preventDefault();
+    const textarea = getNativeEditorTextarea(editor);
+    const selection = textarea instanceof HTMLTextAreaElement ? getStoredEditorFontFamilySelection(select, textarea) : null;
+    clearEditorTypography(editor, "font", selection);
+    editor.__cc98CurrentFontFamily = "";
+    select.value = "";
+    apply.disabled = true;
+  });
+  reset.type = "button";
+  reset.title = "取消字体（恢复默认）";
+  reset.setAttribute("aria-label", reset.title);
+  reset.addEventListener("pointerdown", (event) => {
+    rememberEditorFontFamilySelection(editor, select);
+    event.preventDefault();
+  });
+  control.append(apply, select, reset);
+  return control;
+}
+
+function clearEditorTypography(editor, tag, selection = null) {
+  const clear = tag === "font" ? editor?.__cc98WysiwygClearFontFamily : editor?.__cc98WysiwygClearFontSize;
+  if (typeof clear === "function") {
+    return clear();
+  }
+  const textarea = getNativeEditorTextarea(editor);
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return false;
+  }
+  const result = window.CC98RebornExtendedUbbCore?.applyTypographyToSource(
+    textarea.value,
+    selection || { start: textarea.selectionStart, end: textarea.selectionEnd },
+    tag, null
+  );
+  if (!result) {
+    return false;
+  }
+  setNativeMessageInputValue(textarea, result.value);
+  textarea.focus({ preventScroll: true });
+  textarea.setSelectionRange(result.start, result.end);
+  scheduleNativeEditorStabilize(editor);
+  scheduleNativeEditorDraftSave(editor);
+  return true;
+}
 
 function normalizeHexColor(value, fallback = "#ff0000") {
   const text = String(value ?? "").trim();
@@ -5822,8 +15595,160 @@ function hexToRgb(color) {
 
 function rgbToHex(r, g, b) {
   return `#${[r, g, b]
-    .map((value) => Math.max(0, Math.min(255, Number(value) || 0)).toString(16).padStart(2, "0"))
+    .map((value) => Math.round(Math.max(0, Math.min(255, Number(value) || 0))).toString(16).padStart(2, "0"))
     .join("")}`;
+}
+
+function createEditorGradientStop(color, position) {
+  editorGradientStopSequence += 1;
+  return {
+    id: `gradient-stop-${editorGradientStopSequence}`,
+    color: normalizeHexColor(color),
+    position: Math.max(0, Math.min(100, Number(position) || 0))
+  };
+}
+
+function normalizeEditorGradientStops(stops, fallbackColor = "#ff0000") {
+  const normalized = (Array.isArray(stops) ? stops : [])
+    .map((stop) => {
+      if (!stop || typeof stop !== "object") {
+        return null;
+      }
+      if (!stop.id) {
+        stop.id = createEditorGradientStop(stop.color || fallbackColor, stop.position).id;
+      }
+      stop.color = normalizeHexColor(stop.color, fallbackColor);
+      stop.position = Math.max(0, Math.min(100, Number(stop.position) || 0));
+      return stop;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.position - b.position);
+  if (normalized.length >= 2) {
+    return normalized;
+  }
+  return [
+    createEditorGradientStop(fallbackColor, 0),
+    createEditorGradientStop("#1677ff", 100)
+  ];
+}
+
+function interpolateEditorGradientColor(startColor, endColor, amount) {
+  const start = hexToRgb(startColor);
+  const end = hexToRgb(endColor);
+  const ratio = Math.max(0, Math.min(1, Number(amount) || 0));
+  return rgbToHex(
+    Math.round(start.r + (end.r - start.r) * ratio),
+    Math.round(start.g + (end.g - start.g) * ratio),
+    Math.round(start.b + (end.b - start.b) * ratio)
+  );
+}
+
+function getEditorGradientColorAt(stops, progress) {
+  const normalized = normalizeEditorGradientStops(stops);
+  const position = Math.max(0, Math.min(100, Number(progress) * 100));
+  if (position <= normalized[0].position) {
+    return normalized[0].color;
+  }
+  const last = normalized.at(-1);
+  if (position >= last.position) {
+    return last.color;
+  }
+  for (let index = 1; index < normalized.length; index += 1) {
+    const next = normalized[index];
+    const previous = normalized[index - 1];
+    if (position > next.position) {
+      continue;
+    }
+    const width = Math.max(1, next.position - previous.position);
+    return interpolateEditorGradientColor(previous.color, next.color, (position - previous.position) / width);
+  }
+  return last.color;
+}
+
+function getEditorGradientCss(stops) {
+  return `linear-gradient(90deg, ${normalizeEditorGradientStops(stops)
+    .map((stop) => `${stop.color} ${stop.position}%`)
+    .join(", ")})`;
+}
+
+function segmentEditorGradientText(text) {
+  if (typeof Intl?.Segmenter === "function") {
+    const segmenter = new Intl.Segmenter("zh-CN", { granularity: "grapheme" });
+    return [...segmenter.segment(String(text ?? ""))].map((item) => item.segment);
+  }
+  return Array.from(String(text ?? ""));
+}
+
+function normalizeEditorGradientDensity(value) {
+  const number = Number.parseInt(String(value ?? ""), 10);
+  return Math.max(1, Math.min(10, Number.isFinite(number) ? number : 1));
+}
+
+function buildEditorGradientUbb(source, stops, density = 1) {
+  const text = String(source ?? "");
+  const step = normalizeEditorGradientDensity(density);
+  const protectedPattern = /\[(?:img|audio|mp3|video|bili|bilibili)(?:=[^\]]+)?\][\s\S]*?\[\/(?:img|audio|mp3|video|bili|bilibili)\]|\[[^\]\r\n]{1,100}\]/ig;
+  const parts = [];
+  let lastIndex = 0;
+  let match = null;
+  while ((match = protectedPattern.exec(text))) {
+    if (match.index > lastIndex) {
+      parts.push({ protected: false, value: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ protected: true, value: match[0] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ protected: false, value: text.slice(lastIndex) });
+  }
+
+  const visibleSegments = parts.flatMap((part) => (
+    part.protected
+      ? []
+      : segmentEditorGradientText(part.value).filter((segment) => !/^\s+$/u.test(segment))
+  ));
+  const totalColorSteps = Math.max(1, Math.ceil(visibleSegments.length / step));
+  let visibleIndex = 0;
+  let currentColor = "";
+  let currentText = "";
+  const output = [];
+  const flushColoredText = () => {
+    if (!currentText) {
+      return;
+    }
+    output.push(currentColor ? `[color=${currentColor}]${currentText}[/color]` : currentText);
+    currentColor = "";
+    currentText = "";
+  };
+
+  parts.forEach((part) => {
+    if (part.protected) {
+      flushColoredText();
+      output.push(part.value);
+      return;
+    }
+    segmentEditorGradientText(part.value).forEach((segment) => {
+      if (/^\s+$/u.test(segment)) {
+        if (currentText) {
+          currentText += segment;
+        } else {
+          output.push(segment);
+        }
+        return;
+      }
+      const colorStep = Math.floor(visibleIndex / step);
+      const progress = totalColorSteps <= 1 ? 0 : colorStep / (totalColorSteps - 1);
+      visibleIndex += 1;
+      const color = getEditorGradientColorAt(stops, progress);
+      if (currentColor && currentColor !== color) {
+        flushColoredText();
+      }
+      currentColor = color;
+      currentText += segment;
+    });
+  });
+  flushColoredText();
+  return output.join("");
 }
 
 function stopEditorColorEvent(event) {
@@ -5862,6 +15787,10 @@ function ensureLegacyColorPickerKillStyle() {
 function getEditorColorTriggerButton(target) {
   if (!(target instanceof Element)) {
     return null;
+  }
+  const split = target.closest(".cc98-rebuild-color-split");
+  if (split instanceof HTMLElement) {
+    return split.querySelector(".cc98-rebuild-color-button");
   }
   const direct = target.closest(".ubb-button-color, .cc98-rebuild-color-button");
   if (direct instanceof HTMLElement) {
@@ -5925,12 +15854,21 @@ function ensureLegacyColorPickerSuppressor() {
     legacyColorPickerObserver.observe(document.documentElement || document, { childList: true, subtree: true });
   }
   if (!legacyColorPickerInterval) {
-    legacyColorPickerInterval = window.setInterval(() => suppressLegacyEditorColorPickers(document), 700);
+    legacyColorPickerInterval = window.setInterval(() => {
+      if (document.visibilityState === "hidden"
+        || !lastSettings?.enabled
+        || !document.querySelector(LEGACY_COLOR_PICKER_SELECTOR)) {
+        return;
+      }
+      suppressLegacyEditorColorPickers(document);
+    }, 4500);
   }
 }
 
 function findEditorForColorButton(button) {
-  return button?.closest?.(".cc98-rebuild-native-editor, .createTopic, #sendTopicInfo, .sendTopicInfo, .reply-input, .ubb-editor, form")
+  return button?.__cc98ColorEditor
+    || button?.closest?.(".cc98-rebuild-profile-signature-editor, .cc98-rebuild-message-editor, .cc98-rebuild-native-editor")
+    || button?.closest?.(".createTopic, #sendTopicInfo, .sendTopicInfo, .reply-input, .ubb-editor, form")
     || document.querySelector(".cc98-rebuild-native-editor, .createTopic, #sendTopicInfo")
     || null;
 }
@@ -5941,7 +15879,7 @@ function positionEditorColorPopover(button, panel) {
   }
   const rect = button.getBoundingClientRect();
   const margin = 12;
-  const width = Math.min(328, Math.max(280, window.innerWidth - margin * 2));
+  const width = Math.min(390, Math.max(300, window.innerWidth - margin * 2));
   panel.style.setProperty("width", `${width}px`, "important");
   panel.style.setProperty("min-width", `${width}px`, "important");
   const panelHeight = panel.offsetHeight || 252;
@@ -5973,55 +15911,59 @@ function positionEditorFontSizePopover(button, panel) {
   panel.style.setProperty("left", `${left}px`, "important");
 }
 
-function getEditorColorButtonValue(button) {
-  const input = button?.querySelector?.(":scope > .cc98-rebuild-native-color-input")
-    || getEditorColorPanels(button)[0]?.querySelector?.(".cc98-rebuild-color-popover-input");
-  const preview = button?.querySelector?.(".sp-preview-inner, .sp-preview");
-  return normalizeHexColor(input?.value || preview?.style?.backgroundColor || preview?.style?.color || "#ff0000");
+function copyEditorColorChoice(choice) {
+  const color = normalizeHexColor(choice?.color);
+  const stops = normalizeEditorGradientStops((choice?.stops || []).map((stop) => ({ ...stop })), color);
+  return {
+    mode: ["solid", "transparent", "gradient"].includes(choice?.mode) ? choice.mode : "solid",
+    color,
+    stops,
+    density: normalizeEditorGradientDensity(choice?.density),
+    selectedStopId: stops.some((stop) => stop.id === choice?.selectedStopId) ? choice.selectedStopId : stops[0].id
+  };
 }
 
-function updateEditorColorButtonPreview(button, color) {
-  const normalized = normalizeHexColor(color);
-  const rgb = hexToRgb(normalized);
-  getEditorColorPanels(button).forEach((panel) => {
-    if (panel instanceof HTMLElement) {
-      panel.dataset.cc98CurrentColor = normalized;
-    }
-  });
-  [
-    ...(button?.querySelectorAll?.(".cc98-rebuild-native-color-input") ?? []),
-    ...getEditorColorPanels(button).flatMap((panel) => [...panel.querySelectorAll(".cc98-rebuild-color-popover-input")])
-  ].forEach((input) => {
-    if (input instanceof HTMLInputElement) {
-      input.value = normalized;
-    }
-  });
-  getEditorColorPanels(button).flatMap((panel) => [...panel.querySelectorAll("[data-cc98-color-channel]")]).forEach((input) => {
-    if (input instanceof HTMLInputElement) {
-      input.value = String(rgb[input.dataset.cc98ColorChannel] ?? 0);
-    }
-  });
-  [
-    ...(button?.querySelectorAll?.(".sp-preview-inner, .sp-preview") ?? []),
-    ...getEditorColorPanels(button).flatMap((panel) => [...panel.querySelectorAll(".cc98-rebuild-color-popover-swatch")])
-  ].forEach((node) => {
-    if (node instanceof HTMLElement) {
-      node.style.setProperty("background-color", normalized, "important");
-    }
-  });
-  getEditorColorPanels(button).flatMap((panel) => [...panel.querySelectorAll(".cc98-rebuild-color-preset")]).forEach((preset) => {
-    if (preset instanceof HTMLElement) {
-      preset.classList.toggle("is-active", normalizeHexColor(preset.dataset.cc98ColorPreset) === normalized);
-    }
-  });
+function getEditorColorState(button) {
+  const editor = button.__cc98ColorEditor || findEditorForColorButton(button);
+  let state = button.__cc98ColorState || editor?.__cc98ColorState;
+  if (!state) {
+    const legacy = button.querySelector(".sp-preview-inner, .sp-preview");
+    const color = button.classList.contains("cc98-rebuild-message-editor-color")
+      ? "#ff6666" : normalizeHexColor(legacy?.style.backgroundColor, "#ff0000");
+    state = { committed: copyEditorColorChoice({ color }) };
+  }
+  button.__cc98ColorState = state;
+  if (editor) {
+    editor.__cc98ColorState = state;
+  }
+  return state;
 }
 
-function getColorPopoverValue(panel, button) {
-  return normalizeHexColor(
-    panel?.dataset?.cc98CurrentColor
-      || panel?.querySelector?.(".cc98-rebuild-color-popover-input")?.value
-      || getEditorColorButtonValue(button)
-  );
+function renderEditorColorSwatch(swatch, choice) {
+  if (!(swatch instanceof HTMLElement)) {
+    return;
+  }
+  // Set all background components together so transparency cannot leave tiled gradients behind.
+  const transparent = choice.mode === "transparent";
+  swatch.style.setProperty("background-color", transparent ? "transparent" : choice.color, "important");
+  swatch.style.setProperty("background-image", transparent
+    ? "conic-gradient(#c6cbd0 25%, #fff 0 50%, #c6cbd0 0 75%, #fff 0)"
+    : choice.mode === "gradient" ? getEditorGradientCss(choice.stops) : "none", "important");
+  swatch.style.setProperty("background-size", transparent ? "8px 8px" : "100% 100%", "important");
+}
+
+function renderEditorColorButton(button, choice = getEditorColorState(button).committed) {
+  button.querySelectorAll(".cc98-rebuild-color-swatch").forEach((swatch) => renderEditorColorSwatch(swatch, choice));
+  const input = button.querySelector(":scope > .cc98-rebuild-native-color-input");
+  if (input instanceof HTMLInputElement) {
+    input.value = getEditorColorState(button).committed.color;
+  }
+}
+
+function applyEditorColorChoice(editor, choice, selection) {
+  return choice.mode === "gradient"
+    ? applyEditorGradient(editor, choice.stops, selection, choice.density)
+    : applyEditorColor(editor, choice.mode === "transparent" ? "transparent" : choice.color, selection);
 }
 
 function getStoredEditorSelection(button, textarea) {
@@ -6037,18 +15979,802 @@ function getStoredEditorSelection(button, textarea) {
   };
 }
 
-function rememberEditorSelection(editor, button) {
+let cc98ColorSelectionSequence = 0;
+
+function getEditorColorSelectionMarkerText(marker) {
+  return marker?.dataset?.cc98ColorSelectionMarker || "";
+}
+
+function getEditorColorSelectionMarkerRange(snapshot) {
+  if (!snapshot || snapshot.surface !== "visual") {
+    return null;
+  }
+  const startMarker = snapshot.startMarker;
+  const endMarker = snapshot.endMarker;
+  if (
+    !(snapshot.wysiwyg instanceof HTMLElement)
+    || !(startMarker instanceof HTMLElement)
+    || !startMarker.isConnected
+    || !snapshot.wysiwyg.contains(startMarker)
+  ) {
+    return null;
+  }
+  if (snapshot.collapsed) {
+    const range = document.createRange();
+    try {
+      range.setStartAfter(startMarker);
+      range.collapse(true);
+      return range;
+    } catch {
+      return null;
+    }
+  }
+  if (
+    !(endMarker instanceof HTMLElement)
+    || !endMarker.isConnected
+    || !snapshot.wysiwyg.contains(endMarker)
+  ) {
+    return null;
+  }
+  const range = document.createRange();
+  try {
+    range.setStartAfter(startMarker);
+    range.setEndBefore(endMarker);
+    return range;
+  } catch {
+    return null;
+  }
+}
+
+function clearEditorColorSelectionSnapshot(editor, options = {}) {
+  const snapshot = editor?.__cc98ColorSelectionSnapshot;
+  if (!snapshot) {
+    return null;
+  }
+  const range = getEditorColorSelectionMarkerRange(snapshot);
+  if (options.restore && range) {
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+  [snapshot.startMarker, snapshot.endMarker].forEach((marker) => {
+    if (marker instanceof HTMLElement) {
+      marker.remove();
+    }
+  });
+  delete editor.__cc98ColorSelectionSnapshot;
+  return range;
+}
+
+function captureEditorColorSourceSelection(editor, textarea, selection) {
+  if (!(textarea instanceof HTMLTextAreaElement) || !selection) {
+    return null;
+  }
+  clearEditorColorSelectionSnapshot(editor);
+  // A source selection supersedes any visual selection remembered before the
+  // source pane became active.  Otherwise a later color-button click could
+  // accidentally reuse an old visual interval after the source was edited.
+  delete editor.__cc98WysiwygLogicalSelection;
+  const max = textarea.value.length;
+  const start = Math.max(0, Math.min(max, Number(selection.start) || 0));
+  const end = Math.max(start, Math.min(max, Number(selection.end) || start));
+  const snapshot = {
+    surface: "source",
+    start,
+    end,
+    sourceValue: textarea.value,
+    selectedText: textarea.value.slice(start, end),
+    locked: true
+  };
+  editor.__cc98ColorSelectionSnapshot = snapshot;
+  return snapshot;
+}
+
+function getEditorVisualNodePath(root, node) {
+  if (!(root instanceof Node) || !(node instanceof Node)) {
+    return null;
+  }
+  const path = [];
+  let current = node;
+  while (current && current !== root) {
+    const parent = current.parentNode;
+    if (!(parent instanceof Node)) {
+      return null;
+    }
+    const index = [...parent.childNodes].indexOf(current);
+    if (index < 0) {
+      return null;
+    }
+    path.unshift(index);
+    current = parent;
+  }
+  return current === root ? path : null;
+}
+
+function getEditorVisualNodeAtPath(root, path) {
+  if (!(root instanceof Node) || !Array.isArray(path)) {
+    return null;
+  }
+  return path.reduce((node, index) => {
+    if (!(node instanceof Node)) {
+      return null;
+    }
+    return node.childNodes?.[index] || null;
+  }, root);
+}
+
+function buildEditorColorVisualLogicalSelection(editor, wysiwyg, range) {
+  if (
+    !(editor instanceof HTMLElement)
+    || !(wysiwyg instanceof HTMLElement)
+    || !(range instanceof Range)
+  ) {
+    return null;
+  }
+  const container = range.commonAncestorContainer;
+  if (!(container === wysiwyg || wysiwyg.contains(container))) {
+    return null;
+  }
+  const startPath = getEditorVisualNodePath(wysiwyg, range.startContainer);
+  const endPath = getEditorVisualNodePath(wysiwyg, range.endContainer);
+  if (!startPath || !endPath) {
+    return null;
+  }
+  const clone = wysiwyg.cloneNode(true);
+  const cloneStart = getEditorVisualNodeAtPath(clone, startPath);
+  const cloneEnd = getEditorVisualNodeAtPath(clone, endPath);
+  if (!(cloneStart instanceof Node) || !(cloneEnd instanceof Node)) {
+    return null;
+  }
+
+  let markedRange;
+  try {
+    markedRange = document.createRange();
+    markedRange.setStart(cloneStart, Math.min(range.startOffset, cloneStart.nodeType === Node.TEXT_NODE
+      ? cloneStart.nodeValue.length
+      : cloneStart.childNodes.length));
+    markedRange.setEnd(cloneEnd, Math.min(range.endOffset, cloneEnd.nodeType === Node.TEXT_NODE
+      ? cloneEnd.nodeValue.length
+      : cloneEnd.childNodes.length));
+  } catch {
+    return null;
+  }
+
+  const sourceValue = serializeProfileSignatureWysiwygChildren(wysiwyg)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u200b\uFEFF]/g, "");
+  let visibleSelectionText = "";
+  try {
+    visibleSelectionText = String(range.toString() || "")
+      .replace(/[\u200b\uFEFF]/g, "")
+      .replace(/\u00a0/g, " ");
+  } catch {
+    visibleSelectionText = "";
+  }
+
+  const sequence = ++cc98ColorSelectionSequence;
+  const startToken = `\uE000cc98-color-logical-start-${sequence}\uE001`;
+  const endToken = `\uE000cc98-color-logical-end-${sequence}\uE001`;
+  const startMarker = document.createElement("span");
+  const endMarker = document.createElement("span");
+  startMarker.dataset.cc98ColorSelectionMarker = startToken;
+  endMarker.dataset.cc98ColorSelectionMarker = endToken;
+  startMarker.setAttribute("aria-hidden", "true");
+  endMarker.setAttribute("aria-hidden", "true");
+
+  const collapsed = range.collapsed;
+  try {
+    if (collapsed) {
+      markedRange.collapse(true);
+      markedRange.insertNode(startMarker);
+    } else {
+      // Insert the end first, matching the live-marker implementation and
+      // keeping offsets stable when both boundaries share a text node.
+      const endRange = markedRange.cloneRange();
+      endRange.collapse(false);
+      endRange.insertNode(endMarker);
+      const startRange = markedRange.cloneRange();
+      startRange.collapse(true);
+      startRange.insertNode(startMarker);
+    }
+  } catch {
+    return null;
+  }
+
+  const markedSource = serializeProfileSignatureWysiwygChildren(clone)
+    .replace(/\r\n?/g, "\n");
+  const withoutMarkers = markedSource
+    .split(startToken).join("")
+    .split(endToken).join("")
+    .replace(/[\u200b\uFEFF]/g, "");
+  const startIndex = markedSource.indexOf(startToken);
+  const endIndex = collapsed ? startIndex : markedSource.indexOf(endToken);
+  const sourceStart = startIndex >= 0
+    ? markedSource.slice(0, startIndex)
+      .split(startToken).join("")
+      .split(endToken).join("")
+      .replace(/[\u200b\uFEFF]/g, "").length
+    : 0;
+  const sourceEnd = collapsed
+    ? sourceStart
+    : (endIndex >= 0
+      ? markedSource.slice(0, endIndex)
+        .split(startToken).join("")
+        .split(endToken).join("")
+        .replace(/[\u200b\uFEFF]/g, "").length
+      : sourceStart);
+  const start = Math.max(0, Math.min(sourceValue.length, sourceStart));
+  const end = Math.max(start, Math.min(sourceValue.length, sourceEnd));
+  return {
+    surface: "visual",
+    wysiwyg,
+    collapsed,
+    sourceValue,
+    start,
+    end,
+    sourceSelectedText: withoutMarkers.slice(start, end),
+    selectedText: visibleSelectionText || withoutMarkers.slice(start, end),
+    logical: true,
+    locked: false,
+    startMarker: null,
+    endMarker: null
+  };
+}
+
+function rememberEditorColorVisualLogicalSelection(editor, wysiwyg, range) {
+  const snapshot = buildEditorColorVisualLogicalSelection(editor, wysiwyg, range);
+  if (!snapshot) {
+    return null;
+  }
+  editor.__cc98WysiwygLogicalSelection = snapshot;
+  return snapshot;
+}
+
+function promoteEditorColorLogicalSelection(editor, wysiwyg, sourceValue) {
+  const logical = editor?.__cc98WysiwygLogicalSelection;
+  if (
+    !logical
+    || logical.surface !== "visual"
+    || logical.wysiwyg !== wysiwyg
+  ) {
+    return null;
+  }
+  const value = String(sourceValue ?? "").replace(/[\u200b\uFEFF]/g, "");
+  const sourceSelection = getEditorColorSourceSelectionForApply(logical, value);
+  if (!sourceSelection) {
+    return null;
+  }
+  if (!isUsableEditorColorSourceSelection(logical, value, sourceSelection)
+    && getEditorColorSelectionExpectedSourceText(logical)) {
+    return null;
+  }
+  const promoted = {
+    ...logical,
+    sourceValue: value,
+    start: sourceSelection.start,
+    end: sourceSelection.end,
+    sourceSelectedText: value.slice(sourceSelection.start, sourceSelection.end),
+    startMarker: null,
+    endMarker: null,
+    locked: true,
+    logical: true
+  };
+  editor.__cc98ColorSelectionSnapshot = promoted;
+  return promoted;
+}
+
+function captureEditorColorVisualSelection(editor, wysiwyg, range) {
+  if (!(wysiwyg instanceof HTMLElement) || !(range instanceof Range)) {
+    return null;
+  }
+  const container = range.commonAncestorContainer;
+  if (!(container === wysiwyg || wysiwyg.contains(container))) {
+    return null;
+  }
+  clearEditorColorSelectionSnapshot(editor);
+  const sourceValue = serializeProfileSignatureWysiwygChildren(wysiwyg)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u200b\uFEFF]/g, "");
+  const visibleSelectionText = String(range.toString() || "")
+    .replace(/[\u200b\uFEFF]/g, "")
+    .replace(/\u00a0/g, " ");
+  const sequence = ++cc98ColorSelectionSequence;
+  const startToken = `\uE000cc98-color-start-${sequence}\uE001`;
+  const endToken = `\uE000cc98-color-end-${sequence}\uE001`;
+  const startMarker = document.createElement("span");
+  const endMarker = document.createElement("span");
+  startMarker.dataset.cc98ColorSelectionMarker = startToken;
+  endMarker.dataset.cc98ColorSelectionMarker = endToken;
+  startMarker.setAttribute("aria-hidden", "true");
+  endMarker.setAttribute("aria-hidden", "true");
+  startMarker.contentEditable = "false";
+  endMarker.contentEditable = "false";
+  startMarker.className = "cc98-rebuild-color-selection-marker";
+  endMarker.className = "cc98-rebuild-color-selection-marker";
+
+  const startRange = range.cloneRange();
+  const endRange = range.cloneRange();
+  const collapsed = range.collapsed;
+  if (collapsed) {
+    startRange.collapse(true);
+    startRange.insertNode(startMarker);
+  } else {
+    // Insert the end first so inserting the start marker cannot change the
+    // end boundary when both boundaries are in the same text node.
+    endRange.collapse(false);
+    endRange.insertNode(endMarker);
+    startRange.collapse(true);
+    startRange.insertNode(startMarker);
+  }
+
+  const markedSource = serializeProfileSignatureWysiwygChildren(wysiwyg)
+    .replace(/\r\n?/g, "\n");
+  const startIndex = markedSource.indexOf(startToken);
+  const endIndex = collapsed ? startIndex : markedSource.indexOf(endToken);
+  const withoutMarkers = markedSource
+    .split(startToken).join("")
+    .split(endToken).join("")
+    .replace(/[\u200b\uFEFF]/g, "");
+  const sourceStart = startIndex >= 0
+    ? markedSource.slice(0, startIndex)
+      .split(startToken).join("")
+      .split(endToken).join("")
+      .replace(/[\u200b\uFEFF]/g, "").length
+    : 0;
+  const sourceEnd = collapsed
+    ? sourceStart
+    : (endIndex >= 0
+      ? markedSource.slice(0, endIndex)
+        .split(startToken).join("")
+        .split(endToken).join("")
+        .replace(/[\u200b\uFEFF]/g, "").length
+      : sourceStart);
+  const snapshot = {
+    surface: "visual",
+    wysiwyg,
+    startMarker,
+    endMarker: collapsed ? null : endMarker,
+    collapsed,
+    sourceValue,
+    start: sourceStart,
+    end: Math.max(sourceStart, sourceEnd),
+    sourceSelectedText: withoutMarkers.slice(sourceStart, Math.max(sourceStart, sourceEnd)),
+    selectedText: visibleSelectionText || withoutMarkers.slice(sourceStart, Math.max(sourceStart, sourceEnd)),
+    locked: true,
+    logical: true
+  };
+  editor.__cc98ColorSelectionSnapshot = snapshot;
+  // Keep the source interval independently of the live marker nodes.  The
+  // visual pane is rebuilt with replaceChildren() during native/editor sync,
+  // which removes those nodes and invalidates their Range references.
+  editor.__cc98WysiwygLogicalSelection = {
+    ...snapshot,
+    startMarker: null,
+    endMarker: null,
+    locked: false,
+    logical: true
+  };
+  const markerRange = getEditorColorSelectionMarkerRange(snapshot);
+  if (markerRange) {
+    editor.__cc98WysiwygRange = markerRange.cloneRange();
+  }
+  return snapshot;
+}
+
+function getStoredEditorColorSelection(editor, button, panel = null) {
+  const snapshot = panel?.__cc98ColorSelectionSnapshot
+    || editor?.__cc98ColorSelectionSnapshot;
+  if (snapshot) {
+    return snapshot;
+  }
   const textarea = getNativeEditorTextarea(editor);
-  if (!(textarea instanceof HTMLTextAreaElement)) {
+  return textarea instanceof HTMLTextAreaElement
+    ? getStoredEditorSelection(button, textarea)
+    : null;
+}
+
+function normalizeEditorColorSourceSelection(selection, sourceValue) {
+  if (!selection) {
+    return null;
+  }
+  const value = String(sourceValue ?? "").replace(/[\u200b\uFEFF]/g, "");
+  const max = value.length;
+  let start = Number(selection.start);
+  let end = Number(selection.end);
+  if (selection.surface === "visual" && String(selection.sourceValue ?? "").replace(/[\u200b\uFEFF]/g, "") !== value) {
+    const selectedText = getEditorColorSelectionExpectedSourceText(selection);
+    if (selectedText) {
+      const hintedStart = Math.max(0, Math.min(max, Number(selection.start) || 0));
+      const foundAtHint = value.indexOf(selectedText, hintedStart);
+      const found = foundAtHint >= 0 ? foundAtHint : value.indexOf(selectedText);
+      if (found >= 0) {
+        start = found;
+        end = found + selectedText.length;
+      }
+    }
+  }
+  if (!Number.isFinite(start)) {
+    start = max;
+  }
+  if (!Number.isFinite(end)) {
+    end = start;
+  }
+  start = Math.max(0, Math.min(max, start));
+  end = Math.max(start, Math.min(max, end));
+  return { start, end };
+}
+
+function normalizeEditorColorSelectionText(value) {
+  return String(value ?? "")
+    .replace(/[\u200b\uFEFF]/g, "")
+    .replace(/\u00a0/g, " ");
+}
+
+function getEditorColorSelectionExpectedSourceText(selection) {
+  if (!selection) {
+    return "";
+  }
+  return normalizeEditorColorSelectionText(
+    selection.sourceSelectedText || selection.selectedText || ""
+  );
+}
+
+function getEditorColorSourceSelectionForApply(selection, sourceValue) {
+  if (!selection) {
+    return null;
+  }
+  const value = String(sourceValue ?? "").replace(/[\u200b\uFEFF]/g, "");
+  const candidate = normalizeEditorColorSourceSelection(selection, value);
+  if (!candidate || selection.surface !== "visual") {
+    return candidate;
+  }
+
+  // A visual selection can be replaced by a collapsed caret while the color
+  // popover takes focus.  At the beginning of a line this used to produce an
+  // empty color tag after the selected text.  Use the captured visible text
+  // to recover the exact source interval before touching the DOM selection.
+  const expected = getEditorColorSelectionExpectedSourceText(selection);
+  if (!expected) {
+    return candidate;
+  }
+  const actual = normalizeEditorColorSelectionText(
+    value.slice(candidate.start, candidate.end)
+  );
+  if (actual === expected) {
+    return candidate;
+  }
+
+  const hint = Math.max(0, Math.min(value.length, Number(selection.start) || 0));
+  let found = -1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let cursor = value.indexOf(expected);
+  while (cursor >= 0) {
+    const distance = Math.abs(cursor - hint);
+    if (distance < bestDistance) {
+      found = cursor;
+      bestDistance = distance;
+    }
+    cursor = value.indexOf(expected, cursor + Math.max(1, expected.length));
+  }
+  return found >= 0
+    ? { start: found, end: found + expected.length }
+    : null;
+}
+
+function isUsableEditorColorSourceSelection(selection, sourceValue, sourceSelection) {
+  if (!sourceSelection || sourceSelection.end <= sourceSelection.start) {
+    return false;
+  }
+  const value = String(sourceValue ?? "").replace(/[\u200b\uFEFF]/g, "");
+  const actual = normalizeEditorColorSelectionText(
+    value.slice(sourceSelection.start, sourceSelection.end)
+  );
+  const expectedSource = normalizeEditorColorSelectionText(selection?.sourceSelectedText || "");
+  const expectedVisible = normalizeEditorColorSelectionText(selection?.selectedText || "");
+  if (!expectedSource && !expectedVisible) {
+    return true;
+  }
+  return actual === expectedSource || actual === expectedVisible;
+}
+
+function stripEditorInvisibleTextNodes(root) {
+  if (!(root instanceof Node)) {
     return;
   }
-  button.dataset.cc98ColorSelectionStart = String(Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length);
-  button.dataset.cc98ColorSelectionEnd = String(Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : textarea.selectionStart);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (walker.nextNode()) {
+    textNodes.push(walker.currentNode);
+  }
+  textNodes.forEach((node) => {
+    node.nodeValue = String(node.nodeValue || "").replace(/[\u200b\uFEFF]/g, "");
+  });
+}
+
+function rememberEditorSelection(editor, button, options = {}) {
+  if (typeof editor?.__cc98WysiwygRememberSelection === "function") {
+    const remembered = editor.__cc98WysiwygRememberSelection(options);
+    if (options.captureColorSelection && !editor.__cc98ColorSelectionSnapshot) {
+      const visual = editor.querySelector?.(
+        ".cc98-rebuild-dual-ubb-visual, .cc98-rebuild-profile-signature-wysiwyg"
+      );
+      let range = getProfileSignatureWysiwygRange(visual);
+      const storedRange = editor.__cc98WysiwygRange;
+      const storedRangeIsValid = storedRange instanceof Range
+        && storedRange.startContainer?.isConnected
+        && storedRange.endContainer?.isConnected
+        && (
+          storedRange.commonAncestorContainer === visual
+          || visual?.contains?.(storedRange.commonAncestorContainer)
+        );
+      if (
+        options.preserveNonCollapsed
+        && storedRangeIsValid
+        && hasMeaningfulProfileSignatureWysiwygRange(storedRange)
+        && (!range || !hasMeaningfulProfileSignatureWysiwygRange(range))
+      ) {
+        range = storedRange;
+      }
+      const logicalSelection = editor.__cc98WysiwygLogicalSelection;
+      const logicalSelectionHasContent = Boolean(
+        logicalSelection
+        && logicalSelection.surface === "visual"
+        && logicalSelection.wysiwyg === visual
+        && (
+          normalizeEditorColorSelectionText(logicalSelection.selectedText).replace(/\s/g, "")
+          || normalizeEditorColorSelectionText(logicalSelection.sourceSelectedText).replace(/\s|\[[^\]]+\]/g, "")
+        )
+      );
+      if (
+        options.preserveNonCollapsed
+        && logicalSelectionHasContent
+        && (!range || !hasMeaningfulProfileSignatureWysiwygRange(range))
+        && !(storedRangeIsValid && hasMeaningfulProfileSignatureWysiwygRange(storedRange))
+      ) {
+        // The current Range can point at a newly rendered caret.  Leave the
+        // range empty here so the stable source snapshot is promoted below.
+        range = null;
+      }
+      if (range) {
+        captureEditorColorVisualSelection(editor, visual, range);
+      } else {
+        promoteEditorColorLogicalSelection(
+          editor,
+          visual,
+          getNativeEditorTextarea(editor)?.value || ""
+        );
+      }
+    }
+    return remembered;
+  }
+  const textarea = getNativeEditorTextarea(editor);
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return null;
+  }
+  const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+  const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+  button.dataset.cc98ColorSelectionStart = String(start);
+  button.dataset.cc98ColorSelectionEnd = String(end);
+  return { start, end };
 }
 
 function applyEditorColor(editor, color, selection = null) {
+  if (typeof editor?.__cc98WysiwygApplyColor === "function") {
+    return editor.__cc98WysiwygApplyColor(color, selection);
+  }
   const textarea = getNativeEditorTextarea(editor);
-  if (!(textarea instanceof HTMLTextAreaElement) || !/^#[0-9a-f]{6}$/i.test(color)) {
+  const normalizedColor = String(color ?? "").trim().toLowerCase();
+  if (
+    !(textarea instanceof HTMLTextAreaElement)
+    || (normalizedColor !== "transparent" && !/^#[0-9a-f]{6}$/i.test(normalizedColor))
+  ) {
+    return false;
+  }
+  const sourceValue = String(textarea.value || "").replace(/[\u200b\uFEFF]/g, "");
+  const sourceSelection = getEditorColorSourceSelectionForApply(selection, sourceValue)
+    || normalizeEditorColorSourceSelection(selection, sourceValue);
+  const start = Number.isFinite(sourceSelection?.start)
+    ? sourceSelection.start
+    : (Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length);
+  const end = Number.isFinite(sourceSelection?.end)
+    ? sourceSelection.end
+    : (Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start);
+  if (
+    start === end
+    && normalizeEditorColorSelectionText(selection?.selectedText || "").replace(/\s/g, "")
+  ) {
+    return false;
+  }
+  const selected = sourceValue.slice(start, end);
+  const before = sourceValue.slice(0, start);
+  const after = sourceValue.slice(end);
+  const wrapped = selected
+    ? `[color=${normalizedColor}]${selected}[/color]`
+    : `[color=${normalizedColor}][/color]`;
+  setNativeMessageInputValue(textarea, `${before}${wrapped}${after}`);
+  const caret = selected ? start + wrapped.length : start + `[color=${normalizedColor}]`.length;
+  textarea.focus({ preventScroll: true });
+  textarea.setSelectionRange(caret, caret);
+  scheduleNativeEditorStabilize(editor);
+  return true;
+}
+
+function collectEditorColorTagIntervals(source) {
+  const value = String(source ?? "");
+  const pattern = /\[color(?:=([^\]]+))?\]|\[\/color\]/ig;
+  const stack = [];
+  const intervals = [];
+  let match;
+  while ((match = pattern.exec(value))) {
+    const token = match[0];
+    if (/^\[\//i.test(token)) {
+      const opener = stack.pop();
+      if (opener) {
+        intervals.push({
+          ...opener,
+          closeStart: match.index,
+          closeEnd: match.index + token.length,
+          closeText: token
+        });
+      }
+      continue;
+    }
+    stack.push({
+      openStart: match.index,
+      openEnd: match.index + token.length,
+      openText: token,
+      color: match[1] || "",
+      depth: stack.length
+    });
+  }
+  stack.forEach((opener) => {
+    intervals.push({
+      ...opener,
+      closeStart: value.length,
+      closeEnd: value.length,
+      closeText: ""
+    });
+  });
+  return intervals.sort((left, right) => left.openStart - right.openStart);
+}
+
+function removeEditorColorTagsFromSource(source, start, end) {
+  const value = String(source ?? "");
+  const max = value.length;
+  const from = Math.max(0, Math.min(max, Number(start) || 0));
+  const to = Math.max(from, Math.min(max, Number(end) || from));
+  if (from === to) {
+    return { value, start: from, end: to, changed: false };
+  }
+
+  const edits = [];
+  const editKeys = new Set();
+  const addEdit = (editStart, editEnd, replacement = "", order = 0) => {
+    const safeStart = Math.max(0, Math.min(max, editStart));
+    const safeEnd = Math.max(safeStart, Math.min(max, editEnd));
+    const key = `${safeStart}:${safeEnd}:${replacement}:${order}`;
+    if (editKeys.has(key)) {
+      return;
+    }
+    editKeys.add(key);
+    edits.push({ start: safeStart, end: safeEnd, replacement });
+  };
+  const intersects = (left, right) => Math.max(left, from) < Math.min(right, to);
+  const intervals = collectEditorColorTagIntervals(value);
+
+  intervals.forEach((interval) => {
+    const contentStart = interval.openEnd;
+    const contentEnd = interval.closeStart;
+    const contentIntersects = intersects(contentStart, contentEnd);
+    if (!contentIntersects) {
+      const openTokenIntersects = intersects(interval.openStart, interval.openEnd);
+      const closeTokenIntersects = interval.closeEnd > interval.closeStart
+        && intersects(interval.closeStart, interval.closeEnd);
+      if (openTokenIntersects || closeTokenIntersects) {
+        addEdit(interval.openStart, interval.openEnd);
+        if (interval.closeEnd > interval.closeStart) {
+          addEdit(interval.closeStart, interval.closeEnd);
+        }
+      }
+      return;
+    }
+    const coversContent = from <= contentStart && to >= contentEnd;
+    const startsInside = from > contentStart && from < contentEnd;
+    const endsInside = to > contentStart && to < contentEnd;
+    if (coversContent) {
+      addEdit(interval.openStart, interval.openEnd);
+      if (interval.closeEnd > interval.closeStart) {
+        addEdit(interval.closeStart, interval.closeEnd);
+      }
+      return;
+    }
+    if (startsInside && endsInside) {
+      addEdit(from, from, interval.closeText || "[/color]", interval.depth);
+      addEdit(to, to, interval.openText, -interval.depth);
+      return;
+    }
+    if (!startsInside && endsInside) {
+      addEdit(interval.openStart, interval.openEnd);
+      addEdit(to, to, interval.openText, -interval.depth);
+      return;
+    }
+    if (startsInside && !endsInside) {
+      addEdit(from, from, interval.closeText || "[/color]", interval.depth);
+      if (interval.closeEnd > interval.closeStart) {
+        addEdit(interval.closeStart, interval.closeEnd);
+      }
+    }
+  });
+
+  const colorTokenPattern = /\[\/?color(?:=[^\]]+)?\]/ig;
+  let tokenMatch;
+  while ((tokenMatch = colorTokenPattern.exec(value))) {
+    const tokenStart = tokenMatch.index;
+    const tokenEnd = tokenStart + tokenMatch[0].length;
+    if (tokenStart < to && tokenEnd > from) {
+      addEdit(tokenStart, tokenEnd);
+    }
+  }
+  if (!edits.length) {
+    return { value, start: from, end: to, changed: false };
+  }
+
+  edits.sort((left, right) => right.start - left.start || right.end - left.end || left.order - right.order);
+  let nextValue = value;
+  edits.forEach((edit) => {
+    nextValue = `${nextValue.slice(0, edit.start)}${edit.replacement}${nextValue.slice(edit.end)}`;
+  });
+  const shiftAt = (position, includeAtPosition) => edits.reduce((shift, edit) => {
+    const affectsPosition = edit.end < position
+      || (edit.end === position && (edit.start !== edit.end || includeAtPosition));
+    if (affectsPosition) {
+      return shift + edit.replacement.length - (edit.end - edit.start);
+    }
+    return shift;
+  }, 0);
+  return {
+    value: nextValue,
+    start: Math.max(0, from + shiftAt(from, true)),
+    end: Math.max(0, to + shiftAt(to, false)),
+    changed: nextValue !== value
+  };
+}
+
+function clearEditorColor(editor, selection = null) {
+  if (typeof editor?.__cc98WysiwygClearColor === "function") {
+    return editor.__cc98WysiwygClearColor(selection);
+  }
+  const textarea = getNativeEditorTextarea(editor);
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return false;
+  }
+  const sourceValue = String(textarea.value || "").replace(/[\u200b\uFEFF]/g, "");
+  const sourceSelection = normalizeEditorColorSourceSelection(selection, sourceValue);
+  const rawStart = Number.isFinite(sourceSelection?.start)
+    ? sourceSelection.start
+    : (Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : sourceValue.length);
+  const rawEnd = Number.isFinite(sourceSelection?.end)
+    ? sourceSelection.end
+    : (Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : rawStart);
+  const start = Math.max(0, Math.min(sourceValue.length, rawStart));
+  const end = Math.max(start, Math.min(sourceValue.length, rawEnd));
+  const result = removeEditorColorTagsFromSource(sourceValue, start, end);
+  if (!result.changed) {
+    return false;
+  }
+  setNativeMessageInputValue(textarea, result.value);
+  textarea.focus({ preventScroll: true });
+  textarea.setSelectionRange(result.start, result.end);
+  scheduleNativeEditorStabilize(editor);
+  return true;
+}
+
+function applyEditorGradient(editor, stops, selection = null, density = 1) {
+  if (typeof editor?.__cc98WysiwygApplyGradient === "function") {
+    return editor.__cc98WysiwygApplyGradient(stops, density);
+  }
+  const textarea = getNativeEditorTextarea(editor);
+  if (!(textarea instanceof HTMLTextAreaElement)) {
     return false;
   }
   const start = Number.isFinite(selection?.start)
@@ -6058,18 +16784,16 @@ function applyEditorColor(editor, color, selection = null) {
     ? selection.end
     : (Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start);
   const selected = textarea.value.slice(start, end);
+  if (!selected) {
+    return false;
+  }
   const before = textarea.value.slice(0, start);
   const after = textarea.value.slice(end);
-  const wrapped = selected
-    ? `[color=${color}]${selected}[/color]`
-    : `[color=${color}][/color]`;
-  textarea.value = `${before}${wrapped}${after}`;
-  const caret = selected ? start + wrapped.length : start + `[color=${color}]`.length;
+  const wrapped = buildEditorGradientUbb(selected, stops, density);
+  setNativeMessageInputValue(textarea, `${before}${wrapped}${after}`);
+  const caret = start + wrapped.length;
   textarea.focus({ preventScroll: true });
   textarea.setSelectionRange(caret, caret);
-  ["input", "change"].forEach((type) => {
-    textarea.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
-  });
   scheduleNativeEditorStabilize(editor);
   return true;
 }
@@ -6102,6 +16826,10 @@ function getStoredEditorFontSizeSelection(button, textarea) {
 }
 
 function rememberEditorFontSizeSelection(editor, button) {
+  if (typeof editor?.__cc98WysiwygRememberSelection === "function") {
+    editor.__cc98WysiwygRememberSelection({ preserveNonCollapsed: true });
+    return;
+  }
   const textarea = getNativeEditorTextarea(editor);
   if (!(textarea instanceof HTMLTextAreaElement)) {
     return;
@@ -6112,6 +16840,9 @@ function rememberEditorFontSizeSelection(editor, button) {
 
 function applyEditorFontSize(editor, size, selection = null) {
   const normalized = normalizeEditorFontSizeValue(size, "");
+  if (normalized && typeof editor?.__cc98WysiwygApplyFontSize === "function") {
+    return editor.__cc98WysiwygApplyFontSize(normalized);
+  }
   const textarea = getNativeEditorTextarea(editor);
   if (!(textarea instanceof HTMLTextAreaElement) || !normalized) {
     return false;
@@ -6122,30 +16853,27 @@ function applyEditorFontSize(editor, size, selection = null) {
   const end = Number.isFinite(selection?.end)
     ? selection.end
     : (Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start);
-  const selected = textarea.value.slice(start, end);
-  const before = textarea.value.slice(0, start);
-  const after = textarea.value.slice(end);
-  const wrapped = selected
-    ? `[size=${normalized}]${selected}[/size]`
-    : `[size=${normalized}][/size]`;
-  textarea.value = `${before}${wrapped}${after}`;
-  const caret = selected ? start + wrapped.length : start + `[size=${normalized}]`.length;
+  const result = window.CC98RebornExtendedUbbCore?.applyTypographyToSource(
+    textarea.value, { start, end }, "size", normalized
+  );
+  if (!result) {
+    return false;
+  }
+  setNativeMessageInputValue(textarea, result.value);
   textarea.focus({ preventScroll: true });
-  textarea.setSelectionRange(caret, caret);
-  ["input", "change"].forEach((type) => {
-    textarea.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
-  });
+  textarea.setSelectionRange(result.start, result.end);
   scheduleNativeEditorStabilize(editor);
   return true;
 }
 
 function ensureNativeColorInput(editor, button) {
+  button.__cc98ColorEditor = editor;
   let input = button.querySelector(":scope > .cc98-rebuild-native-color-input");
   if (!(input instanceof HTMLInputElement)) {
     input = document.createElement("input");
     input.type = "hidden";
     input.className = "cc98-rebuild-native-color-input";
-    input.value = getEditorColorButtonValue(button);
+    input.value = getEditorColorState(button).committed.color;
     input.title = "选择文字颜色";
     input.setAttribute("aria-label", "选择文字颜色");
     button.append(input);
@@ -6175,15 +16903,29 @@ function ensureNativeColorInput(editor, button) {
   return input;
 }
 
+function closeEditorColorPopover(panel, restoreSelection = true) {
+  if (!(panel instanceof HTMLElement) || panel.hidden) {
+    return;
+  }
+  // Hide before restoring focus: the input's later blur/change must not revive a discarded draft.
+  panel.hidden = true;
+  panel.__cc98ColorDraft = null;
+  panel.__cc98ColorDragCleanup?.();
+  const button = panel.__cc98ColorButton;
+  button?.classList.remove("cc98-rebuild-color-button-open");
+  if (button instanceof HTMLElement) {
+    renderEditorColorButton(button);
+  }
+  clearEditorColorSelectionSnapshot(panel.__cc98Editor, { restore: restoreSelection });
+  panel.__cc98ColorSelectionSnapshot = null;
+}
+
 function closeEditorColorPopovers(exceptPanel = null) {
   suppressLegacyEditorColorPickers();
-  document.querySelectorAll(".cc98-rebuild-color-popover").forEach((panel) => {
-    if (panel === exceptPanel) {
-      return;
+  document.querySelectorAll(".cc98-rebuild-color-popover:not([hidden])").forEach((panel) => {
+    if (panel !== exceptPanel) {
+      closeEditorColorPopover(panel);
     }
-    panel.hidden = true;
-    panel.__cc98ColorButton?.classList?.remove("cc98-rebuild-color-button-open");
-    panel.closest(".ubb-button-color")?.classList.remove("cc98-rebuild-color-button-open");
   });
 }
 
@@ -6200,12 +16942,12 @@ function closeEditorFontSizePopovers(exceptPanel = null) {
 function updateEditorFontSizePreview(button, size) {
   const normalized = normalizeEditorFontSizeValue(size, "");
   const select = getEditorFontSizeSelect(button);
-  if (select instanceof HTMLSelectElement && normalized) {
+  if (select instanceof HTMLSelectElement) {
     select.value = normalized;
   }
   button?.querySelectorAll?.(".cc98-rebuild-font-size-trigger").forEach((trigger) => {
     if (trigger instanceof HTMLElement) {
-      trigger.textContent = normalized || "字号";
+      trigger.querySelector(".cc98-rebuild-split-value")?.replaceChildren(document.createTextNode(normalized || "字号"));
     }
   });
   document.querySelectorAll(".cc98-rebuild-font-size-popover").forEach((panel) => {
@@ -6226,7 +16968,7 @@ function ensureEditorFontSizePopover(editor, button) {
     button.dataset.cc98FontSizePopoverId = `cc98-rebuild-font-size-popover-${editorFontSizePopoverSequence}`;
   }
   let panel = document.getElementById(button.dataset.cc98FontSizePopoverId);
-  if (panel instanceof HTMLElement && panel.querySelector(".cc98-rebuild-font-size-option")) {
+  if (panel instanceof HTMLElement && panel.querySelector(".cc98-rebuild-font-size-reset")) {
     panel.__cc98Editor = editor;
     panel.__cc98FontSizeButton = button;
     return panel;
@@ -6244,6 +16986,7 @@ function ensureEditorFontSizePopover(editor, button) {
     option.type = "button";
     option.dataset.cc98FontSizeValue = size;
     option.setAttribute("role", "menuitem");
+    option.addEventListener("pointerdown", (event) => event.preventDefault());
     option.addEventListener("click", () => {
       const textarea = getNativeEditorTextarea(editor);
       const selection = textarea instanceof HTMLTextAreaElement ? getStoredEditorFontSizeSelection(button, textarea) : null;
@@ -6254,6 +16997,19 @@ function ensureEditorFontSizePopover(editor, button) {
     });
     panel.append(option);
   });
+  const reset = createButton("cc98-rebuild-font-size-reset", "取消字号", (event) => {
+    event.preventDefault();
+    const textarea = getNativeEditorTextarea(editor);
+    const selection = textarea instanceof HTMLTextAreaElement ? getStoredEditorFontSizeSelection(button, textarea) : null;
+    if (clearEditorTypography(editor, "size", selection)) {
+      updateEditorFontSizePreview(button, "");
+    }
+    panel.hidden = true;
+    button.classList.remove("cc98-rebuild-font-size-button-open");
+  });
+  reset.type = "button";
+  reset.addEventListener("pointerdown", (event) => event.preventDefault());
+  panel.append(reset);
   ["pointerdown", "mousedown", "mouseup", "click"].forEach((type) => {
     panel.addEventListener(type, (event) => event.stopPropagation());
   });
@@ -6272,8 +17028,15 @@ function ensureEditorColorPopover(editor, button) {
   if (panel instanceof HTMLElement) {
     const existingInput = panel.querySelector(".cc98-rebuild-color-popover-input");
     if (
-      panel.querySelector(".cc98-rebuild-color-popover-channels")
+      panel.__cc98ColorButton === button
+      && panel.__cc98Editor === editor
+      && typeof panel.__cc98RenderColor === "function"
+      && panel.querySelector(".cc98-rebuild-color-popover-channels")
       && panel.querySelector(".cc98-rebuild-color-presets")
+      && panel.querySelector(".cc98-rebuild-color-transparent")
+      && panel.querySelector(".cc98-rebuild-gradient-editor")
+      && panel.querySelector(".cc98-rebuild-gradient-density-input")
+      && panel.querySelector(".cc98-rebuild-color-clear")
       && existingInput instanceof HTMLInputElement
       && existingInput.type !== "color"
     ) {
@@ -6281,6 +17044,7 @@ function ensureEditorColorPopover(editor, button) {
       panel.__cc98ColorButton = button;
       return panel;
     }
+    closeEditorColorPopover(panel);
     panel.remove();
   }
 
@@ -6292,17 +17056,32 @@ function ensureEditorColorPopover(editor, button) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", "\u6587\u5b57\u989c\u8272");
   panel.hidden = true;
+
+  const mode = createElement("div", "cc98-rebuild-color-mode");
+  const solidMode = createElement("button", "cc98-rebuild-color-mode-button is-active", "\u5355\u8272");
+  const gradientMode = createElement("button", "cc98-rebuild-color-mode-button", "\u6e10\u53d8");
+  solidMode.type = "button";
+  gradientMode.type = "button";
+  solidMode.dataset.cc98ColorMode = "solid";
+  gradientMode.dataset.cc98ColorMode = "gradient";
+  mode.append(solidMode, gradientMode);
+
   const row = createElement("div", "cc98-rebuild-color-popover-row");
   const swatch = createElement("span", "cc98-rebuild-color-popover-swatch");
   const input = document.createElement("input");
   input.type = "text";
   input.className = "cc98-rebuild-color-popover-input";
-  input.value = getEditorColorButtonValue(button);
+  input.value = getEditorColorState(button).committed.color;
   input.maxLength = 7;
   input.spellcheck = false;
   input.inputMode = "text";
+  input.autocomplete = "off";
   input.setAttribute("aria-label", "color");
-  row.append(swatch, input);
+  const clearColor = createElement("button", "cc98-rebuild-color-clear", "\u53d6\u6d88\u989c\u8272");
+  clearColor.type = "button";
+  clearColor.title = "\u79fb\u9664\u9009\u4e2d\u5185\u5bb9\u7684\u989c\u8272\u683c\u5f0f";
+  clearColor.setAttribute("aria-label", "\u53d6\u6d88\u989c\u8272");
+  row.append(swatch, input, clearColor);
 
   const presets = createElement("div", "cc98-rebuild-color-presets");
   EDITOR_COLOR_PRESETS.forEach((color) => {
@@ -6316,6 +17095,50 @@ function ensureEditorColorPopover(editor, button) {
     preset.append(createElement("span", "cc98-rebuild-color-preset-swatch"));
     presets.append(preset);
   });
+  const transparent = createElement("button", "cc98-rebuild-color-transparent");
+  transparent.type = "button";
+  transparent.setAttribute("aria-pressed", "false");
+  transparent.append(
+    createElement("span", "cc98-rebuild-color-transparent-swatch"),
+    document.createTextNode("\u900f\u660e")
+  );
+
+  const gradientEditor = createElement("div", "cc98-rebuild-gradient-editor");
+  gradientEditor.hidden = true;
+  const gradientPreview = createElement("div", "cc98-rebuild-gradient-preview");
+  const gradientTrack = createElement("div", "cc98-rebuild-gradient-track");
+  gradientPreview.append(gradientTrack);
+  const gradientStops = createElement("div", "cc98-rebuild-gradient-stops");
+  gradientPreview.append(gradientStops);
+  const gradientTools = createElement("div", "cc98-rebuild-gradient-tools");
+  const addStop = createElement("button", "cc98-rebuild-gradient-tool", "\u6dfb\u52a0\u8272\u6807");
+  const removeStop = createElement("button", "cc98-rebuild-gradient-tool", "\u5220\u9664\u8272\u6807");
+  addStop.type = "button";
+  removeStop.type = "button";
+  gradientTools.append(addStop, removeStop);
+  const gradientDensity = createElement("label", "cc98-rebuild-gradient-density");
+  gradientDensity.append(createElement("span", "", "\u5bc6\u5ea6"));
+  const gradientDensityInput = document.createElement("select");
+  gradientDensityInput.className = "cc98-rebuild-gradient-density-input";
+  gradientDensityInput.setAttribute("aria-label", "\u6e10\u53d8\u5bc6\u5ea6");
+  for (let value = 1; value <= 10; value += 1) {
+    const option = document.createElement("option");
+    option.value = String(value);
+    option.textContent = `${value} \u5b57/\u6b21`;
+    gradientDensityInput.append(option);
+  }
+  gradientDensity.append(gradientDensityInput);
+  const gradientPresets = createElement("div", "cc98-rebuild-gradient-presets");
+  EDITOR_GRADIENT_PRESETS.forEach((colors) => {
+    const preset = createElement("button", "cc98-rebuild-gradient-preset");
+    preset.type = "button";
+    preset.title = "\u5feb\u901f\u6e10\u53d8";
+    preset.style.setProperty("--cc98-gradient-preset", `linear-gradient(90deg, ${colors.join(", ")})`);
+    preset.__cc98GradientColors = colors;
+    gradientPresets.append(preset);
+  });
+  const gradientHint = createElement("p", "cc98-rebuild-gradient-hint", "\u62d6\u52a8\u8272\u6807\u8c03\u6574\u4f4d\u7f6e\uff0c\u53cc\u51fb\u6e10\u53d8\u6761\u4e5f\u53ef\u6dfb\u52a0\u8272\u6807\u3002");
+  gradientEditor.append(gradientPreview, gradientTools, gradientDensity, gradientPresets, gradientHint);
 
   const channels = createElement("div", "cc98-rebuild-color-popover-channels");
   ["r", "g", "b"].forEach((channel) => {
@@ -6343,66 +17166,271 @@ function ensureEditorColorPopover(editor, button) {
   cancel.type = "button";
   ok.type = "button";
   actions.append(cancel, ok);
-  panel.append(row, presets, channels, actions);
+  const status = createElement("p", "cc98-rebuild-color-popover-status");
+  status.hidden = true;
+  panel.append(mode, row, presets, transparent, gradientEditor, channels, status, actions);
 
-  ["pointerdown", "mousedown", "mouseup", "click", "input", "change"].forEach((type) => {
-    panel.addEventListener(type, (event) => {
-      event.stopPropagation();
+  const handles = new Map();
+  const getDraft = () => !panel.hidden && !panel.__cc98ColorCommitting ? panel.__cc98ColorDraft : null;
+  const selectedStop = (choice) => choice.stops.find((stop) => stop.id === choice.selectedStopId) || choice.stops[0];
+  const editableColor = (choice) => choice.mode === "gradient" ? selectedStop(choice).color : choice.color;
+
+  const render = ({ preserveHexInput = false } = {}) => {
+    const choice = panel.__cc98ColorDraft || getEditorColorState(button).committed;
+    const gradient = choice.mode === "gradient";
+    const color = editableColor(choice);
+    const rgb = hexToRgb(color);
+    panel.dataset.cc98ColorMode = gradient ? "gradient" : "solid";
+    solidMode.classList.toggle("is-active", !gradient);
+    gradientMode.classList.toggle("is-active", gradient);
+    transparent.classList.toggle("is-active", choice.mode === "transparent");
+    transparent.setAttribute("aria-pressed", String(choice.mode === "transparent"));
+    gradientEditor.hidden = !gradient;
+    presets.hidden = gradient;
+    if (!preserveHexInput) {
+      input.value = color;
+    }
+    channels.querySelectorAll("[data-cc98-color-channel]").forEach((control) => {
+      control.value = String(rgb[control.dataset.cc98ColorChannel]);
     });
-  });
-  const syncFromHex = () => {
-    const normalized = normalizeHexColor(input.value, getColorPopoverValue(panel, button));
-    updateEditorColorButtonPreview(button, normalized);
+    presets.querySelectorAll(".cc98-rebuild-color-preset").forEach((preset) => {
+      preset.classList.toggle("is-active", choice.mode === "solid" && preset.dataset.cc98ColorPreset === color);
+    });
+    gradientDensityInput.value = String(choice.density);
+    renderEditorColorSwatch(swatch, choice);
+    renderEditorColorButton(button, choice);
+    gradientTrack.style.setProperty("background", getEditorGradientCss(choice.stops), "important");
+    for (const [id, handle] of handles) {
+      if (!choice.stops.some((stop) => stop.id === id)) {
+        handle.remove();
+        handles.delete(id);
+      }
+    }
+    choice.stops.forEach((stop, index) => {
+      let handle = handles.get(stop.id);
+      if (!handle) {
+        handle = createElement("button", "cc98-rebuild-gradient-stop");
+        handle.type = "button";
+        const id = stop.id;
+        const selectStop = () => {
+          const draft = getDraft();
+          if (draft) {
+            draft.selectedStopId = id;
+            render();
+          }
+        };
+        handle.addEventListener("click", selectStop);
+        handle.addEventListener("pointerdown", (event) => {
+          if (!getDraft()) return;
+          event.preventDefault();
+          event.stopPropagation();
+          panel.__cc98ColorDragCleanup?.();
+          selectStop();
+          const move = (moveEvent) => {
+            const draft = getDraft();
+            const currentStop = draft?.stops.find((item) => item.id === id);
+            if (!currentStop) return;
+            const rect = gradientTrack.getBoundingClientRect();
+            currentStop.position = Math.max(0, Math.min(100, (moveEvent.clientX - rect.left) / Math.max(1, rect.width) * 100));
+            draft.stops.sort((left, right) => left.position - right.position);
+            render();
+          };
+          const release = () => {
+            document.removeEventListener("pointermove", move, true);
+            document.removeEventListener("pointerup", release, true);
+            document.removeEventListener("pointercancel", release, true);
+            panel.__cc98ColorDragCleanup = null;
+          };
+          panel.__cc98ColorDragCleanup = release;
+          document.addEventListener("pointermove", move, true);
+          document.addEventListener("pointerup", release, true);
+          document.addEventListener("pointercancel", release, true);
+        });
+        handles.set(id, handle);
+      }
+      handle.title = String(Math.round(stop.position)) + "% · " + stop.color.toUpperCase();
+      handle.style.setProperty("--cc98-gradient-stop-position", String(stop.position) + "%");
+      handle.style.setProperty("--cc98-gradient-stop-color", stop.color);
+      handle.classList.toggle("is-active", stop.id === choice.selectedStopId);
+      if (gradientStops.children[index] !== handle) {
+        gradientStops.insertBefore(handle, gradientStops.children[index] || null);
+      }
+    });
+    removeStop.disabled = choice.stops.length <= 2;
+  };
+  panel.__cc98RenderColor = render;
+
+  const setMode = (mode) => {
+    const draft = getDraft();
+    if (!draft) return;
+    draft.mode = mode;
+    status.hidden = true;
+    render();
+    positionEditorColorPopover(button, panel);
+  };
+  const applyActiveColor = (color, preserveHexInput = false) => {
+    const draft = getDraft();
+    if (!draft) return;
+    const normalized = normalizeHexColor(color, editableColor(draft));
+    if (draft.mode === "gradient") {
+      selectedStop(draft).color = normalized;
+    } else {
+      draft.mode = "solid";
+      draft.color = normalized;
+    }
+    status.hidden = true;
+    render({ preserveHexInput });
+  };
+  const getCompleteHexInput = () => {
+    const raw = input.value.trim();
+    const withHash = raw.startsWith("#") ? raw : "#" + raw;
+    return /^#[0-9a-f]{6}$/i.test(withHash) ? withHash.toLowerCase() : "";
+  };
+  const commitHexInput = () => {
+    const draft = getDraft();
+    if (!draft) return;
+    const value = getCompleteHexInput();
+    if (value && value !== editableColor(draft)) {
+      applyActiveColor(value);
+    } else {
+      input.value = editableColor(draft);
+    }
   };
   const syncFromChannels = (event) => {
-    const source = event?.currentTarget;
-    if (source instanceof HTMLInputElement && source.dataset.cc98ColorChannel) {
-      const channel = source.dataset.cc98ColorChannel;
-      const value = Math.max(0, Math.min(255, Number(source.value) || 0));
-      source.value = String(value);
-      panel.querySelectorAll(`[data-cc98-color-channel="${channel}"]`).forEach((control) => {
-        if (control instanceof HTMLInputElement && control !== source) {
-          control.value = String(value);
-        }
-      });
-    }
-    const values = {};
-    ["r", "g", "b"].forEach((channel) => {
-      const control = panel.querySelector(`.cc98-rebuild-color-channel-range[data-cc98-color-channel="${channel}"]`);
-      values[channel] = control instanceof HTMLInputElement ? Number(control.value) : 0;
-    });
-    updateEditorColorButtonPreview(button, rgbToHex(values.r, values.g, values.b));
+    const draft = getDraft();
+    if (!draft) return;
+    const source = event.currentTarget;
+    const rgb = hexToRgb(editableColor(draft));
+    rgb[source.dataset.cc98ColorChannel] = Math.max(0, Math.min(255, Number(source.value) || 0));
+    applyActiveColor(rgbToHex(rgb.r, rgb.g, rgb.b));
   };
-  input.addEventListener("input", syncFromHex);
-  presets.querySelectorAll(".cc98-rebuild-color-preset").forEach((preset) => {
-    preset.addEventListener("click", () => {
-      updateEditorColorButtonPreview(button, preset.dataset.cc98ColorPreset || "#ff0000");
-    });
+  ["pointerdown", "mousedown", "mouseup", "click", "input", "change"].forEach((type) => {
+    panel.addEventListener(type, (event) => event.stopPropagation());
   });
-  panel.querySelectorAll("[data-cc98-color-channel]").forEach((control) => {
+  panel.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeEditorColorPopover(panel);
+    }
+  });
+  solidMode.addEventListener("click", () => setMode("solid"));
+  gradientMode.addEventListener("click", () => setMode("gradient"));
+  transparent.addEventListener("click", () => setMode("transparent"));
+  input.addEventListener("input", () => {
+    const value = getCompleteHexInput();
+    if (value) applyActiveColor(value, true);
+  });
+  input.addEventListener("change", commitHexInput);
+  input.addEventListener("blur", commitHexInput);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitHexInput();
+    }
+  });
+  presets.querySelectorAll(".cc98-rebuild-color-preset").forEach((preset) => {
+    preset.addEventListener("click", () => applyActiveColor(preset.dataset.cc98ColorPreset));
+  });
+  channels.querySelectorAll("[data-cc98-color-channel]").forEach((control) => {
     control.addEventListener("input", syncFromChannels);
     control.addEventListener("change", syncFromChannels);
   });
-  cancel.addEventListener("click", () => {
-    updateEditorColorButtonPreview(button, panel.dataset.cc98PreviousColor || getEditorColorButtonValue(button));
-    panel.hidden = true;
-    button.classList.remove("cc98-rebuild-color-button-open");
-    suppressLegacyEditorColorPickers();
+  gradientDensityInput.addEventListener("change", () => {
+    const draft = getDraft();
+    if (draft) draft.density = normalizeEditorGradientDensity(gradientDensityInput.value);
+  });
+
+  const addGradientStop = (position) => {
+    const draft = getDraft();
+    if (!draft) return;
+    const stop = createEditorGradientStop(getEditorGradientColorAt(draft.stops, position / 100), position);
+    draft.stops.push(stop);
+    draft.stops.sort((left, right) => left.position - right.position);
+    draft.selectedStopId = stop.id;
+    render();
+  };
+  addStop.addEventListener("click", () => {
+    const draft = getDraft();
+    if (!draft) return;
+    let start = draft.stops[0];
+    let end = draft.stops[1];
+    for (let index = 1; index < draft.stops.length; index++) {
+      if (draft.stops[index].position - draft.stops[index - 1].position > end.position - start.position) {
+        start = draft.stops[index - 1];
+        end = draft.stops[index];
+      }
+    }
+    addGradientStop((start.position + end.position) / 2);
+  });
+  removeStop.addEventListener("click", () => {
+    const draft = getDraft();
+    if (!draft || draft.stops.length <= 2) return;
+    const index = draft.stops.indexOf(selectedStop(draft));
+    draft.stops.splice(index, 1);
+    draft.selectedStopId = draft.stops[Math.min(index, draft.stops.length - 1)].id;
+    render();
+  });
+  gradientTrack.addEventListener("dblclick", (event) => {
+    const rect = gradientTrack.getBoundingClientRect();
+    addGradientStop(Math.max(0, Math.min(100, (event.clientX - rect.left) / Math.max(1, rect.width) * 100)));
+  });
+  gradientPresets.querySelectorAll(".cc98-rebuild-gradient-preset").forEach((preset) => {
+    preset.addEventListener("click", () => {
+      const draft = getDraft();
+      if (!draft) return;
+      const colors = preset.__cc98GradientColors;
+      draft.stops = colors.map((color, index) => createEditorGradientStop(color, index / (colors.length - 1) * 100));
+      draft.selectedStopId = draft.stops[0].id;
+      render();
+    });
+  });
+  cancel.addEventListener("click", () => closeEditorColorPopover(panel));
+  clearColor.addEventListener("click", () => {
+    const selection = getStoredEditorColorSelection(editor, button, panel);
+    panel.__cc98ColorCommitting = true;
+    let applied;
+    try {
+      applied = clearEditorColor(editor, selection);
+    } finally {
+      panel.__cc98ColorCommitting = false;
+    }
+    if (!applied) {
+      status.textContent = "请先选中包含颜色的文字。";
+      status.hidden = false;
+      return;
+    }
+    delete editor.__cc98WysiwygLogicalSelection;
+    closeEditorColorPopover(panel, false);
   });
   ok.addEventListener("click", () => {
-    const textarea = getNativeEditorTextarea(editor);
-    const selection = textarea instanceof HTMLTextAreaElement ? getStoredEditorSelection(button, textarea) : null;
-    const color = getColorPopoverValue(panel, button);
-    if (applyEditorColor(editor, color, selection)) {
-      updateEditorColorButtonPreview(button, color);
+    commitHexInput();
+    const draft = getDraft();
+    if (!draft) return;
+    const choice = copyEditorColorChoice(draft);
+    const selection = getStoredEditorColorSelection(editor, button, panel);
+    panel.__cc98ColorCommitting = true;
+    let applied;
+    try {
+      applied = applyEditorColorChoice(editor, choice, selection);
+    } finally {
+      panel.__cc98ColorCommitting = false;
     }
-    panel.hidden = true;
-    button.classList.remove("cc98-rebuild-color-button-open");
-    suppressLegacyEditorColorPickers();
+    if (!applied) {
+      status.textContent = choice.mode === "gradient"
+        ? "请先在编辑器中选中要应用渐变的文字。"
+        : "选区已失效，请重新选择文字后再试。";
+      status.hidden = false;
+      positionEditorColorPopover(button, panel);
+      return;
+    }
+    getEditorColorState(button).committed = choice;
+    delete editor.__cc98WysiwygLogicalSelection;
+    closeEditorColorPopover(panel, false);
   });
 
   document.body.append(panel);
-  updateEditorColorButtonPreview(button, input.value);
+  render();
   return panel;
 }
 
@@ -6423,9 +17451,32 @@ function stabilizeEditorColorButton(editor) {
     }
   });
   colorButtons.forEach((button) => {
+    button.__cc98ColorEditor = editor;
     button.classList.add("cc98-rebuild-color-button");
+    if (button.classList.contains("ubb-button-color") && button.tagName !== "BUTTON") {
+      let apply = button.querySelector(":scope > .cc98-rebuild-color-apply");
+      if (!(apply instanceof HTMLButtonElement)) {
+        apply = createButton("cc98-rebuild-color-apply", "色");
+        apply.type = "button";
+        apply.title = "应用当前颜色";
+        apply.setAttribute("aria-label", apply.title);
+        apply.append(createElement("span", "sp-preview cc98-rebuild-color-swatch"));
+        button.append(apply);
+      }
+      apply.querySelector(".sp-preview")?.classList.add("cc98-rebuild-color-swatch");
+      let chooser = button.querySelector(":scope > .cc98-rebuild-color-chooser");
+      if (!(chooser instanceof HTMLButtonElement)) {
+        chooser = createButton("cc98-rebuild-color-chooser", "");
+        chooser.type = "button";
+        chooser.title = "选择颜色";
+        chooser.setAttribute("aria-label", chooser.title);
+        chooser.append(createElement("span", "cc98-rebuild-chooser-caret", "▾"));
+        button.append(chooser);
+      }
+    }
     ensureNativeColorInput(editor, button);
-    ensureEditorColorPopover(editor, button);
+    const panel = ensureEditorColorPopover(editor, button);
+    renderEditorColorButton(button, panel.hidden ? getEditorColorState(button).committed : panel.__cc98ColorDraft);
     const replacer = button.querySelector(".sp-replacer");
     if (replacer) {
       replacer.style.setProperty("pointer-events", "none", "important");
@@ -6480,14 +17531,26 @@ function bindGlobalEditorFontSizeInterceptor() {
       }
       return;
     }
-    const editor = button.closest(".cc98-rebuild-native-editor, .createTopic, #sendTopicInfo, .sendTopicInfo, .reply-input, .ubb-editor, form");
+    const editor = button.closest(".cc98-rebuild-native-editor, .createTopic, #sendTopicInfo, .sendTopicInfo, .reply-input")
+      || button.closest(".ubb-editor, form");
     if (!(editor instanceof HTMLElement)) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    openEditorFontSizePicker(button, editor);
+    if (event.type !== "click") {
+      rememberEditorFontSizeSelection(editor, button);
+      return;
+    }
+    if (target.closest(".cc98-rebuild-font-size-apply")) {
+      const textarea = getNativeEditorTextarea(editor);
+      const selection = textarea instanceof HTMLTextAreaElement ? getStoredEditorFontSizeSelection(button, textarea) : null;
+      applyEditorFontSize(editor, getEditorFontSizeValue(button) || "3", selection);
+      closeEditorFontSizePopovers();
+    } else {
+      openEditorFontSizePicker(button, editor);
+    }
   };
   ["pointerdown", "mousedown", "click"].forEach((type) => {
     document.addEventListener(type, handleFontSizeEvent, true);
@@ -6516,31 +17579,146 @@ function stabilizeEditorFontSizeButton(editor) {
       select.setAttribute("aria-hidden", "true");
       select.style.setProperty("display", "none", "important");
     }
+    let apply = button.querySelector(":scope > .cc98-rebuild-font-size-apply");
+    if (!(apply instanceof HTMLButtonElement)) {
+      apply = document.createElement("button");
+      apply.type = "button";
+      apply.className = "cc98-rebuild-font-size-apply";
+      apply.textContent = "T↕";
+      apply.title = "应用当前字号";
+      apply.setAttribute("aria-label", apply.title);
+      button.append(apply);
+    }
     let trigger = button.querySelector(":scope > .cc98-rebuild-font-size-trigger");
     if (!(trigger instanceof HTMLButtonElement)) {
       trigger = document.createElement("button");
       trigger.type = "button";
       trigger.className = "cc98-rebuild-font-size-trigger";
-      trigger.setAttribute("aria-label", "\u5b57\u53f7");
+      trigger.append(createElement("span", "cc98-rebuild-split-value", "字号"), createElement("span", "cc98-rebuild-chooser-caret", "▾"));
+      trigger.title = "选择字号";
+      trigger.setAttribute("aria-label", trigger.title);
       button.append(trigger);
     }
-    trigger.onclick = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openEditorFontSizePicker(button, editor);
-    };
-    trigger.onpointerdown = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      rememberEditorFontSizeSelection(editor, button);
-    };
     ensureEditorFontSizePopover(editor, button);
+    button.querySelector(":scope > .cc98-rebuild-typography-reset")?.remove();
     updateEditorFontSizePreview(button, getEditorFontSizeValue(button));
   });
 }
 
 function stabilizeEditorEmojiImages(editor) {
   stabilizeEmojiRendering(editor);
+  hideNativeEditorLegacyEmojiPanel(editor);
+}
+
+function isEditorEmojiButtonTarget(target) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  if (target.closest(".cc98-rebuild-message-emoji-panel")) {
+    return false;
+  }
+  const control = target.closest(
+    ".ubb-emoji-button, .ubb-button, [data-cc98-emoji-trigger='true']"
+  );
+  if (!(control instanceof HTMLElement)) {
+    return false;
+  }
+  const signature = [
+    control.className,
+    control.getAttribute("title"),
+    control.getAttribute("aria-label"),
+    control.dataset.cc98ToolbarLabel,
+    control.textContent
+  ].filter(Boolean).join(" ");
+  return /(?:表情|emoji|emoticon|smile|fa-smile|fa-meh|☺)/i.test(signature);
+}
+
+function hideNativeEditorLegacyEmojiPanel(editor) {
+  if (!(editor instanceof HTMLElement)) {
+    return;
+  }
+  editor.querySelectorAll(".ubb-editor > .ubb-emoji").forEach((panel) => {
+    if (!(panel instanceof HTMLElement) || panel.classList.contains("cc98-rebuild-message-emoji-panel")) {
+      return;
+    }
+    panel.style.setProperty("display", "none", "important");
+    panel.style.setProperty("visibility", "hidden", "important");
+    panel.style.setProperty("pointer-events", "none", "important");
+    panel.style.setProperty("max-height", "0", "important");
+    panel.style.setProperty("overflow", "hidden", "important");
+  });
+}
+
+function positionNativeEditorEmojiPanel(editor, panel) {
+  if (!(editor instanceof HTMLElement) || !(panel instanceof HTMLElement) || panel.hidden) {
+    return;
+  }
+  const toolbar = editor.querySelector(".ubb-buttons, .cc98-rebuild-message-editor-toolbar");
+  if (!(toolbar instanceof HTMLElement)) {
+    return;
+  }
+  const editorRect = editor.getBoundingClientRect();
+  const toolbarRect = toolbar.getBoundingClientRect();
+  const margin = 12;
+  const gap = 6;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const width = Math.max(0, Math.min(editorRect.width - 56, viewportWidth - margin * 2));
+  const left = Math.max(margin, Math.min(viewportWidth - width - margin, editorRect.left + 28));
+  const preferredHeight = Math.min(380, viewportHeight * 0.55);
+  const belowSpace = Math.max(0, viewportHeight - toolbarRect.bottom - gap - margin);
+  const aboveSpace = Math.max(0, toolbarRect.top - gap - margin);
+  const placeAbove = belowSpace < preferredHeight && aboveSpace > belowSpace;
+  const availableHeight = placeAbove ? aboveSpace : belowSpace;
+  const height = Math.max(0, Math.min(preferredHeight, availableHeight));
+  const top = placeAbove
+    ? Math.max(margin, toolbarRect.top - gap - height)
+    : Math.min(viewportHeight - margin, toolbarRect.bottom + gap);
+  panel.style.setProperty("--cc98-editor-emoji-panel-top", `${top}px`);
+  panel.style.setProperty("--cc98-editor-emoji-panel-left", `${left}px`);
+  panel.style.setProperty("--cc98-editor-emoji-panel-width", `${width}px`);
+  panel.style.setProperty("--cc98-editor-emoji-panel-height", `${height}px`);
+  if (!panel.__cc98ViewportPositionBound) {
+    panel.__cc98ViewportPositionBound = true;
+    const reposition = () => positionNativeEditorEmojiPanel(editor, panel);
+    window.addEventListener("scroll", reposition, { passive: true, capture: true });
+    window.addEventListener("resize", reposition, { passive: true });
+  }
+}
+
+function setEditorEmojiPanelOpen(editor, open) {
+  if (!(editor instanceof HTMLElement)) {
+    return;
+  }
+  hideNativeEditorLegacyEmojiPanel(editor);
+  const shouldOpen = Boolean(open);
+  let panel = editor.querySelector(":scope > .cc98-rebuild-message-emoji-panel");
+  if (shouldOpen) {
+    const textarea = getNativeEditorTextarea(editor);
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    panel = ensurePrivateMessageEmojiPanel(editor, textarea, { nativeEditor: true });
+  }
+  if (panel instanceof HTMLElement) {
+    panel.hidden = !shouldOpen;
+    if (shouldOpen) {
+      panel.classList.add("cc98-rebuild-editor-emoji-panel");
+      positionNativeEditorEmojiPanel(editor, panel);
+    }
+  }
+  editor.classList.toggle("cc98-rebuild-emoji-panel-open", shouldOpen);
+  editor.classList.toggle("cc98-rebuild-message-emoji-open", shouldOpen);
+  if (shouldOpen) {
+    [0, 80, 220].forEach((delay) => {
+      window.setTimeout(() => {
+        hideNativeEditorLegacyEmojiPanel(editor);
+        if (panel instanceof HTMLElement) {
+          positionNativeEditorEmojiPanel(editor, panel);
+        }
+      }, delay);
+    });
+  }
 }
 
 function dispatchMouseSequence(target) {
@@ -6557,29 +17735,56 @@ function dispatchMouseSequence(target) {
   });
 }
 
-function openEditorColorPicker(colorButton, editor = colorButton?.closest?.(".cc98-rebuild-native-editor")) {
-  if (!(colorButton instanceof HTMLElement)) {
+function openEditorColorPicker(colorButton, editor = findEditorForColorButton(colorButton)) {
+  if (!(colorButton instanceof HTMLElement) || !(editor instanceof HTMLElement)) {
     return false;
   }
-  if (!(editor instanceof HTMLElement)) {
-    return false;
+  colorButton.__cc98ColorEditor = editor;
+  const existing = document.getElementById(colorButton.dataset.cc98ColorPopoverId || "");
+  if (existing instanceof HTMLElement && !existing.hidden) {
+    closeEditorColorPopover(existing);
+    return true;
   }
+  closeEditorColorPopovers();
+  clearEditorColorSelectionSnapshot(editor);
+  rememberEditorSelection(editor, colorButton, {
+    preserveNonCollapsed: true,
+    captureColorSelection: true
+  });
   const panel = ensureEditorColorPopover(editor, colorButton);
-  const previousColor = getEditorColorButtonValue(colorButton);
-  panel.dataset.cc98PreviousColor = previousColor;
-  updateEditorColorButtonPreview(colorButton, previousColor);
-  rememberEditorSelection(editor, colorButton);
-  suppressLegacyEditorColorPickers(editor);
-  closeEditorColorPopovers(panel);
+  panel.__cc98ColorDraft = copyEditorColorChoice(getEditorColorState(colorButton).committed);
+  panel.__cc98ColorSelectionSnapshot = editor.__cc98ColorSelectionSnapshot || null;
+  panel.querySelector(".cc98-rebuild-color-popover-status").hidden = true;
   panel.hidden = false;
+  panel.__cc98RenderColor();
   colorButton.classList.add("cc98-rebuild-color-button-open");
+  suppressLegacyEditorColorPickers(editor);
   positionEditorColorPopover(colorButton, panel);
   window.setTimeout(() => {
-    suppressLegacyEditorColorPickers(editor);
+    if (panel.hidden || !panel.isConnected) return;
     positionEditorColorPopover(colorButton, panel);
-    panel.querySelector(".cc98-rebuild-color-popover-input")?.focus?.({ preventScroll: true });
+    panel.querySelector(".cc98-rebuild-color-popover-input")?.focus({ preventScroll: true });
   }, 0);
   return true;
+}
+
+function applyCurrentEditorColor(editor, button) {
+  if (!editor.__cc98ColorSelectionSnapshot) {
+    rememberEditorSelection(editor, button, { preserveNonCollapsed: true, captureColorSelection: true });
+  }
+  const selection = getStoredEditorColorSelection(editor, button);
+  const panel = getEditorColorPanels(button).find((item) => !item.hidden);
+  if (panel) panel.__cc98ColorCommitting = true;
+  let applied;
+  try {
+    applied = applyEditorColorChoice(editor, getEditorColorState(button).committed, selection);
+  } finally {
+    if (panel) panel.__cc98ColorCommitting = false;
+  }
+  if (panel) closeEditorColorPopover(panel, false);
+  clearEditorColorSelectionSnapshot(editor);
+  renderEditorColorButton(button);
+  return applied;
 }
 
 function bindGlobalEditorColorInterceptor() {
@@ -6613,7 +17818,24 @@ function bindGlobalEditorColorInterceptor() {
     }
     stopEditorColorEvent(event);
     suppressLegacyEditorColorPickers(editor);
-    openEditorColorPicker(colorButton, editor);
+    const isApply = Boolean(target.closest(".cc98-rebuild-color-apply, .cc98-rebuild-message-editor-color"));
+    if (event.type !== "click") {
+      if (event.type === "pointerdown" || event.type === "touchstart" || event.type === "mousedown") {
+        if (isApply) {
+          if (!editor.__cc98ColorSelectionSnapshot) {
+            rememberEditorSelection(editor, colorButton, { preserveNonCollapsed: true, captureColorSelection: true });
+          }
+        } else {
+          rememberEditorSelection(editor, colorButton, { preserveNonCollapsed: true });
+        }
+      }
+      return;
+    }
+    if (isApply) {
+      applyCurrentEditorColor(editor, colorButton);
+    } else {
+      openEditorColorPicker(colorButton, editor);
+    }
   };
   ["pointerdown", "touchstart", "mousedown", "mouseup", "click"].forEach((type) => {
     document.addEventListener(type, handleColorEvent, true);
@@ -6647,27 +17869,141 @@ function getExplicitTextColor(node) {
 }
 
 function hasInlineUbbFormatting(text) {
-  return /\[(?:\/?)(?:b|i|u|s|del|color|size|align)(?:=[^\]]+)?\]/i.test(String(text ?? ""));
+  return /\[(?:(?:\/?)(?:b|i|u|s|del|color|size|font|align|img|audio|mp3|video|bili|bilibili)(?:=[^\]]+)?|cc98\d{2}|ac(?:\d{2}|\d{4})|[acf]:\d{3}|tb\d{2}|ms\d{2}|em\d{2})\]/i.test(String(text ?? ""));
 }
 
 function buildNativeEditorUbbPreview(source) {
   const article = document.createElement("article");
   article.className = "cc98-rebuild-ubb-preview-rendered";
-  String(source ?? "")
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .forEach((block) => {
-      const paragraph = createElement("p", "cc98-rebuild-text-line");
-      block.split(/\n/).forEach((line, index) => {
-        if (index > 0) {
-          paragraph.append(document.createElement("br"));
-        }
-        appendInlineUbbText(paragraph, line);
-      });
-      article.append(paragraph);
-    });
+  const extendedUbb = window.CC98RebornExtendedUbb;
+  if (extendedUbb?.shouldHandle?.(source)) {
+    const rendered = extendedUbb.render(source);
+    if (rendered instanceof HTMLElement) {
+      return rendered;
+    }
+  }
+  // Keep source newlines as explicit BR nodes in the dual editor preview.
+  // This avoids depending only on inherited white-space rules, which can be
+  // overridden by original-editor styles around emoji/media nodes.
+  appendInlineUbbText(article, String(source ?? ""), { preserveLineBreaks: true });
   return article;
+}
+
+function appendEditorFontSizeSplitSelect(editor, toolbar, select) {
+  const group = createElement("span", "cc98-rebuild-typography-group");
+  const split = createElement("span", "cc98-rebuild-font-size-split");
+  const apply = createButton("cc98-rebuild-font-size-apply", "T↕", (event) => {
+    event.preventDefault();
+    const textarea = getNativeEditorTextarea(editor);
+    const selection = textarea instanceof HTMLTextAreaElement ? getStoredEditorFontSizeSelection(select, textarea) : null;
+    applyEditorFontSize(editor, getEditorFontSizeValue(split) || "3", selection);
+  });
+  apply.type = "button";
+  apply.title = "应用当前字号";
+  apply.setAttribute("aria-label", apply.title);
+  apply.addEventListener("pointerdown", (event) => {
+    rememberEditorFontSizeSelection(editor, select);
+    event.preventDefault();
+  });
+  select.title = "选择字号";
+  select.setAttribute("aria-label", select.title);
+  split.append(apply, select);
+  group.append(split);
+  toolbar.append(group);
+  const reset = document.createElement("option");
+  reset.value = EDITOR_TYPOGRAPHY_RESET_VALUE;
+  reset.textContent = "取消字号";
+  select.append(reset);
+  return split;
+}
+
+function appendEditorColorSplitButton(editor, toolbar) {
+  const group = createElement("span", "cc98-rebuild-color-split");
+  const colorButton = createButton("cc98-rebuild-message-editor-button cc98-rebuild-message-editor-color cc98-rebuild-color-button cc98-rebuild-color-apply", "", (event) => {
+    event.preventDefault();
+    applyCurrentEditorColor(editor, colorButton);
+  });
+  colorButton.type = "button";
+  colorButton.title = "应用当前颜色";
+  colorButton.setAttribute("aria-label", colorButton.title);
+  colorButton.append(createElement("span", "cc98-rebuild-message-editor-color-label", "色"));
+  colorButton.append(createElement("span", "sp-preview cc98-rebuild-color-swatch"));
+  const chooser = createButton("cc98-rebuild-message-editor-button cc98-rebuild-color-chooser", "", (event) => {
+    event.preventDefault();
+    openEditorColorPicker(colorButton, editor);
+  });
+  chooser.type = "button";
+  chooser.title = "选择颜色";
+  chooser.setAttribute("aria-label", chooser.title);
+  chooser.append(createElement("span", "cc98-rebuild-chooser-caret", "▾"));
+  group.append(colorButton, chooser);
+  toolbar.append(group);
+  ensureNativeColorInput(editor, colorButton);
+  ensureEditorColorPopover(editor, colorButton);
+  bindGlobalEditorColorInterceptor();
+  renderEditorColorButton(colorButton);
+  return group;
+}
+
+function buildLegacy031UbbPreview(source) {
+  const article = document.createElement("article");
+  article.className = "cc98-rebuild-ubb-preview-rendered";
+  // Keep this path aligned with the shipped 0.3.1 preview renderer. It is a
+  // deliberately simple, read-only fallback for checking the canonical UBB.
+  appendInlineUbbText(article, String(source ?? ""));
+  return article;
+}
+
+function createLegacy031UbbPreviewPanel() {
+  const panel = createElement("section", "cc98-rebuild-legacy-ubb-preview");
+  panel.hidden = true;
+  panel.setAttribute("role", "region");
+  panel.setAttribute("aria-label", "旧版 UBB 预览");
+
+  const header = createElement("div", "cc98-rebuild-legacy-ubb-preview-header");
+  const title = createElement(
+    "span",
+    "cc98-rebuild-legacy-ubb-preview-title",
+    "旧版 UBB 预览（0.3.1）"
+  );
+  const closeButton = createButton(
+    "cc98-rebuild-legacy-ubb-preview-close",
+    "×",
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      panel.dispatchEvent(new CustomEvent("cc98:legacy-preview-close", { bubbles: true }));
+    }
+  );
+  closeButton.title = "关闭旧版预览";
+  closeButton.setAttribute("aria-label", "关闭旧版预览");
+  header.append(title, closeButton);
+
+  const body = createElement("div", "cc98-rebuild-legacy-ubb-preview-body");
+  body.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("a[href]")) {
+      event.preventDefault();
+    }
+  });
+  panel.append(header, body);
+  return panel;
+}
+
+function renderLegacy031UbbPreview(panel, sourceText) {
+  if (!(panel instanceof HTMLElement)) {
+    return;
+  }
+  const body = panel.querySelector(".cc98-rebuild-legacy-ubb-preview-body");
+  if (!(body instanceof HTMLElement)) {
+    return;
+  }
+  const article = buildLegacy031UbbPreview(sourceText);
+  markInlineUbbStyleClasses(article);
+  strengthenInlineTextStyles(article);
+  markInlineEmojiContainers(article);
+  stabilizeEmojiRendering(article);
+  synchronizeInlineUbbDecorationColors(article);
+  body.replaceChildren(article);
 }
 
 function getEditorSourceText(editor) {
@@ -6688,7 +18024,9 @@ function stabilizeEditorPreviewFormatting(editor) {
   const shouldRenderUbbPreview = hasInlineUbbFormatting(sourceText);
   const sourceHash = shouldRenderUbbPreview ? String(sourceText.length) + ":" + sourceText.slice(0, 96) + ":" + sourceText.slice(-96) : "";
   editor.querySelectorAll(previewSelectors).forEach((preview) => {
-    if (shouldRenderUbbPreview && preview instanceof HTMLElement && preview.dataset.cc98UbbPreviewSource !== sourceHash) {
+    const isMarkdownPreview = preview.matches?.(".mde-preview-content, .markdown-preview")
+      || Boolean(preview.closest?.(".react-mde, .markdown-editor"));
+    if (!isMarkdownPreview && shouldRenderUbbPreview && preview instanceof HTMLElement && preview.dataset.cc98UbbPreviewSource !== sourceHash) {
       preview.dataset.cc98UbbPreviewSource = sourceHash;
       preview.replaceChildren(buildNativeEditorUbbPreview(sourceText));
     }
@@ -6742,7 +18080,1310 @@ function stabilizeEditorPreviewFormatting(editor) {
         spreadVariable(node, "cc98-rebuild-preview-size", "--cc98-preview-size", normalizedSize);
       }
     });
+    synchronizeInlineUbbDecorationColors(preview);
   });
+}
+
+function closeEditorTagDropdowns(editor, except = null) {
+  editor?.querySelectorAll?.(".cc98-rebuild-tag-dropdown").forEach((row) => {
+    if (!(row instanceof HTMLElement) || row === except) {
+      return;
+    }
+    row.classList.remove("is-open");
+    const list = row.querySelector(".tagBoxSub");
+    if (list instanceof HTMLElement) {
+      list.style.display = "none";
+    }
+  });
+}
+
+function setEditorTagDropdownOpen(row, open) {
+  if (!(row instanceof HTMLElement)) {
+    return;
+  }
+  const list = row.querySelector(".tagBoxSub");
+  if (!(list instanceof HTMLElement)) {
+    return;
+  }
+  row.classList.toggle("is-open", Boolean(open));
+  list.style.display = open ? "block" : "none";
+}
+
+function syncEditorTagValue(row, item) {
+  const select = row?.querySelector?.(".tagBoxSelect");
+  if (!(row instanceof HTMLElement) || !(item instanceof HTMLElement) || !(select instanceof HTMLElement)) {
+    return;
+  }
+  const value = cleanupPostText(item.textContent);
+  if (!value) {
+    return;
+  }
+  select.textContent = value;
+  row.dataset.cc98SelectedTag = value;
+  row.querySelectorAll(".tagBoxSub li").forEach((option) => {
+    option.classList.toggle("is-active", option === item);
+  });
+  ["input", "change"].forEach((type) => {
+    select.dispatchEvent(new Event(type, { bubbles: true }));
+    row.dispatchEvent(new Event(type, { bubbles: true }));
+  });
+}
+
+function stabilizeEditorTagDropdown(editor) {
+  if (!(editor instanceof HTMLElement)) {
+    return;
+  }
+  editor.querySelectorAll(".createTopicTitle > .row").forEach((row) => {
+    if (!(row instanceof HTMLElement) || !row.querySelector(".tagBoxSelect") || !row.querySelector(".tagBoxSub")) {
+      return;
+    }
+    row.classList.add("cc98-rebuild-tag-dropdown");
+    const list = row.querySelector(".tagBoxSub");
+    if (row.dataset.cc98TagDropdownBound === "true") {
+      return;
+    }
+    row.dataset.cc98TagDropdownBound = "true";
+    if (list instanceof HTMLElement) {
+      list.style.display = "none";
+    }
+    row.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      const item = target.closest(".tagBoxSub li");
+      if (item instanceof HTMLElement && row.contains(item)) {
+        event.preventDefault();
+        event.stopPropagation();
+        syncEditorTagValue(row, item);
+        setEditorTagDropdownOpen(row, false);
+        return;
+      }
+      if (target.closest(".tagBoxSelect, .downArrow")) {
+        event.preventDefault();
+        event.stopPropagation();
+        const shouldOpen = !row.classList.contains("is-open");
+        closeEditorTagDropdowns(editor, row);
+        setEditorTagDropdownOpen(row, shouldOpen);
+      }
+    }, true);
+  });
+}
+
+function bindDualUbbPaneDivider(workspace, upperPane, lowerPane, divider) {
+  if (
+    !(workspace instanceof HTMLElement)
+    || !(upperPane instanceof HTMLElement)
+    || !(lowerPane instanceof HTMLElement)
+    || !(divider instanceof HTMLElement)
+    || divider.dataset.cc98DualDividerBound === "true"
+  ) {
+    return;
+  }
+  divider.dataset.cc98DualDividerBound = "true";
+  const readCssPixelValue = (element, property, fallback = 0) => {
+    const value = Number.parseFloat(window.getComputedStyle(element).getPropertyValue(property));
+    return Number.isFinite(value) ? Math.max(0, value) : fallback;
+  };
+  const getMinimumPaneHeight = (pane, fallback) => Math.max(
+    fallback,
+    readCssPixelValue(pane, "min-height", fallback)
+  );
+  const getDividerHeight = () => Math.max(
+    1,
+    divider.getBoundingClientRect().height,
+    readCssPixelValue(divider, "height", 10)
+  );
+  const readPaneHeight = (pane) => {
+    const value = pane.getBoundingClientRect().height;
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  };
+  let lastObservedUpperHeight = 0;
+  let lastObservedLowerHeight = 0;
+  const setPaneLayout = (upperHeight, lowerHeight) => {
+    const upper = Math.max(0, Math.round(upperHeight));
+    const lower = Math.max(0, Math.round(lowerHeight));
+    upperPane.style.setProperty("height", `${upper}px`, "important");
+    lowerPane.style.setProperty("height", `${lower}px`, "important");
+    // Keep the grid tracks in step with the two pane boxes.  Auto-sized grid
+    // tracks can otherwise reject an upward drag when a profile editor has a
+    // larger content-based minimum height.
+    workspace.style.setProperty("--cc98-dual-upper-height", `${upper}px`);
+    workspace.style.setProperty("--cc98-dual-lower-height", `${lower}px`);
+    workspace.style.setProperty("--cc98-dual-divider-height", `${Math.round(getDividerHeight())}px`);
+    lastObservedUpperHeight = upper;
+    lastObservedLowerHeight = lower;
+  };
+  const resizeBy = (requestedDelta, initialUpper = null, initialLower = null) => {
+    const upperHeight = Number.isFinite(initialUpper)
+      ? initialUpper
+      : upperPane.getBoundingClientRect().height;
+    const lowerHeight = Number.isFinite(initialLower)
+      ? initialLower
+      : lowerPane.getBoundingClientRect().height;
+    const minimumUpperHeight = getMinimumPaneHeight(upperPane, 180);
+    const minimumLowerHeight = getMinimumPaneHeight(lowerPane, 120);
+    const totalHeight = Math.max(
+      upperHeight + lowerHeight,
+      minimumUpperHeight + minimumLowerHeight
+    );
+    const requestedUpperHeight = upperHeight + (Number(requestedDelta) || 0);
+    const nextUpperHeight = Math.min(
+      totalHeight - minimumLowerHeight,
+      Math.max(minimumUpperHeight, requestedUpperHeight)
+    );
+    const nextLowerHeight = totalHeight - nextUpperHeight;
+    setPaneLayout(nextUpperHeight, nextLowerHeight);
+    workspace.dispatchEvent(new CustomEvent("cc98:dual-editor-resize", { bubbles: true }));
+  };
+
+  const rememberCurrentPaneHeights = () => {
+    lastObservedUpperHeight = readPaneHeight(upperPane);
+    lastObservedLowerHeight = readPaneHeight(lowerPane);
+  };
+  const syncLayoutFromNativePaneResize = () => {
+    if (!workspace.isConnected) {
+      return;
+    }
+    if (lowerPane.hidden) {
+      rememberCurrentPaneHeights();
+      return;
+    }
+    const upperHeight = readPaneHeight(upperPane);
+    const lowerHeight = readPaneHeight(lowerPane);
+    if (upperHeight <= 0 || lowerHeight <= 0) {
+      rememberCurrentPaneHeights();
+      return;
+    }
+    const upperChanged = Math.abs(upperHeight - lastObservedUpperHeight) >= 1;
+    const lowerChanged = Math.abs(lowerHeight - lastObservedLowerHeight) >= 1;
+    if (!upperChanged && !lowerChanged) {
+      return;
+    }
+    // A native resize changes the pane box, but not the grid row variables.
+    // Reconcile both rows so the divider and the document flow follow it.
+    setPaneLayout(upperHeight, lowerHeight);
+    workspace.dispatchEvent(new CustomEvent("cc98:dual-editor-resize", { bubbles: true }));
+  };
+  let paneResizeFrame = 0;
+  let paneResizeObserver = null;
+  rememberCurrentPaneHeights();
+  if (typeof ResizeObserver === "function") {
+    paneResizeObserver = new ResizeObserver(() => {
+      if (!workspace.isConnected) {
+        paneResizeObserver?.disconnect?.();
+        return;
+      }
+      if (paneResizeFrame) {
+        window.cancelAnimationFrame(paneResizeFrame);
+      }
+      paneResizeFrame = window.requestAnimationFrame(() => {
+        paneResizeFrame = 0;
+        syncLayoutFromNativePaneResize();
+      });
+    });
+    paneResizeObserver.observe(upperPane);
+    paneResizeObserver.observe(lowerPane);
+    workspace.__cc98DualPaneResizeObserver = paneResizeObserver;
+    workspace.__cc98DualPaneResizeFrame = () => {
+      if (paneResizeFrame) {
+        window.cancelAnimationFrame(paneResizeFrame);
+        paneResizeFrame = 0;
+      }
+    };
+  }
+  divider.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || lowerPane.hidden) {
+      return;
+    }
+    event.preventDefault();
+    const startY = event.clientY;
+    const startUpperHeight = upperPane.getBoundingClientRect().height;
+    const startLowerHeight = lowerPane.getBoundingClientRect().height;
+    divider.classList.add("is-dragging");
+    document.documentElement.classList.add("cc98-rebuild-dual-editor-resizing");
+    const move = (moveEvent) => {
+      resizeBy(moveEvent.clientY - startY, startUpperHeight, startLowerHeight);
+    };
+    const release = () => {
+      divider.classList.remove("is-dragging");
+      document.documentElement.classList.remove("cc98-rebuild-dual-editor-resizing");
+      document.removeEventListener("pointermove", move, true);
+      document.removeEventListener("pointerup", release, true);
+      document.removeEventListener("pointercancel", release, true);
+    };
+    document.addEventListener("pointermove", move, true);
+    document.addEventListener("pointerup", release, true);
+    document.addEventListener("pointercancel", release, true);
+  });
+  divider.addEventListener("keydown", (event) => {
+    if (!["ArrowUp", "ArrowDown"].includes(event.key) || lowerPane.hidden) {
+      return;
+    }
+    event.preventDefault();
+    resizeBy(event.key === "ArrowUp" ? -12 : 12);
+  });
+}
+
+function getNativeDualUbbToolbarCommand(control) {
+  if (!(control instanceof HTMLElement)) {
+    return null;
+  }
+  const label = String(control.dataset.cc98ToolbarLabel || "").trim();
+  const signature = getNativeEditorToolbarControlSignature(control);
+  const rules = [
+    { label: "B", pattern: /(?:fa-bold|\b加粗\b|\bbold\b)/i, tag: "b", command: "bold" },
+    { label: "I", pattern: /(?:fa-italic|\b斜体\b|\bitalic\b)/i, tag: "i", command: "italic" },
+    { label: "U", pattern: /(?:fa-underline|\b下划线\b|\bunderline\b)/i, tag: "u", command: "underline" },
+    { label: "S", pattern: /(?:fa-strikethrough|\b删除线\b|\bstrike\b)/i, tag: "del", command: "strikeThrough" },
+    { label: "左", pattern: /(?:fa-align-left|左对齐|align.*left)/i, tag: "align", value: "left", command: "justifyLeft" },
+    { label: "中", pattern: /(?:fa-align-center|居中|align.*center)/i, tag: "align", value: "center", command: "justifyCenter" },
+    { label: "右", pattern: /(?:fa-align-right|右对齐|align.*right)/i, tag: "align", value: "right", command: "justifyRight" },
+    { label: "隐", pattern: /(?:fa-eye-slash|回复后可见|replyview)/i, tag: "replyview", command: "" }
+  ];
+  return rules.find((rule) => label === rule.label || rule.pattern.test(signature)) || null;
+}
+
+function isNativeDualUbbSourceActive(state) {
+  return Boolean(
+    state
+    && state.activeSurface === "source"
+    && state.sourceEditor instanceof HTMLElement
+  );
+}
+
+function handleNativeDualUbbToolbarControl(editor, target, event) {
+  const state = editor?.__cc98DualUbbState;
+  if (!state || state.workspace?.hidden || !(target instanceof Element)) {
+    return false;
+  }
+  const control = target.closest(".ubb-buttons .ubb-button");
+  const command = getNativeDualUbbToolbarCommand(control);
+  if (!command) {
+    return false;
+  }
+  stopNativeEditorToolbarEvent(event);
+  state.applyToolbarCommand(command);
+  scheduleNativeEditorDraftSave(editor);
+  return true;
+}
+
+function openNativeMarkupConversionDialog(editor, state) {
+  const converter = window.CC98RebornMarkupConverter;
+  if (!converter?.convertUbbToMarkdown || !converter?.convertMarkdownToUbb) {
+    showRebuiltTransientToast(editor, "互转工具未加载");
+    return;
+  }
+  editor.__cc98ConversionDialogClose?.();
+  state.forceSynchronize?.();
+  const layer = createElement("div", "cc98-rebuild-convert-layer");
+  const dialog = createElement("section", "cc98-rebuild-convert-dialog");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", "UBB Markdown 互转");
+  const header = createElement("div", "cc98-rebuild-convert-header");
+  header.append(createElement("strong", "", "UBB / Markdown 互转"));
+  const close = createButton("cc98-rebuild-convert-close", "×", () => finish());
+  close.type = "button";
+  close.title = "关闭";
+  close.setAttribute("aria-label", "关闭互转工具");
+  header.append(close);
+
+  const direction = createElement("div", "cc98-rebuild-convert-directions");
+  direction.setAttribute("role", "group");
+  direction.setAttribute("aria-label", "转换方向");
+  const ubbToMarkdown = createButton("", "UBB → Markdown", () => setDirection("ubb"));
+  const markdownToUbb = createButton("", "Markdown → UBB", () => setDirection("markdown"));
+  for (const button of [ubbToMarkdown, markdownToUbb]) button.type = "button";
+  direction.append(ubbToMarkdown, markdownToUbb);
+
+  const panes = createElement("div", "cc98-rebuild-convert-panes");
+  const inputPane = createElement("label", "cc98-rebuild-convert-pane");
+  const outputPane = createElement("label", "cc98-rebuild-convert-pane");
+  const inputLabel = createElement("span", "", "UBB 输入");
+  const outputLabel = createElement("span", "", "Markdown 结果（可修改）");
+  const input = document.createElement("textarea");
+  const output = document.createElement("textarea");
+  input.spellcheck = false;
+  output.spellcheck = false;
+  input.value = state.textarea.value;
+  inputPane.append(inputLabel, input);
+  outputPane.append(outputLabel, output);
+  panes.append(inputPane, outputPane);
+
+  const warnings = createElement("div", "cc98-rebuild-convert-warnings");
+  warnings.setAttribute("role", "status");
+  const review = createElement("label", "cc98-rebuild-convert-review");
+  const reviewCheckbox = document.createElement("input");
+  reviewCheckbox.type = "checkbox";
+  review.append(reviewCheckbox, document.createTextNode("已检查转换结果，接受可能的格式差异"));
+  const footer = createElement("div", "cc98-rebuild-convert-footer");
+  const status = createElement("span", "cc98-rebuild-convert-status");
+  status.setAttribute("role", "status");
+  const copy = createButton("", "复制结果", async () => {
+    try {
+      await navigator.clipboard.writeText(output.value);
+      status.textContent = "已复制";
+    } catch {
+      output.focus();
+      output.select();
+      status.textContent = "无法自动复制，请手动复制选中的结果";
+    }
+  });
+  const apply = createButton("cc98-rebuild-convert-apply", "替换编辑内容", () => {
+    if (apply.disabled || !state.textarea?.isConnected) return;
+    const replacement = currentDirection === "ubb" ? `[md]${output.value}[/md]` : output.value;
+    setNativeMessageInputValue(state.textarea, replacement);
+    state.refreshFromNative?.(false);
+    scheduleNativeEditorDraftSave(editor);
+    finish();
+    state.sourceEditor?.focus({ preventScroll: true });
+  });
+  copy.type = "button";
+  apply.type = "button";
+  footer.append(status, copy, apply);
+  dialog.append(header, direction, panes, warnings, review, footer);
+  layer.append(dialog);
+  document.body.append(layer);
+  let currentDirection = "ubb";
+  let blocked = false;
+  let hasWarnings = false;
+  const updateApply = () => {
+    const invalidMarkdownBlock = currentDirection === "ubb" && /\[\/md\]/i.test(output.value);
+    apply.disabled = blocked || invalidMarkdownBlock || !output.value || (hasWarnings && !reviewCheckbox.checked);
+    if (invalidMarkdownBlock) status.textContent = "结果含 [/md]，无法安全嵌入 UBB 编辑器";
+  };
+  const convert = () => {
+    const result = currentDirection === "ubb"
+      ? converter.convertUbbToMarkdown(input.value)
+      : converter.convertMarkdownToUbb(input.value);
+    output.value = result.output;
+    blocked = result.blocked;
+    hasWarnings = result.warnings.length > 0;
+    warnings.replaceChildren();
+    result.warnings.forEach((message) => warnings.append(createElement("p", "", message)));
+    review.hidden = !hasWarnings || blocked;
+    reviewCheckbox.checked = false;
+    status.textContent = blocked ? "当前内容无法直接替换" : "";
+    updateApply();
+  };
+  const setDirection = (value) => {
+    if (value === "markdown") {
+      const wrapped = input.value.match(/^\[md\]([\s\S]*)\[\/md\]$/i);
+      if (wrapped) input.value = wrapped[1];
+    }
+    currentDirection = value;
+    ubbToMarkdown.setAttribute("aria-pressed", String(value === "ubb"));
+    markdownToUbb.setAttribute("aria-pressed", String(value === "markdown"));
+    inputLabel.textContent = value === "ubb" ? "UBB 输入" : "Markdown 输入";
+    outputLabel.textContent = value === "ubb" ? "Markdown 结果（将以 [md] 块写入）" : "UBB 结果（可修改）";
+    apply.textContent = value === "ubb" ? "替换为 Markdown 块" : "替换为 UBB";
+    convert();
+  };
+  const onKeydown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      finish();
+    }
+  };
+  function finish() {
+    document.removeEventListener("keydown", onKeydown, true);
+    layer.remove();
+    if (editor.__cc98ConversionDialogClose === finish) delete editor.__cc98ConversionDialogClose;
+  }
+  editor.__cc98ConversionDialogClose = finish;
+  document.addEventListener("keydown", onKeydown, true);
+  layer.addEventListener("pointerdown", (event) => {
+    if (event.target === layer) finish();
+  });
+  input.addEventListener("input", convert);
+  output.addEventListener("input", updateApply);
+  reviewCheckbox.addEventListener("change", updateApply);
+  setDirection("ubb");
+  input.focus({ preventScroll: true });
+}
+
+function ensureNativeDualUbbToolbarControls(editor, state = editor?.__cc98DualUbbState) {
+  if (!(editor instanceof HTMLElement) || !state || !(state.ubbEditor instanceof HTMLElement)) {
+    return;
+  }
+  const toolbar = state.ubbEditor.querySelector(":scope > .ubb-buttons, :scope > .ubb-toolbar")
+    || state.ubbEditor.querySelector(".ubb-buttons, .ubb-toolbar");
+  if (!(toolbar instanceof HTMLElement)) {
+    return;
+  }
+  let fontFamilySelect = toolbar.querySelector(":scope > .cc98-rebuild-font-family-control > .cc98-rebuild-editor-font-select");
+  if (!(fontFamilySelect instanceof HTMLSelectElement)) {
+    toolbar.querySelector(":scope > .cc98-rebuild-typography-group:has(> .cc98-rebuild-editor-font-select)")?.remove();
+    const fontControl = createEditorFontFamilyControl(
+      editor,
+      "cc98-rebuild-dual-ubb-font-select"
+    );
+    fontFamilySelect = fontControl.querySelector(".cc98-rebuild-editor-font-select");
+  }
+  const fontSizeControl = toolbar.querySelector(
+    ":scope > .ubb-button-fontSize, :scope > .cc98-rebuild-font-size-button"
+  );
+  const fontControl = fontFamilySelect.closest(".cc98-rebuild-font-family-control");
+  toolbar.querySelectorAll(".cc98-rebuild-typography-reset").forEach((button) => button.remove());
+  if (fontSizeControl instanceof HTMLElement) {
+    // Re-inserting an already correctly positioned native <select> closes its
+    // open picker in Chromium. Stabilization runs after most toolbar clicks,
+    // so only move the control when React has actually changed its position.
+    if (fontSizeControl.nextElementSibling !== fontControl) {
+      fontSizeControl.after(fontControl);
+    }
+  } else if (!fontControl.isConnected) {
+    toolbar.append(fontControl);
+  }
+  state.fontFamilySelect = fontFamilySelect;
+  const ensureConvertBadge = (button) => {
+    if (button.nextElementSibling?.classList.contains("cc98-local-syntax-experimental-badge")) {
+      return;
+    }
+    button.after(createElement("span", "cc98-local-syntax-experimental-badge", "实验性"));
+  };
+  const existing = toolbar.querySelector(":scope > .cc98-rebuild-dual-ubb-toolbar-actions");
+  if (existing instanceof HTMLElement) {
+    const legacyPreviewButton = existing.querySelector("[data-cc98-dual-ubb-action='legacy-preview']");
+    const syncButton = existing.querySelector("[data-cc98-dual-ubb-action='sync']");
+    const convertButton = existing.querySelector("[data-cc98-dual-ubb-action='convert']");
+    if (legacyPreviewButton instanceof HTMLElement && syncButton instanceof HTMLElement && convertButton instanceof HTMLElement) {
+      ensureConvertBadge(convertButton);
+      state.toolbarActions = existing;
+      state.legacyPreviewButton = legacyPreviewButton;
+      state.syncButton = syncButton;
+      state.updateToolbarState?.();
+      return;
+    }
+    existing.remove();
+  }
+
+  const actions = createElement("span", "cc98-rebuild-dual-ubb-toolbar-actions");
+  const preserveSelection = (control) => {
+    control.addEventListener("pointerdown", (event) => {
+      state.rememberSelection?.({ preserveNonCollapsed: true });
+      event.preventDefault();
+      event.stopPropagation();
+    });
+  };
+  const addAction = (label, title, action, onClick) => {
+    const button = createButton(
+      "cc98-rebuild-dual-ubb-toolbar-button cc98-rebuild-dual-ubb-toolbar-utility",
+      label,
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick(button);
+      }
+    );
+    button.dataset.cc98DualUbbAction = action;
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    preserveSelection(button);
+    actions.append(button);
+    return button;
+  };
+
+  const legacyPreviewButton = addAction(
+    "旧预览",
+    "打开 0.3.1 版 UBB 预览（备用）",
+    "legacy-preview",
+    () => state.toggleLegacyPreview?.()
+  );
+  const syncButton = addAction(
+    "同步",
+    "同步上下编辑区并重新渲染",
+    "sync",
+    (button) => {
+      state.forceSynchronize?.();
+      showRebuiltTransientToast(button, "上下编辑区已同步");
+    }
+  );
+  const convertButton = addAction(
+    "互转",
+    "UBB 与 Markdown 互转（预览后再替换）",
+    "convert",
+    () => openNativeMarkupConversionDialog(editor, state)
+  );
+  ensureConvertBadge(convertButton);
+  toolbar.append(actions);
+  state.toolbarActions = actions;
+  state.legacyPreviewButton = legacyPreviewButton;
+  state.syncButton = syncButton;
+  state.updateToolbarState?.();
+}
+
+function teardownNativeDualUbbEditor(editor) {
+  const state = editor?.__cc98DualUbbState;
+  if (!state) {
+    return;
+  }
+  editor.__cc98ConversionDialogClose?.();
+  state.gutterResizeObserver?.disconnect?.();
+  state.workspace?.__cc98DualPaneResizeFrame?.();
+  state.workspace?.__cc98DualPaneResizeObserver?.disconnect?.();
+  (state.fontFamilySelect?.closest(".cc98-rebuild-font-family-control") || state.fontFamilySelect)?.remove?.();
+  editor.querySelectorAll(".cc98-rebuild-typography-reset").forEach((button) => button.remove());
+  state.toolbarActions?.remove?.();
+  state.workspace?.remove();
+  state.ubbEditor?.classList?.remove("cc98-rebuild-dual-ubb-native-shell");
+  if (state.textarea instanceof HTMLTextAreaElement) {
+    state.textarea.classList.remove("cc98-rebuild-dual-ubb-native-textarea");
+    delete state.textarea.dataset.cc98DualUbbNative;
+    state.textarea.removeAttribute("aria-hidden");
+    state.textarea.tabIndex = state.originalTabIndex;
+  }
+  delete editor.__cc98DualUbbState;
+  delete editor.__cc98WysiwygClearColor;
+  delete editor.__cc98WysiwygApplyFontFamily;
+  delete editor.__cc98WysiwygApplyFontSize;
+  delete editor.__cc98WysiwygClearFontFamily;
+  delete editor.__cc98WysiwygClearFontSize;
+}
+
+function createNativeDualUbbEditor(editor, ubbEditor, textarea) {
+  const workspace = createElement(
+    "div",
+    "cc98-rebuild-dual-ubb-workspace cc98-rebuild-native-dual-ubb-workspace"
+  );
+  workspace.setAttribute("aria-label", "双向 UBB 编辑器");
+  const visualPane = createElement(
+    "section",
+    "cc98-rebuild-dual-ubb-visual-pane cc98-rebuild-message-editor-preview"
+  );
+  const visualHeader = createElement("div", "cc98-rebuild-dual-ubb-header");
+  const visualTitle = createElement("span", "cc98-rebuild-dual-ubb-title", "上下都可以编辑哦~");
+  const visualMeta = createElement("span", "cc98-rebuild-dual-ubb-meta");
+  const visual = createElement(
+    "div",
+    "cc98-rebuild-dual-ubb-visual cc98-rebuild-profile-signature-wysiwyg"
+  );
+  applyImportantStyle(visual, {
+    margin: "5px",
+    padding: "24px 28px",
+    border: "1px solid transparent",
+    "box-sizing": "border-box"
+  });
+  visual.contentEditable = "true";
+  visual.spellcheck = true;
+  visual.setAttribute("role", "textbox");
+  visual.setAttribute("aria-multiline", "true");
+  visual.setAttribute("aria-label", "可视化 UBB 编辑器");
+  visual.setAttribute("aria-placeholder", "在这里直接编辑并预览内容");
+  visual.dataset.placeholder = "在这里直接编辑并预览内容";
+  visualHeader.append(visualTitle, visualMeta);
+  visualPane.append(visualHeader, visual);
+
+  const divider = createElement("div", "cc98-rebuild-dual-editor-divider");
+  divider.setAttribute("role", "separator");
+  divider.setAttribute("aria-orientation", "horizontal");
+  divider.setAttribute("aria-label", "调整上下编辑区高度");
+  divider.tabIndex = 0;
+
+  const sourcePane = createElement("section", "cc98-rebuild-dual-ubb-source-pane");
+  const sourceGutter = createElement("div", "cc98-rebuild-dual-ubb-source-gutter");
+  sourceGutter.setAttribute("aria-hidden", "true");
+  const sourceEditor = createElement(
+    "pre",
+    "cc98-rebuild-dual-ubb-source cc98-rebuild-profile-signature-syntax-layer"
+  );
+  sourceEditor.contentEditable = "true";
+  sourceEditor.spellcheck = false;
+  sourceEditor.setAttribute("role", "textbox");
+  sourceEditor.setAttribute("aria-multiline", "true");
+  sourceEditor.setAttribute("aria-label", "UBB 源码编辑器");
+  sourceEditor.setAttribute("aria-placeholder", "在这里以经典代码形式编辑内容");
+  sourceEditor.dataset.placeholder = "在这里以经典代码形式编辑内容";
+  sourceEditor.tabIndex = 0;
+  sourcePane.append(sourceGutter, sourceEditor);
+  const legacyPreview = createLegacy031UbbPreviewPanel();
+  workspace.append(visualPane, divider, sourcePane, legacyPreview);
+
+  const state = {
+    editor,
+    ubbEditor,
+    textarea,
+    workspace,
+    visualPane,
+    visual,
+    visualMeta,
+    divider,
+    sourcePane,
+    sourceGutter,
+    sourceEditor,
+    legacyPreview,
+    activeSurface: "visual",
+    sourceSelection: null,
+    syncingNativeSource: false,
+    sourceIsComposing: false,
+    visualIsComposing: false,
+    sourceHighlightFrame: 0,
+    originalTabIndex: textarea.tabIndex,
+    lastNativeValue: textarea.value
+  };
+
+  const updateVisualMeta = () => {
+    const textLength = String(visual.textContent || "").replace(/\u200b/g, "").length;
+    visualMeta.textContent = `${textLength} 字符`;
+  };
+  const refreshLegacyPreview = (force = false) => {
+    if (!force && legacyPreview.hidden) {
+      return;
+    }
+    renderLegacy031UbbPreview(legacyPreview, textarea.value);
+  };
+  let refreshSourceGutter = null;
+  const renderSource = (preserveSelection = true) => {
+    renderEditableProfileSignatureSource(sourceEditor, textarea.value, preserveSelection);
+    renderDualUbbLogicalLineGutter(sourceGutter, sourceEditor, textarea.value);
+  };
+  const renderVisual = () => {
+    renderProfileSignatureWysiwygFromUbb(visual, textarea.value);
+    updateVisualMeta();
+  };
+  const writeNativeSource = (nextValue) => {
+    const normalized = String(nextValue ?? "").replace(/[\u200b\uFEFF]/g, "");
+    state.lastNativeValue = normalized;
+    if (textarea.value === normalized) {
+      refreshLegacyPreview();
+      return;
+    }
+    state.syncingNativeSource = true;
+    setNativeMessageInputValue(textarea, normalized);
+    state.syncingNativeSource = false;
+    refreshLegacyPreview();
+  };
+  const scheduleSourceHighlight = (immediate = false) => {
+    if (state.sourceHighlightFrame) {
+      window.cancelAnimationFrame(state.sourceHighlightFrame);
+      state.sourceHighlightFrame = 0;
+    }
+    const run = () => {
+      state.sourceHighlightFrame = 0;
+      renderSource(true);
+    };
+    if (immediate) {
+      run();
+    } else {
+      state.sourceHighlightFrame = window.requestAnimationFrame(run);
+    }
+  };
+  const rememberSelection = (options = {}) => {
+    const lockedColorSelection = editor.__cc98ColorSelectionSnapshot;
+    if (lockedColorSelection?.locked && lockedColorSelection.surface === "source") {
+      state.activeSurface = "source";
+      state.sourceSelection = lockedColorSelection;
+      return lockedColorSelection;
+    }
+    const currentSourceSelection = getProfileSignatureSourceSelection(sourceEditor);
+    if (currentSourceSelection) {
+      state.activeSurface = "source";
+      const previousSourceSelection = state.sourceSelection;
+      const effectiveSourceSelection = (
+        options.preserveNonCollapsed
+        && previousSourceSelection
+        && previousSourceSelection.start !== previousSourceSelection.end
+        && currentSourceSelection.start === currentSourceSelection.end
+      ) ? previousSourceSelection : currentSourceSelection;
+      state.sourceSelection = effectiveSourceSelection;
+      if (options.captureColorSelection) {
+        captureEditorColorSourceSelection(editor, textarea, effectiveSourceSelection);
+      }
+      return effectiveSourceSelection;
+    }
+    const visualRange = getProfileSignatureWysiwygRange(visual);
+    if (visualRange) {
+      state.activeSurface = "visual";
+      return rememberProfileSignatureWysiwygRange(editor, visual, options) || visualRange;
+    }
+    return null;
+  };
+  const refreshFromNative = (preserveSourceSelection = document.activeElement === sourceEditor) => {
+    state.lastNativeValue = textarea.value;
+    renderVisual();
+    renderSource(preserveSourceSelection);
+    refreshLegacyPreview();
+    if (state.activeSurface === "visual") {
+      editor.__cc98WysiwygRange = null;
+    }
+  };
+  const getVisualDeletionNormalization = createWysiwygDeletionInputTracker(visual);
+  const syncFromVisual = (normalizeEmptyFormatting = false) => {
+    if (state.visualIsComposing) {
+      return;
+    }
+    if (normalizeEmptyFormatting) {
+      normalizeEmptyWysiwygFormatting(visual);
+    }
+    stabilizeDualUbbLeadingEmojiLayout(visual);
+    const nextValue = serializeProfileSignatureWysiwyg(visual);
+    writeNativeSource(nextValue);
+    updateVisualMeta();
+    renderSource(false);
+    rememberProfileSignatureWysiwygRange(editor, visual);
+    scheduleNativeEditorDraftSave(editor);
+  };
+  const syncFromSource = (rehighlight = !state.sourceIsComposing) => {
+    const nextValue = getProfileSignatureSourceText(sourceEditor);
+    writeNativeSource(nextValue);
+    renderProfileSignatureWysiwygFromUbb(visual, nextValue);
+    editor.__cc98WysiwygRange = null;
+    updateVisualMeta();
+    state.sourceSelection = getProfileSignatureSourceSelection(sourceEditor) || state.sourceSelection;
+    if (rehighlight) {
+      scheduleSourceHighlight();
+    }
+    scheduleNativeEditorDraftSave(editor);
+  };
+  const forceSynchronize = () => {
+    const sourceActive = state.activeSurface === "source"
+      || document.activeElement === sourceEditor
+      || sourceEditor.contains(document.activeElement);
+    const nextValue = sourceActive
+      ? getProfileSignatureSourceText(sourceEditor)
+      : serializeProfileSignatureWysiwyg(visual);
+    writeNativeSource(nextValue);
+    state.lastNativeValue = textarea.value;
+    renderVisual();
+    renderSource(sourceActive);
+    refreshLegacyPreview(true);
+    editor.__cc98WysiwygRange = null;
+    scheduleNativeEditorDraftSave(editor);
+    return textarea.value;
+  };
+  const updateToolbarState = () => {
+    const open = !legacyPreview.hidden;
+    const button = state.legacyPreviewButton;
+    if (button instanceof HTMLElement) {
+      button.classList.toggle("is-active", open);
+      button.setAttribute("aria-pressed", String(open));
+    }
+  };
+  const setLegacyPreviewOpen = (open) => {
+    const shouldOpen = Boolean(open);
+    if (shouldOpen) {
+      forceSynchronize();
+    }
+    legacyPreview.hidden = !shouldOpen;
+    workspace.classList.toggle("is-legacy-preview-open", shouldOpen);
+    updateToolbarState();
+  };
+  const toggleLegacyPreview = () => setLegacyPreviewOpen(legacyPreview.hidden);
+  const getSourceSelection = () => {
+    const current = getProfileSignatureSourceSelection(sourceEditor);
+    if (current) {
+      state.sourceSelection = current;
+      return current;
+    }
+    return state.sourceSelection || {
+      start: textarea.value.length,
+      end: textarea.value.length
+    };
+  };
+  const replaceSourceSelection = (before, after = "", requireSelection = false, selectionOverride = null) => {
+    const sourceValue = String(textarea.value || "").replace(/[\u200b\uFEFF]/g, "");
+    const resolvedSelection = selectionOverride
+      ? getEditorColorSourceSelectionForApply(selectionOverride, sourceValue)
+      : null;
+    if (
+      selectionOverride?.surface === "visual"
+      && normalizeEditorColorSelectionText(selectionOverride.selectedText)
+      && !resolvedSelection
+    ) {
+      return false;
+    }
+    const selection = resolvedSelection || selectionOverride || getSourceSelection();
+    const start = Math.max(0, Math.min(sourceValue.length, Number(selection?.start) || 0));
+    const end = Math.max(start, Math.min(sourceValue.length, Number(selection?.end) || start));
+    const selected = sourceValue.slice(start, end);
+    if (requireSelection && !selected) {
+      return false;
+    }
+    if (selectionOverride?.surface === "visual") {
+      clearEditorColorSelectionSnapshot(editor);
+      delete editor.__cc98WysiwygLogicalSelection;
+    }
+    const inserted = `${before}${selected}${after}`;
+    const nextValue = `${sourceValue.slice(0, start)}${inserted}${sourceValue.slice(end)}`;
+    writeNativeSource(nextValue);
+    renderProfileSignatureWysiwygFromUbb(visual, nextValue);
+    updateVisualMeta();
+    renderSource(false);
+    const nextSelection = selected
+      ? { start: start + before.length, end: start + before.length + selected.length }
+      : { start: start + before.length, end: start + before.length };
+    sourceEditor.focus({ preventScroll: true });
+    restoreProfileSignatureSourceSelection(sourceEditor, nextSelection);
+    state.activeSurface = "source";
+    state.sourceSelection = nextSelection;
+    scheduleNativeEditorDraftSave(editor);
+    return true;
+  };
+  const replaceSourceWithText = (replacement, requireSelection = false) => {
+    const selection = getSourceSelection();
+    const start = Math.max(0, Math.min(textarea.value.length, selection.start));
+    const end = Math.max(start, Math.min(textarea.value.length, selection.end));
+    if (requireSelection && start === end) {
+      return false;
+    }
+    const inserted = String(replacement ?? "");
+    const nextValue = `${textarea.value.slice(0, start)}${inserted}${textarea.value.slice(end)}`;
+    writeNativeSource(nextValue);
+    renderProfileSignatureWysiwygFromUbb(visual, nextValue);
+    updateVisualMeta();
+    renderSource(false);
+    const caret = start + inserted.length;
+    const nextSelection = { start: caret, end: caret };
+    sourceEditor.focus({ preventScroll: true });
+    restoreProfileSignatureSourceSelection(sourceEditor, nextSelection);
+    state.activeSurface = "source";
+    state.sourceSelection = nextSelection;
+    scheduleNativeEditorDraftSave(editor);
+    return true;
+  };
+  const applySourceTag = (tag, value = "", requireSelection = false) => {
+    const suffix = value ? `=${String(value).replace(/\]/g, "")}` : "";
+    return replaceSourceSelection(`[${tag}${suffix}]`, `[/${tag}]`, requireSelection);
+  };
+  const insertSourceText = (text) => replaceSourceWithText(String(text || ""));
+  const getExtendedUbbSourceSelection = () => {
+    const sourceValue = String(textarea.value || "").replace(/[\u200b\uFEFF]/g, "");
+    const syntaxToolsCore = window.CC98RebornExtendedUbbCore;
+    const liveSourceSelection = getProfileSignatureSourceSelection(sourceEditor);
+    const savedSourceSelection = state.sourceSelection;
+    if (liveSourceSelection || savedSourceSelection) {
+      const sourceSelection = syntaxToolsCore?.preferSavedSelection
+        ? syntaxToolsCore.preferSavedSelection(liveSourceSelection, savedSourceSelection)
+        : (liveSourceSelection || savedSourceSelection);
+      if (sourceSelection && state.activeSurface === "source") {
+        return { ...sourceSelection, surface: "source" };
+      }
+    }
+    const liveVisualRange = getProfileSignatureWysiwygRange(visual);
+    const liveVisualSelection = liveVisualRange
+      ? buildEditorColorVisualLogicalSelection(editor, visual, liveVisualRange)
+      : null;
+    const savedVisualSelection = editor.__cc98WysiwygLogicalSelection
+      || editor.__cc98ColorSelectionSnapshot;
+    const visualSelection = syntaxToolsCore?.preferSavedSelection
+      ? syntaxToolsCore.preferSavedSelection(liveVisualSelection, savedVisualSelection)
+      : (liveVisualSelection || savedVisualSelection);
+    const resolvedVisualSelection = visualSelection
+      ? getEditorColorSourceSelectionForApply(visualSelection, sourceValue)
+      : null;
+    if (resolvedVisualSelection) {
+      return { ...resolvedVisualSelection, surface: "visual" };
+    }
+    const fallback = savedSourceSelection || liveSourceSelection || getSourceSelection();
+    return { ...fallback, surface: "source" };
+  };
+  const applyExtendedUbbSourceEdit = (options = {}) => {
+    const sourceValue = String(textarea.value || "").replace(/[\u200b\uFEFF]/g, "");
+    const selection = getExtendedUbbSourceSelection();
+    const buildSourceEdit = window.CC98RebornExtendedUbbCore?.buildSourceEdit;
+    if (typeof buildSourceEdit !== "function") {
+      return { applied: false, reason: "core-unavailable", selected: "", start: 0, end: 0 };
+    }
+    const editPlan = buildSourceEdit(sourceValue, selection, options);
+    if (!editPlan?.applied) {
+      return editPlan;
+    }
+    const { selected, start, end, nextValue, nextSelection } = editPlan;
+    if (selection.surface === "visual") {
+      clearEditorColorSelectionSnapshot(editor);
+      delete editor.__cc98WysiwygLogicalSelection;
+    }
+    writeNativeSource(nextValue);
+    renderProfileSignatureWysiwygFromUbb(visual, nextValue);
+    updateVisualMeta();
+    renderSource(false);
+    sourceEditor.focus({ preventScroll: true });
+    restoreProfileSignatureSourceSelection(sourceEditor, nextSelection);
+    state.activeSurface = "source";
+    state.sourceSelection = nextSelection;
+    scheduleNativeEditorDraftSave(editor);
+    return { applied: true, selected, start, end, nextValue, nextSelection };
+  };
+  const applyToolbarCommand = ({ tag, value = "", command = "" }) => {
+    if (isNativeDualUbbSourceActive(state)) {
+      return applySourceTag(tag, value);
+    }
+    state.activeSurface = "visual";
+    if (command) {
+      return applyProfileSignatureWysiwygCommand(editor, visual, command);
+    }
+    return applyProfileSignatureWysiwygInlineTag(editor, visual, tag, value);
+  };
+  const applyInlineTag = (tag, value, style = {}) => {
+    if (isNativeDualUbbSourceActive(state)) {
+      return applySourceTag(tag, value);
+    }
+    state.activeSurface = "visual";
+    return applyProfileSignatureWysiwygInlineTag(editor, visual, tag, value, style);
+  };
+  const applyGradient = (stops, density) => {
+    if (isNativeDualUbbSourceActive(state)) {
+      const selection = getSourceSelection();
+      const selected = textarea.value.slice(selection.start, selection.end);
+      if (!selected) {
+        return false;
+      }
+      const gradient = buildEditorGradientUbb(selected, stops, density);
+      return replaceSourceWithText(gradient, true);
+    }
+    state.activeSurface = "visual";
+    return applyProfileSignatureWysiwygGradient(editor, visual, stops, density);
+  };
+  const insertEmoji = (item) => {
+    if (isNativeDualUbbSourceActive(state)) {
+      return insertSourceText(item?.insertText || "");
+    }
+    const emotionTag = String(item?.insertText || "").replace(/^\[/, "").replace(/\]$/, "");
+    if (!emotionTag || !item?.src) {
+      return false;
+    }
+    const wrap = createElement("span", "cc98-rebuild-inline-emoji-wrap");
+    wrap.dataset.cc98UbbEmotionTag = emotionTag;
+    wrap.contentEditable = "false";
+    const image = createContentImageFromUrl(item.src, "");
+    markRebuiltEmojiImage(image, item.src);
+    image.draggable = false;
+    wrap.append(image);
+    state.activeSurface = "visual";
+    return insertProfileSignatureWysiwygNode(editor, visual, wrap);
+  };
+  const insertLink = () => {
+    if (!isNativeDualUbbSourceActive(state)) {
+      state.activeSurface = "visual";
+      return insertProfileSignatureWysiwygLink(editor, visual);
+    }
+    const selection = getSourceSelection();
+    const selected = textarea.value.slice(selection.start, selection.end);
+    const defaultUrl = /^https?:\/\//i.test(selected) ? selected : "";
+    const url = promptPrivateMessageValue("请输入链接地址", defaultUrl);
+    if (!url) {
+      return false;
+    }
+    const label = selected || promptPrivateMessageValue("请输入显示文字（可留空）", url) || url;
+    return replaceSourceWithText(`[url=${url}]${label}[/url]`);
+  };
+  const insertMedia = (requestedTag) => {
+    const tag = requestedTag === "image"
+      ? "img"
+      : (requestedTag === "bilibili" ? "bilibili" : requestedTag);
+    const promptLabels = {
+      img: "请输入图片地址",
+      video: "请输入视频地址",
+      bilibili: "请输入 Bilibili 地址或 BV 号",
+      audio: "请输入音频地址"
+    };
+    if (!promptLabels[tag]) {
+      return false;
+    }
+    if (!isNativeDualUbbSourceActive(state)) {
+      state.activeSurface = "visual";
+      return insertProfileSignatureWysiwygMedia(editor, visual, tag, promptLabels[tag]);
+    }
+    const url = promptPrivateMessageValue(promptLabels[tag], "");
+    return url ? insertSourceText(`[${tag}]${url}[/${tag}]`) : false;
+  };
+
+  state.updateVisualMeta = updateVisualMeta;
+  state.renderSource = renderSource;
+  state.renderVisual = renderVisual;
+  state.refreshFromNative = refreshFromNative;
+  state.rememberSelection = rememberSelection;
+  state.applyToolbarCommand = applyToolbarCommand;
+  state.applySourceTag = applySourceTag;
+  state.extendedUbbApplySourceEdit = applyExtendedUbbSourceEdit;
+  state.extendedUbbGetSourceSelection = getExtendedUbbSourceSelection;
+  state.forceSynchronize = forceSynchronize;
+  state.setLegacyPreviewOpen = setLegacyPreviewOpen;
+  state.toggleLegacyPreview = toggleLegacyPreview;
+  state.updateToolbarState = updateToolbarState;
+
+  editor.__cc98DualUbbState = state;
+  editor.__cc98WysiwygSyncSource = syncFromVisual;
+  editor.__cc98WysiwygRememberSelection = rememberSelection;
+  editor.__cc98WysiwygApplyColor = (color, selectionOverride = null) => {
+    const normalized = String(color || "").trim().toLowerCase();
+    if (normalized !== "transparent" && !/^#[0-9a-f]{6}$/i.test(normalized)) {
+      return false;
+    }
+    const selection = selectionOverride
+      || editor.__cc98ColorSelectionSnapshot
+      || promoteEditorColorLogicalSelection(editor, visual, textarea.value);
+    if (selection?.surface === "source") {
+      return replaceSourceSelection(
+        `[color=${normalized}]`,
+        "[/color]",
+        false,
+        selection
+      );
+    }
+    if (selection?.surface === "visual") {
+      const sourceSelection = getEditorColorSourceSelectionForApply(selection, textarea.value);
+      if (isUsableEditorColorSourceSelection(selection, textarea.value, sourceSelection)) {
+        return replaceSourceSelection(
+          `[color=${normalized}]`,
+          "[/color]",
+          false,
+          selection
+        );
+      }
+      const markerRange = getEditorColorSelectionMarkerRange(selection);
+      const expectedSelection = getEditorColorSelectionExpectedSourceText(selection);
+      if (
+        expectedSelection.replace(/\s|\[[^\]]+\]/g, "")
+        && (!markerRange || !hasMeaningfulProfileSignatureWysiwygRange(markerRange))
+      ) {
+        return false;
+      }
+      state.activeSurface = "visual";
+      return applyProfileSignatureWysiwygInlineTag(
+        editor,
+        visual,
+        "color",
+        normalized,
+        { color: normalized }
+      );
+    }
+    return applyInlineTag("color", normalized, { color: normalized });
+  };
+  editor.__cc98WysiwygClearColor = (selectionOverride = null) => {
+    if (isNativeDualUbbSourceActive(state)) {
+      const selection = selectionOverride?.surface === "source"
+        ? selectionOverride
+        : getSourceSelection();
+      const result = removeEditorColorTagsFromSource(
+        textarea.value,
+        selection.start,
+        selection.end
+      );
+      if (!result.changed) {
+        return false;
+      }
+      writeNativeSource(result.value);
+      renderProfileSignatureWysiwygFromUbb(visual, result.value);
+      updateVisualMeta();
+      renderSource(false);
+      const nextSelection = { start: result.start, end: result.end };
+      sourceEditor.focus({ preventScroll: true });
+      restoreProfileSignatureSourceSelection(sourceEditor, nextSelection);
+      state.activeSurface = "source";
+      state.sourceSelection = nextSelection;
+      scheduleNativeEditorDraftSave(editor);
+      return true;
+    }
+    return clearProfileSignatureWysiwygColor(editor, visual);
+  };
+  editor.__cc98WysiwygApplyGradient = applyGradient;
+  const applyTypography = (tag, value) => {
+    if (!isNativeDualUbbSourceActive(state)) {
+      state.activeSurface = "visual";
+      return applyProfileSignatureWysiwygTypography(editor, visual, tag, value);
+    }
+    const result = window.CC98RebornExtendedUbbCore?.applyTypographyToSource(
+      textarea.value, getSourceSelection(), tag, value
+    );
+    if (!result) {
+      return false;
+    }
+    writeNativeSource(result.value);
+    renderVisual();
+    renderSource(false);
+    const nextSelection = { start: result.start, end: result.end };
+    sourceEditor.focus({ preventScroll: true });
+    restoreProfileSignatureSourceSelection(sourceEditor, nextSelection);
+    state.sourceSelection = nextSelection;
+    scheduleNativeEditorDraftSave(editor);
+    return true;
+  };
+  editor.__cc98WysiwygApplyFontFamily = (fontFamily) => {
+    const normalized = normalizeEditorFontFamilyValue(fontFamily);
+    return normalized ? applyTypography("font", normalized) : false;
+  };
+  editor.__cc98WysiwygApplyFontSize = (size) => {
+    const normalized = normalizeEditorFontSizeValue(size, "");
+    return normalized ? applyTypography("size", normalized) : false;
+  };
+  editor.__cc98WysiwygClearFontFamily = () => applyTypography("font", null);
+  editor.__cc98WysiwygClearFontSize = () => applyTypography("size", null);
+  editor.__cc98WysiwygInsertEmoji = insertEmoji;
+  editor.__cc98WysiwygInsertLink = insertLink;
+  editor.__cc98WysiwygInsertMedia = insertMedia;
+
+  textarea.dataset.cc98DualUbbNative = "true";
+  textarea.classList.add("cc98-rebuild-dual-ubb-native-textarea");
+  textarea.tabIndex = -1;
+  textarea.setAttribute("aria-hidden", "true");
+  ubbEditor.classList.add("cc98-rebuild-dual-ubb-native-shell");
+  ubbEditor.after(workspace);
+  legacyPreview.addEventListener("cc98:legacy-preview-close", () => {
+    setLegacyPreviewOpen(false);
+  });
+  ensureNativeDualUbbToolbarControls(editor, state);
+  bindDualUbbPaneDivider(workspace, visualPane, sourcePane, divider);
+  refreshSourceGutter = bindDualUbbLogicalLineGutter(
+    sourceGutter,
+    sourceEditor,
+    () => textarea.value
+  );
+
+  textarea.addEventListener("input", () => {
+    if (state.syncingNativeSource) {
+      return;
+    }
+    refreshFromNative(document.activeElement === sourceEditor);
+  });
+  sourceEditor.addEventListener("focus", () => {
+    state.activeSurface = "source";
+    state.sourceSelection = getProfileSignatureSourceSelection(sourceEditor) || state.sourceSelection;
+  });
+  ["keyup", "mouseup"].forEach((type) => {
+    sourceEditor.addEventListener(type, () => {
+      state.activeSurface = "source";
+      state.sourceSelection = getProfileSignatureSourceSelection(sourceEditor) || state.sourceSelection;
+    });
+  });
+  sourceEditor.addEventListener("input", () => syncFromSource(!state.sourceIsComposing));
+  sourceEditor.addEventListener("compositionstart", () => {
+    state.sourceIsComposing = true;
+  });
+  sourceEditor.addEventListener("compositionend", () => {
+    state.sourceIsComposing = false;
+    syncFromSource(true);
+  });
+  sourceEditor.addEventListener("keydown", (event) => {
+    if (!["Tab", "Enter"].includes(event.key)) {
+      return;
+    }
+    if (event.key === "Enter" && (event.isComposing || event.ctrlKey || event.metaKey || event.altKey)) {
+      return;
+    }
+    event.preventDefault();
+    if (insertProfileSignatureSourceTextAtSelection(sourceEditor, event.key === "Tab" ? "\t" : "\n")) {
+      syncFromSource(true);
+    }
+  });
+  sourceEditor.addEventListener("paste", (event) => {
+    const plainText = event.clipboardData?.getData("text/plain");
+    if (typeof plainText !== "string") {
+      return;
+    }
+    event.preventDefault();
+    document.execCommand("insertText", false, plainText);
+    syncFromSource(true);
+  });
+  sourceEditor.addEventListener("blur", () => {
+    state.sourceSelection = getProfileSignatureSourceSelection(sourceEditor) || state.sourceSelection;
+    if (!state.sourceIsComposing) {
+      scheduleSourceHighlight(true);
+    }
+  });
+  visual.addEventListener("focus", () => {
+    state.activeSurface = "visual";
+    rememberProfileSignatureWysiwygRange(editor, visual, { preserveNonCollapsed: true });
+  });
+  ["keyup", "mouseup"].forEach((type) => {
+    visual.addEventListener(type, () => {
+      state.activeSurface = "visual";
+      rememberProfileSignatureWysiwygRange(editor, visual);
+    });
+  });
+  visual.addEventListener("compositionstart", () => {
+    state.visualIsComposing = true;
+  });
+  visual.addEventListener("compositionend", () => {
+    state.visualIsComposing = false;
+    syncFromVisual(false);
+  });
+  visual.addEventListener("input", (event) => {
+    syncFromVisual(getVisualDeletionNormalization(event));
+  });
+  visual.addEventListener("paste", (event) => {
+    const plainText = event.clipboardData?.getData("text/plain");
+    if (typeof plainText !== "string") {
+      return;
+    }
+    event.preventDefault();
+    restoreProfileSignatureWysiwygRange(editor, visual);
+    document.execCommand("insertText", false, plainText);
+    rememberProfileSignatureWysiwygRange(editor, visual);
+    syncFromVisual(false);
+  });
+  visual.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("a[href]")) {
+      event.preventDefault();
+    }
+  });
+  if (typeof ResizeObserver === "function") {
+    let gutterResizeFrame = 0;
+    const gutterResizeObserver = new ResizeObserver(() => {
+      if (!workspace.isConnected) {
+        gutterResizeObserver.disconnect();
+        return;
+      }
+      if (gutterResizeFrame) {
+        window.cancelAnimationFrame(gutterResizeFrame);
+      }
+      gutterResizeFrame = window.requestAnimationFrame(() => {
+        gutterResizeFrame = 0;
+        refreshSourceGutter?.();
+      });
+    });
+    gutterResizeObserver.observe(sourcePane);
+    state.gutterResizeObserver = gutterResizeObserver;
+  }
+  renderVisual();
+  renderSource(false);
+  return state;
+}
+
+function stabilizeNativeDualUbbEditor(editor) {
+  if (!(editor instanceof HTMLElement) || editor.dataset.cc98ProfileSignatureEditor === "true") {
+    return;
+  }
+  const existingState = editor.__cc98DualUbbState;
+  const markdownActive = Boolean(editor.querySelector(".react-mde"));
+  if (markdownActive) {
+    if (existingState) {
+      teardownNativeDualUbbEditor(editor);
+    }
+    editor.querySelectorAll(".cc98-rebuild-native-dual-ubb-workspace").forEach((workspace) => {
+      workspace.remove();
+    });
+    return;
+  }
+  const ubbEditor = editor.querySelector(".ubb-editor");
+  const textarea = ubbEditor?.querySelector(":scope > textarea");
+  if (!(ubbEditor instanceof HTMLElement) || !(textarea instanceof HTMLTextAreaElement)) {
+    if (existingState?.workspace instanceof HTMLElement) {
+      existingState.workspace.hidden = true;
+    }
+    return;
+  }
+  if (
+    existingState
+    && existingState.textarea === textarea
+    && existingState.workspace?.isConnected
+  ) {
+    existingState.workspace.hidden = false;
+    ensureNativeDualUbbToolbarControls(editor, existingState);
+    if (
+      !existingState.sourceIsComposing
+      && !existingState.visualIsComposing
+      && existingState.lastNativeValue !== textarea.value
+    ) {
+      existingState.refreshFromNative(document.activeElement === existingState.sourceEditor);
+    }
+    return;
+  }
+  if (existingState) {
+    teardownNativeDualUbbEditor(editor);
+  }
+  createNativeDualUbbEditor(editor, ubbEditor, textarea);
 }
 
 function stabilizeNativeEditor(editor) {
@@ -6750,28 +19391,87 @@ function stabilizeNativeEditor(editor) {
     return;
   }
   editor.classList.add("cc98-rebuild-native-editor");
+  ensureNativeEditorDraftControls(editor);
   labelEditorToolbarButtons(editor);
   labelEditorToolbarButtonsWithUnicode(editor);
-  hideMarkdownEditorEntrances(editor);
+  stabilizeMarkdownEditor(editor);
+  stabilizeNativeDualUbbEditor(editor);
   stabilizeEditorFontSizeButton(editor);
   stabilizeEditorColorButton(editor);
+  stabilizeEditorTagDropdown(editor);
   stabilizeEditorEmojiImages(editor);
   stabilizeEditorPreviewFormatting(editor);
-  editor.querySelectorAll(".ubb-editor, .markdown-editor, .for-container, .for-editor, .for-toolbar, .for-preview, .editor-preview, .CodeMirror, textarea")
+  ensurePendingNativeEditorSubmitRecovery(editor);
+  editor.querySelectorAll(".ubb-editor, .react-mde, .mde-header, .mde-text, .mde-preview, .mde-preview-content, .markdown-editor, .for-container, .for-editor, .for-toolbar, .for-preview, .editor-preview, .CodeMirror, textarea")
     .forEach((node) => node.classList.add("cc98-rebuild-editor-surface"));
 }
 
 function scheduleNativeEditorStabilize(editor) {
-  [60, 220, 620].forEach((delay) => {
-    setTimeout(() => stabilizeNativeEditor(editor), delay);
-  });
+  if (editor?.dataset?.cc98ProfileSignatureEditor === "true") {
+    return;
+  }
+  const previousTimer = nativeEditorStabilizeTimers.get(editor);
+  if (previousTimer) {
+    window.clearTimeout(previousTimer);
+  }
+  const timer = window.setTimeout(() => {
+    nativeEditorStabilizeTimers.delete(editor);
+    if (!editor?.isConnected || editor.dataset.cc98SubmitTransactionActive === "true") {
+      return;
+    }
+    stabilizeNativeEditor(editor);
+  }, 70);
+  nativeEditorStabilizeTimers.set(editor, timer);
 }
 
-function schedulePostSubmitPageRefresh() {
-  window.clearTimeout(nativePostSubmitRefreshTimer);
-  nativePostSubmitRefreshTimer = window.setTimeout(() => {
-    location.reload();
-  }, 2200);
+function schedulePostSubmitPageRefresh(options = {}) {
+  const startedRouteKey = options.startedRouteKey || getRoutePageKey();
+  const startedOnTopic = Boolean(options.startedOnTopic);
+  nativePostSubmitRefreshTimers.forEach((timer) => window.clearTimeout(timer));
+  nativePostSubmitRefreshTimers = [];
+  let context = readEditorSubmitContext();
+  const isCurrentTransaction = context
+    && context.startedRouteKey === startedRouteKey
+    && Date.now() - Number(context.submittedAt || 0) < 3000;
+  if (!isCurrentTransaction) {
+    markEditorSubmitIntent({
+      startedRouteKey,
+      startedOnTopic,
+      destinationHref: options.destinationHref || getEditorSubmitTargetHref(),
+      draftKey: options.draftKey,
+      submitKind: options.submitKind,
+      isEdit: Boolean(options.isEdit)
+    });
+    context = readEditorSubmitContext();
+  }
+  const recoveryDelays = /^(?:post|reply)$/i.test(context?.submitKind || "")
+    ? [6000, 11000]
+    : [];
+  nativePostSubmitRefreshTimers = [
+    ...recoveryDelays.map((delay, index) => window.setTimeout(() => {
+      recoverUnobservedNativePostSubmit(startedRouteKey, {
+        allowRepeat: index > 0,
+        fallbackDelay: index > 0 ? 260 : 420
+      });
+    }, delay)),
+    window.setTimeout(() => {
+      const latest = readEditorSubmitContext();
+      if (!latest || latest.startedRouteKey !== startedRouteKey) {
+        return;
+      }
+      clearEditorSubmitIntent();
+      document.querySelectorAll("[data-cc98-native-submit-released='true'], [data-cc98-submit-transaction-active='true']").forEach((editor) => {
+        delete editor.dataset.cc98NativeSubmitReleased;
+        delete editor.dataset.cc98SubmitTransactionActive;
+        delete editor.dataset.cc98SubmitTransactionStartedAt;
+      });
+      document.querySelectorAll("[data-cc98-submit-pending='true']").forEach((control) => {
+        delete control.dataset.cc98SubmitPending;
+      });
+      hideLoadingOverlay({ force: true });
+      scheduleRebuild();
+    }, 20000)
+  ];
 }
 
 function bindNativeEditorStabilizer(editor) {
@@ -6783,8 +19483,63 @@ function bindNativeEditorStabilizer(editor) {
     return;
   }
   nativeEditorStabilizers.add(editor);
+  bindMarkdownEditorInputTracking(editor);
+  editor.addEventListener("keydown", (event) => {
+    if (!/^(?:Enter| )$/.test(event.key)) {
+      return;
+    }
+    const control = event.target?.closest?.("#post-topic-changeMode, .changeEditor, .cc98-rebuild-markdown-entry");
+    if (!(control instanceof HTMLElement)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    control.click();
+  }, true);
   editor.addEventListener("pointerdown", (event) => {
-    if (getNativeEditorPassthroughControl(event.target)) {
+    blurMarkdownEditorBeforePreview(editor, event.target);
+    if (event.target?.closest?.(".cc98-rebuild-editor-font-select")) {
+      return;
+    }
+    if (event.target?.closest?.(".cc98-rebuild-message-emoji-panel")) {
+      return;
+    }
+    const dualToolbarControl = event.target?.closest?.(".ubb-buttons .ubb-button");
+    if (getNativeDualUbbToolbarCommand(dualToolbarControl)) {
+      editor.__cc98DualUbbState?.rememberSelection?.();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (isEditorEmojiButtonTarget(event.target)) {
+      editor.__cc98DualUbbState?.rememberSelection?.();
+      stopNativeEditorToolbarEvent(event);
+      hideNativeEditorLegacyEmojiPanel(editor);
+      const currentPanel = editor.querySelector(":scope > .cc98-rebuild-message-emoji-panel");
+      const shouldOpen = !(currentPanel instanceof HTMLElement) || currentPanel.hidden;
+      const pointerToggle = {
+        pointerId: Number.isFinite(event.pointerId) ? event.pointerId : null,
+        startedAt: Date.now()
+      };
+      editor.__cc98EmojiPointerToggle = pointerToggle;
+      setEditorEmojiPanelOpen(editor, shouldOpen);
+      window.setTimeout(() => {
+        if (editor.__cc98EmojiPointerToggle === pointerToggle) {
+          delete editor.__cc98EmojiPointerToggle;
+        }
+      }, 5000);
+      return;
+    }
+    if (!event.target?.closest?.(".cc98-rebuild-message-emoji-panel")) {
+      setEditorEmojiPanelOpen(editor, false);
+    }
+    const passthroughControl = getNativeEditorPassthroughControl(event.target);
+    if (passthroughControl) {
+      editor.__cc98DualUbbState?.rememberSelection?.();
+      if (getNativeEditorInsertControlKind(passthroughControl) !== "file") {
+        event.preventDefault();
+        event.stopPropagation();
+      }
       return;
     }
     const colorButton = getEditorColorTriggerButton(event.target);
@@ -6802,12 +19557,53 @@ function bindNativeEditorStabilizer(editor) {
     event.stopPropagation();
     openEditorColorPicker(colorButton, editor);
   }, true);
+  editor.addEventListener("pointercancel", () => {
+    delete editor.__cc98EmojiPointerToggle;
+  }, true);
   editor.addEventListener("click", (event) => {
-    if (event.target?.closest?.("#post-topic-button")) {
-      schedulePostSubmitPageRefresh();
+    if (deferMarkdownPreviewUntilInputSettles(editor, event)) {
+      return;
     }
-    if (getNativeEditorPassthroughControl(event.target)) {
+    if (event.target?.closest?.(".cc98-rebuild-editor-font-select")) {
+      return;
+    }
+    if (isNativePostSubmitEditor(editor) && isLikelyEditorSubmitControl(event.target)) {
+      const submitControl = event.target?.closest?.("#post-topic-button, [id^='post-topic-button-'], button, input[type='button'], input[type='submit'], .button, .ant-btn, [role='button']");
+      appendRebornReplyTailIfNeeded(editor, submitControl);
+      scheduleNativeEditorDraftSave(editor);
+      const context = getNativeEditorSubmitContext({ editor });
+      if (!beginNativeEditorSubmitTransaction(editor, submitControl, context)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
+    if (handleNativeDualUbbToolbarControl(editor, event.target, event)) {
+      return;
+    }
+    if (event.target?.closest?.(".cc98-rebuild-message-emoji-panel img")) {
+      return;
+    }
+    if (event.target?.closest?.(".cc98-rebuild-message-emoji-panel")) {
+      return;
+    }
+    if (isEditorEmojiButtonTarget(event.target)) {
+      stopNativeEditorToolbarEvent(event);
+      if (editor.__cc98EmojiPointerToggle) {
+        delete editor.__cc98EmojiPointerToggle;
+        scheduleNativeEditorStabilize(editor);
+        return;
+      }
+      const currentPanel = editor.querySelector(":scope > .cc98-rebuild-message-emoji-panel");
+      const shouldOpen = !(currentPanel instanceof HTMLElement) || currentPanel.hidden;
+      setEditorEmojiPanelOpen(editor, shouldOpen);
       scheduleNativeEditorStabilize(editor);
+      return;
+    }
+    if (!event.target?.closest?.(".cc98-rebuild-message-emoji-panel")) {
+      setEditorEmojiPanelOpen(editor, false);
+    }
+    if (handleNativeEditorInsertControl(editor, event.target, event)) {
       return;
     }
     const colorButton = getEditorColorTriggerButton(event.target);
@@ -6824,8 +19620,26 @@ function bindNativeEditorStabilizer(editor) {
       scheduleNativeEditorStabilize(editor);
     }
   }, true);
-  editor.addEventListener("submit", () => {
-    schedulePostSubmitPageRefresh();
+  editor.addEventListener("submit", (event) => {
+    if (isEditorAuxiliarySubmitEvent(event, editor)) {
+      return;
+    }
+    if (!isNativePostSubmitEditor(editor)) {
+      return;
+    }
+    if (editor.dataset.cc98SubmitTransactionActive === "true") {
+      return;
+    }
+    const submitControl = findNativeEditorSubmitControl(editor, event.submitter);
+    appendRebornReplyTailIfNeeded(editor, submitControl);
+    const context = getNativeEditorSubmitContext({ editor });
+    if (submitControl instanceof HTMLElement) {
+      beginNativeEditorSubmitTransaction(editor, submitControl, context);
+    } else {
+      markEditorSubmitIntent(context);
+      schedulePostSubmitPageRefresh(context);
+    }
+    scheduleNativeEditorDraftSave(editor);
   }, true);
   const editorObserver = new MutationObserver(() => scheduleNativeEditorStabilize(editor));
   editorObserver.observe(editor, {
@@ -6837,13 +19651,18 @@ function bindNativeEditorStabilizer(editor) {
 function renderEditorPage(app) {
   const data = getEditorPageData();
   const hero = createElement("section", "cc98-rebuild-editor-hero");
-  hero.append(createElement("p", "cc98-rebuild-kicker", "Compose"));
-  hero.append(createElement("h1", "", "发表主题"));
+  hero.append(createElement("p", "cc98-rebuild-kicker", data.modeLabel));
+  hero.append(createElement("h1", "", data.pageTitle));
   const meta = createElement("div", "cc98-rebuild-editor-meta");
   if (data.board?.href) {
     meta.append(createLink("cc98-rebuild-chip", data.board.text, data.board.href));
   }
-  meta.append(createElement("span", "cc98-rebuild-muted", data.titlePlaceholder));
+  if (data.titlePlaceholder) {
+    meta.append(createElement("span", "cc98-rebuild-muted", data.titlePlaceholder));
+  }
+  if (data.submitLabel) {
+    meta.append(createElement("span", "cc98-rebuild-chip cc98-rebuild-editor-submit-chip", data.submitLabel));
+  }
   hero.append(meta);
   hero.querySelector("h1")?.remove();
   app.append(hero);
@@ -6856,6 +19675,10 @@ function renderEditorPage(app) {
     return;
   }
 
+  if (data.editor.dataset.cc98NativeSubmitReleased === "true") {
+    return;
+  }
+
   rememberReparentedNativeNode(data.editor);
   bindNativeEditorStabilizer(data.editor);
   app.append(data.editor);
@@ -6863,7 +19686,7 @@ function renderEditorPage(app) {
 
 function renderPostReplyEditor(app) {
   const reply = document.querySelector("#sendTopicInfo");
-  if (!reply || reply.closest("#cc98-comfort-app")) {
+  if (!reply || reply.closest("#cc98-comfort-app") || reply.dataset.cc98NativeSubmitReleased === "true") {
     return;
   }
   rememberReparentedNativeNode(reply);
@@ -6895,7 +19718,7 @@ function renderMessagePage(app) {
   if (!source) {
     const fallback = createElement("section", "cc98-rebuild-empty-state");
     fallback.append(createElement("h2", "", "消息页面还没有加载完成"));
-    fallback.append(createElement("p", "", "稍后会自动更新，也可以点击刷新。"));
+    fallback.append(createElement("p", "", "稍后会自动更新，也可以点击顶部同步。"));
     app.append(fallback);
     return;
   }
@@ -6941,12 +19764,848 @@ function syncMessageReadAllProxy(source, heroTop) {
   proxy.disabled = Boolean(originalControl.matches?.(":disabled, [disabled], [aria-disabled='true']"));
 }
 
-function bindMessageTitleSync(source, heroTitle, heroTop) {
+function captureMessageWindowScrollState(root = document) {
+  const scope = root instanceof HTMLElement || root instanceof Document ? root : document;
+  return [...scope.querySelectorAll(".message-message-wContent")]
+    .filter((node) => node instanceof HTMLElement)
+    .map((node) => ({
+      top: node.scrollTop || 0,
+      left: node.scrollLeft || 0
+    }));
+}
+
+function restoreMessageWindowScrollState(state, root = document) {
+  if (!Array.isArray(state) || !state.length) {
+    return;
+  }
+  const scope = root instanceof HTMLElement || root instanceof Document ? root : document;
+  const restore = () => {
+    [...scope.querySelectorAll(".message-message-wContent")]
+      .filter((node) => node instanceof HTMLElement)
+      .forEach((node, index) => {
+        const snapshot = state[index];
+        if (!snapshot) {
+          return;
+        }
+        node.scrollTop = snapshot.top || 0;
+        node.scrollLeft = snapshot.left || 0;
+      });
+  };
+  restore();
+  requestAnimationFrame(restore);
+  window.setTimeout(restore, 80);
+}
+
+function stabilizeNativeMessageSurfaces(source) {
+  if (!(source instanceof HTMLElement)) {
+    return;
+  }
+  const scrollState = captureMessageWindowScrollState(source);
+  let movedComposer = false;
+  source.querySelectorAll(".message-message-window").forEach((windowNode) => {
+    if (!(windowNode instanceof HTMLElement)) {
+      return;
+    }
+    const content = windowNode.querySelector(":scope > .message-message-wContent");
+    const composer = windowNode.querySelector(":scope > .message-message-wPost")
+      || [...windowNode.querySelectorAll(".message-message-wPost")]
+        .find((node) => node instanceof HTMLElement && !node.closest(".cc98-rebuild-message-editor"));
+    if (content instanceof HTMLElement && composer instanceof HTMLElement && content.nextElementSibling !== composer) {
+      content.after(composer);
+      movedComposer = true;
+    }
+  });
+  if (movedComposer) {
+    restoreMessageWindowScrollState(scrollState, source);
+  }
+  const cleanSelectors = [
+    ".message",
+    ".message-content",
+    ".message-right",
+    ".message-response",
+    ".message-system",
+    ".message-setting",
+    ".message-message",
+    ".message-message-people",
+    ".message-message-window",
+    ".message-message-pList",
+    ".message-response-box-middle",
+    ".message-response-box-middle1",
+    ".message-response-box-middle-title",
+    ".message-response-box-middle-content",
+    ".message-box-content",
+    ".message-system-box-content",
+    ".message-message-pInfo",
+    ".message-message-pMessage",
+    ".message-message-wContent",
+    ".message-message-wcContent"
+  ].join(",");
+  source.querySelectorAll(cleanSelectors).forEach((node) => {
+    if (!(node instanceof HTMLElement)) {
+      return;
+    }
+    node.classList.add("cc98-rebuild-message-surface-clean");
+    const styleText = node.getAttribute("style") || "";
+    if (/background(?:-color)?\s*:\s*(?:white|#fff(?:fff)?|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\))/i.test(styleText)) {
+      node.style.setProperty("background", "transparent", "important");
+      node.style.setProperty("background-color", "transparent", "important");
+      node.style.setProperty("background-image", "none", "important");
+    }
+  });
+}
+
+function setNativeMessageInputValue(input, value) {
+  if (!(input instanceof HTMLTextAreaElement) && !(input instanceof HTMLInputElement)) {
+    return;
+  }
+  const previousValue = input.value;
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value")
+    || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")
+    || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  if (descriptor?.set) {
+    descriptor.set.call(input, value);
+  } else {
+    input.value = value;
+  }
+  const valueTracker = input._valueTracker;
+  if (valueTracker && typeof valueTracker.setValue === "function") {
+    valueTracker.setValue(previousValue);
+  }
+  input.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+}
+
+function insertPrivateMessageText(textarea, text, caretOffset = null) {
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return;
+  }
+  const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+  const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+  const value = textarea.value;
+  setNativeMessageInputValue(textarea, `${value.slice(0, start)}${text}${value.slice(end)}`);
+  const nextPosition = start + (Number.isFinite(caretOffset) ? caretOffset : text.length);
+  textarea.focus({ preventScroll: true });
+  textarea.setSelectionRange(nextPosition, nextPosition);
+}
+
+function insertPrivateMessageUbb(textarea, before, after = before) {
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return;
+  }
+  const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+  const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+  const selected = textarea.value.slice(start, end);
+  const text = `${before}${selected}${after}`;
+  insertPrivateMessageText(textarea, text, selected ? text.length : before.length);
+}
+
+function getPrivateMessageSelectedText(textarea) {
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return "";
+  }
+  const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+  const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+  return textarea.value.slice(start, end);
+}
+
+function promptPrivateMessageValue(message, defaultValue = "") {
+  const value = window.prompt(message, defaultValue);
+  return value == null ? "" : String(value).trim();
+}
+
+function insertPrivateMessageLink(textarea) {
+  const selected = getPrivateMessageSelectedText(textarea);
+  const urlDefault = /^https?:\/\//i.test(selected) ? selected : "";
+  const url = promptPrivateMessageValue("请输入链接地址", urlDefault);
+  if (!url) {
+    return;
+  }
+  const label = selected || promptPrivateMessageValue("请输入显示文字（可留空）", url) || url;
+  insertPrivateMessageText(textarea, `[url=${url}]${label}[/url]`);
+}
+
+function insertPrivateMessageTaggedUrl(textarea, tag, label) {
+  const selected = getPrivateMessageSelectedText(textarea);
+  const url = promptPrivateMessageValue(label, /^https?:\/\//i.test(selected) ? selected : "");
+  if (!url) {
+    return;
+  }
+  insertPrivateMessageText(textarea, `[${tag}]${url}[/${tag}]`);
+}
+
+function getPrivateMessageEmojiCategories() {
+  const pad2 = (value) => String(value).padStart(2, "0");
+  const pad3 = (value) => String(value).padStart(3, "0");
+  const makeItem = (tag, src) => ({ src, insertText: `[${tag}]` });
+  const makeRange = (length, toCode, toTag, toSrc) => {
+    return Array.from({ length }, (_, index) => {
+      const code = toCode(index);
+      return makeItem(toTag(code), toSrc(code));
+    }).filter(Boolean);
+  };
+  const mahjongCartoonIds = ["003", "018", "019", "046", "049", "059", "096", "134", "189", "217"];
+  const mahjongCartoonGifIds = new Set(["018", "049", "096"]);
+  const mahjongFaceGifIds = new Set(["004", "009", "056", "061", "062", "087", "115", "120", "137", "168", "169", "175", "206"]);
+  const classicIds = [
+    ...Array.from({ length: 10 }, (_, index) => pad2(index)),
+    ...Array.from({ length: 34 }, (_, index) => String(index + 10)),
+    ...Array.from({ length: 21 }, (_, index) => String(index + 71))
+  ];
+  return [
+    {
+      key: "cc98",
+      label: "CC98",
+      items: makeRange(
+        37,
+        (index) => pad2(index + 1),
+        (code) => `cc98${code}`,
+        (code) => getCc98EmotionUrl(code)
+      )
+    },
+    {
+      key: "ac",
+      label: "AC娘",
+      items: [
+        ...makeRange(54, (index) => pad2(index + 1), (code) => `ac${code}`, (code) => getExtensionAssetUrl(`${getLocalAcEmojiFolder()}/${code}.png`)),
+        ...makeRange(40, (index) => String(index + 1001), (code) => `ac${code}`, (code) => getExtensionAssetUrl(`${getLocalAcEmojiFolder()}/${code}.png`)),
+        ...makeRange(55, (index) => String(index + 2001), (code) => `ac${code}`, (code) => getExtensionAssetUrl(`${getLocalAcEmojiFolder()}/${code}.png`))
+      ]
+    },
+    {
+      key: "mahjong",
+      label: "麻将脸",
+      items: [
+        ...makeRange(16, (index) => pad3(index + 1), (code) => `a:${code}`, (code) => getMahjongEmotionUrl("a", code)),
+        ...mahjongCartoonIds.map((code) => makeItem(
+          `c:${code}`,
+          getExtensionAssetUrl(`images/mahjong/carton2017/${code}.${mahjongCartoonGifIds.has(code) ? "gif" : "png"}`)
+        )),
+        ...makeRange(208, (index) => pad3(index + 1), (code) => `f:${code}`, (code) => getExtensionAssetUrl(`images/mahjong/face2017/${code}.${mahjongFaceGifIds.has(code) ? "gif" : "png"}`))
+      ]
+    },
+    {
+      key: "tb",
+      label: "贴吧",
+      items: makeRange(
+        33,
+        (index) => pad2(index + 1),
+        (code) => `tb${code}`,
+        (code) => getExtensionAssetUrl(`images/tb/tb${code}.png`)
+      )
+    },
+    {
+      key: "ms",
+      label: "雀魂",
+      items: makeRange(
+        54,
+        (index) => pad2(index + 1),
+        (code) => `ms${code}`,
+        (code) => getExtensionAssetUrl(`images/ms/ms${code}.png`)
+      )
+    },
+    {
+      key: "em",
+      label: "经典",
+      items: classicIds.map((code) => makeItem(
+        `em${code}`,
+        getExtensionAssetUrl(`images/em/em${code}.gif`)
+      ))
+    }
+  ];
+}
+
+function ensurePrivateMessageEmojiPanel(editor, textarea, options = {}) {
+  if (!(editor instanceof HTMLElement) || !(textarea instanceof HTMLTextAreaElement)) {
+    return null;
+  }
+  bindPrivateMessageEmojiBlankDismiss();
+  const isNativeEditorPanel = Boolean(options.nativeEditor);
+  let panel = editor.querySelector(":scope > .cc98-rebuild-message-emoji-panel");
+  if (panel instanceof HTMLElement) {
+    panel.__cc98EmojiTextarea = textarea;
+    panel.classList.toggle("cc98-rebuild-editor-emoji-panel", isNativeEditorPanel);
+    if (isNativeEditorPanel) {
+      panel.dataset.cc98NativeEditorEmoji = "true";
+    } else {
+      delete panel.dataset.cc98NativeEditorEmoji;
+    }
+    return panel;
+  }
+  const categories = getPrivateMessageEmojiCategories();
+  panel = createElement("div", "cc98-rebuild-message-emoji-panel ubb-emoji");
+  panel.__cc98EmojiTextarea = textarea;
+  if (isNativeEditorPanel) {
+    panel.classList.add("cc98-rebuild-editor-emoji-panel");
+    panel.dataset.cc98NativeEditorEmoji = "true";
+  }
+  const tabs = createElement("div", "cc98-rebuild-message-emoji-tabs ubb-emoji-buttons");
+  const content = createElement("div", "cc98-rebuild-message-emoji-content ubb-emoji-content");
+  const renderCategory = (activeKey) => {
+    const category = categories.find((item) => item.key === activeKey) || categories[0];
+    tabs.querySelectorAll(".cc98-rebuild-message-emoji-tab").forEach((tab) => {
+      tab.classList.toggle("is-active", tab.dataset.emojiKey === category.key);
+    });
+    content.replaceChildren();
+    category.items.forEach((item, index) => {
+      const button = createButton("cc98-rebuild-message-emoji-option", "", (event) => {
+        event?.preventDefault?.();
+        if (typeof editor.__cc98WysiwygInsertEmoji === "function") {
+          editor.__cc98WysiwygInsertEmoji(item);
+        } else {
+          const targetTextarea = panel.__cc98EmojiTextarea instanceof HTMLTextAreaElement ? panel.__cc98EmojiTextarea : textarea;
+          insertPrivateMessageText(targetTextarea, item.insertText);
+        }
+        panel.hidden = true;
+        editor.classList.remove("cc98-rebuild-message-emoji-open", "cc98-rebuild-emoji-panel-open");
+        if (panel.dataset.cc98NativeEditorEmoji === "true") {
+          scheduleNativeEditorStabilize(editor);
+        }
+      });
+      button.type = "button";
+      button.title = `${category.label} ${index + 1}`;
+      const image = document.createElement("img");
+      image.src = item.src;
+      image.alt = "";
+      image.loading = "lazy";
+      image.addEventListener("error", () => {
+        button.hidden = true;
+      }, { once: true });
+      markRebuiltEmojiImage(image, item.src);
+      button.append(image);
+      content.append(button);
+    });
+  };
+  categories.forEach((category) => {
+    const tab = createButton("cc98-rebuild-message-emoji-tab ubb-emoji-button", category.label, (event) => {
+      event?.preventDefault?.();
+      renderCategory(category.key);
+    });
+    tab.type = "button";
+    tab.dataset.emojiKey = category.key;
+    tabs.append(tab);
+  });
+  panel.append(tabs, content);
+  renderCategory(categories[0]?.key);
+  const toolbar = editor.querySelector(":scope > .cc98-rebuild-message-editor-toolbar");
+  if (toolbar instanceof HTMLElement) {
+    toolbar.after(panel);
+  } else {
+    editor.append(panel);
+  }
+  panel.hidden = true;
+  return panel;
+}
+
+function bindFloatingEmojiPanelReposition(panel) {
+  if (!(panel instanceof HTMLElement) || panel.dataset.cc98FloatingEmojiBound === "true") {
+    return;
+  }
+  panel.dataset.cc98FloatingEmojiBound = "true";
+  const reposition = () => {
+    if (panel.hidden || !(panel.__cc98EmojiAnchor instanceof HTMLElement)) {
+      return;
+    }
+    positionPrivateMessageEmojiPanel(panel.__cc98EmojiEditor, panel, panel.__cc98EmojiAnchor);
+  };
+  window.addEventListener("resize", reposition, { passive: true });
+  window.addEventListener("scroll", reposition, { passive: true, capture: true });
+}
+
+function closePrivateMessageEmojiPanels(exceptTarget = null) {
+  document.querySelectorAll(".cc98-rebuild-message-emoji-panel:not([hidden])").forEach((panel) => {
+    if (!(panel instanceof HTMLElement)) {
+      return;
+    }
+    const anchor = panel.__cc98EmojiAnchor;
+    if (exceptTarget instanceof Node && (panel.contains(exceptTarget) || anchor?.contains?.(exceptTarget))) {
+      return;
+    }
+    panel.hidden = true;
+    const editor = panel.__cc98EmojiEditor instanceof HTMLElement
+      ? panel.__cc98EmojiEditor
+      : panel.closest(".cc98-rebuild-message-editor, .cc98-rebuild-profile-signature-editor, .cc98-rebuild-native-editor");
+    editor?.classList?.remove?.("cc98-rebuild-message-emoji-open", "cc98-rebuild-emoji-panel-open");
+  });
+}
+
+function bindPrivateMessageEmojiBlankDismiss() {
+  if (privateMessageEmojiDismissBound) {
+    return;
+  }
+  privateMessageEmojiDismissBound = true;
+  document.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    if (!(target instanceof Node)) {
+      return;
+    }
+    if (target instanceof Element && isEditorEmojiButtonTarget(target)) {
+      return;
+    }
+    closePrivateMessageEmojiPanels(target);
+  }, true);
+}
+
+function positionPrivateMessageEmojiPanel(editor, panel, anchor) {
+  if (!(panel instanceof HTMLElement) || !(anchor instanceof HTMLElement)) {
+    return;
+  }
+  const editorRect = editor instanceof HTMLElement ? editor.getBoundingClientRect() : null;
+  const anchorRect = anchor.getBoundingClientRect();
+  const viewportWidth = Math.max(320, window.innerWidth || document.documentElement.clientWidth || 1024);
+  const viewportHeight = Math.max(320, window.innerHeight || document.documentElement.clientHeight || 768);
+  const preferredWidth = editorRect?.width || 720;
+  const width = Math.min(Math.max(preferredWidth, 360), viewportWidth - 24);
+  const left = Math.min(Math.max(12, anchorRect.left), Math.max(12, viewportWidth - width - 12));
+
+  panel.classList.add("cc98-rebuild-message-emoji-panel-floating");
+  panel.__cc98EmojiEditor = editor;
+  panel.__cc98EmojiAnchor = anchor;
+  bindFloatingEmojiPanelReposition(panel);
+  applyImportantStyle(panel, {
+    position: "fixed",
+    left: `${Math.round(left)}px`,
+    right: "auto",
+    width: `${Math.round(width)}px`,
+    "z-index": "2147483646",
+    visibility: "visible",
+    opacity: "1",
+    "pointer-events": "auto"
+  });
+
+  requestAnimationFrame(() => {
+    if (panel.hidden || !panel.isConnected) {
+      return;
+    }
+    const panelHeight = Math.min(panel.offsetHeight || 340, viewportHeight - 24);
+    const topAbove = anchorRect.top - panelHeight - 8;
+    const topBelow = anchorRect.bottom + 8;
+    const top = topAbove >= 12
+      ? topAbove
+      : Math.min(Math.max(12, topBelow), Math.max(12, viewportHeight - panelHeight - 12));
+    applyImportantStyle(panel, {
+      top: `${Math.round(top)}px`,
+      "max-height": `${Math.round(Math.min(380, viewportHeight - 24))}px`
+    });
+  });
+}
+
+function buildPrivateMessageInsertPanel(editor, fields, onConfirm) {
+  if (!(editor instanceof HTMLElement)) {
+    return null;
+  }
+  let panel = editor.querySelector(":scope > .cc98-rebuild-message-editor-insert-panel");
+  if (!(panel instanceof HTMLElement)) {
+    panel = createElement("div", "cc98-rebuild-message-editor-insert-panel");
+    editor.append(panel);
+  }
+  panel.replaceChildren();
+  const inputs = {};
+  fields.forEach((field) => {
+    const label = createElement("label", "cc98-rebuild-message-editor-field");
+    label.append(createElement("span", "", field.label));
+    const input = document.createElement("input");
+    input.type = field.type || "text";
+    input.placeholder = field.placeholder || "";
+    input.value = field.value || "";
+    input.dataset.field = field.name;
+    label.append(input);
+    panel.append(label);
+    inputs[field.name] = input;
+  });
+  const actions = createElement("div", "cc98-rebuild-message-editor-panel-actions");
+  const confirm = createButton("cc98-rebuild-message-editor-panel-button is-primary", "确定", (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value.trim()]));
+    onConfirm(values);
+    panel.hidden = true;
+  });
+  const cancel = createButton("cc98-rebuild-message-editor-panel-button", "取消", (event) => {
+    event.preventDefault();
+    panel.hidden = true;
+  });
+  actions.append(confirm, cancel);
+  panel.append(actions);
+  panel.hidden = false;
+  Object.values(inputs)[0]?.focus({ preventScroll: true });
+  return panel;
+}
+
+function getPrivateMessageNativeControls(source, container) {
+  return [...new Set([
+    ...container.querySelectorAll("button, a, label, input[type='file'], [role='button']"),
+    ...source.querySelectorAll(".message-message-wPost button, .message-message-wPost a, .message-message-wPost label, .message-message-wPost input[type='file'], .message-message-wPost [role='button']")
+  ].filter((control) => control instanceof HTMLElement && !control.closest(".cc98-rebuild-message-editor")))];
+}
+
+function getPrivateMessageControlSignature(control) {
+  return [
+    control.id,
+    control.className,
+    control.getAttribute?.("for"),
+    control.getAttribute?.("title"),
+    control.getAttribute?.("aria-label"),
+    control.textContent
+  ].filter(Boolean).join(" ");
+}
+
+function findPrivateMessageNativeControl(source, container, kind) {
+  const controls = getPrivateMessageNativeControls(source, container);
+  if (kind === "send") {
+    return controls.find((control) => /发送|send/i.test(cleanupPostText(control.textContent) || getPrivateMessageControlSignature(control)))
+      || controls.find((control) => control.classList?.contains("message-message-wPostBtn") && !/上传|图片|upload|image/i.test(getPrivateMessageControlSignature(control)))
+      || null;
+  }
+  if (kind === "uploadImage") {
+    const imageInput = controls.find((control) => {
+      return control instanceof HTMLInputElement
+        && control.type === "file"
+        && /image|\.png|\.jpe?g|\.gif|\.webp/i.test(control.accept || getPrivateMessageControlSignature(control));
+    });
+    if (imageInput) {
+      return imageInput;
+    }
+    return controls.find((control) => {
+      const signature = getPrivateMessageControlSignature(control);
+      return /上传图片|图片|image|picture|upload/i.test(signature) && !/发送|send/i.test(signature);
+    }) || null;
+  }
+  return null;
+}
+
+function getPrivateMessageUploadFileInput(control, source) {
+  if (!(control instanceof HTMLElement)) {
+    return null;
+  }
+  if (control instanceof HTMLInputElement && control.type === "file") {
+    return control;
+  }
+  const nestedInput = control.querySelector?.("input[type='file']");
+  if (nestedInput instanceof HTMLInputElement) {
+    return nestedInput;
+  }
+  if (control instanceof HTMLLabelElement) {
+    const forId = control.getAttribute("for");
+    if (forId) {
+      const owner = control.ownerDocument || document;
+      const input = owner.getElementById(forId)
+        || source?.querySelector?.(`#${CSS.escape(forId)}`);
+      if (input instanceof HTMLInputElement && input.type === "file") {
+        return input;
+      }
+    }
+  }
+  return null;
+}
+
+function triggerPrivateMessageUploadImage(source, container) {
+  const control = findPrivateMessageNativeControl(source, container, "uploadImage");
+  if (!(control instanceof HTMLElement)) {
+    return false;
+  }
+  const fileInput = getPrivateMessageUploadFileInput(control, source);
+  if (fileInput instanceof HTMLInputElement) {
+    fileInput.click();
+    return true;
+  }
+  triggerOriginalControl(control);
+  return true;
+}
+
+function renderPrivateMessageEditorPreview(preview, sourceText) {
+  if (!(preview instanceof HTMLElement)) {
+    return;
+  }
+  const article = buildNativeEditorUbbPreview(sourceText);
+  markInlineUbbStyleClasses(article);
+  strengthenInlineTextStyles(article);
+  markInlineEmojiContainers(article);
+  stabilizeEmojiRendering(article);
+  preview.replaceChildren(article);
+  preview.hidden = false;
+}
+
+function isInsideHiddenMessageNode(node) {
+  let current = node instanceof Element ? node : null;
+  while (current && current !== document.documentElement) {
+    if (current.matches?.(".displaynone, [hidden], [aria-hidden='true']")) {
+      return true;
+    }
+    const style = window.getComputedStyle(current);
+    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || 1) === 0) {
+      return true;
+    }
+    current = current.parentElement;
+  }
+  return false;
+}
+
+function getPrivateMessageComposerContainer(nativeInput) {
+  if (!(nativeInput instanceof HTMLTextAreaElement) && !(nativeInput instanceof HTMLInputElement)) {
+    return null;
+  }
+  if (nativeInput.closest(".message-message-wContent, .message-message-wcContent, .message-message-pList")) {
+    return null;
+  }
+  const container = nativeInput.closest(".message-message-wPost");
+  if (!(container instanceof HTMLElement) || isInsideHiddenMessageNode(container)) {
+    return null;
+  }
+  return container;
+}
+
+function cleanupPrivateMessageEditorPlacement(source) {
+  if (!(source instanceof HTMLElement)) {
+    return;
+  }
+  source.querySelectorAll(".cc98-rebuild-message-editor").forEach((editor) => {
+    if (!(editor instanceof HTMLElement)) {
+      return;
+    }
+    const container = editor.closest(".message-message-wPost");
+    const misplaced = !(container instanceof HTMLElement)
+      || editor.parentElement !== container
+      || Boolean(editor.closest(".message-message-wContent, .message-message-wcContent, .message-message-pList"));
+    if (misplaced) {
+      const input = editor.parentElement?.querySelector?.(".message-message-wPostArea");
+      if (input instanceof HTMLElement) {
+        delete input.dataset.cc98RebuildMessageEditorBound;
+      }
+      editor.remove();
+    }
+  });
+}
+
+function getPrivateMessageComposerInputs(source) {
+  if (!(source instanceof HTMLElement)) {
+    return [];
+  }
+  const windows = [...source.querySelectorAll(".message-message-window")]
+    .filter((windowNode) => windowNode instanceof HTMLElement && !isInsideHiddenMessageNode(windowNode));
+  const scopes = windows.length ? windows : [source];
+  return [...new Set(scopes.flatMap((scope) => (
+    [...scope.querySelectorAll(".message-message-wPost textarea.message-message-wPostArea, .message-message-wPost input.message-message-wPostArea")]
+      .filter((input) => input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement)
+  )))].filter((input) => getPrivateMessageComposerContainer(input));
+}
+
+function stabilizePrivateMessageEditor(source) {
+  if (!(source instanceof HTMLElement)) {
+    return;
+  }
+  cleanupPrivateMessageEditorPlacement(source);
+  getPrivateMessageComposerInputs(source).forEach((nativeInput) => {
+    stabilizePrivateMessageComposer(source, nativeInput);
+  });
+}
+
+function stabilizePrivateMessageComposer(source, nativeInput) {
+  if (!(nativeInput instanceof HTMLTextAreaElement) && !(nativeInput instanceof HTMLInputElement)) {
+    return;
+  }
+  const container = getPrivateMessageComposerContainer(nativeInput);
+  if (!(container instanceof HTMLElement)) {
+    return;
+  }
+  const existingEditor = container.querySelector(":scope > .cc98-rebuild-message-editor");
+  if (existingEditor instanceof HTMLElement) {
+    nativeInput.dataset.cc98RebuildMessageEditorBound = "true";
+    return;
+  }
+  if (nativeInput.dataset.cc98RebuildMessageEditorBound === "true") {
+    delete nativeInput.dataset.cc98RebuildMessageEditorBound;
+  }
+  nativeInput.dataset.cc98RebuildMessageEditorBound = "true";
+
+  const originalButton = findPrivateMessageNativeControl(source, container, "send");
+  const originalUploadButton = findPrivateMessageNativeControl(source, container, "uploadImage");
+  const editor = createElement("div", "cc98-rebuild-message-editor");
+  const toolbar = createElement("div", "cc98-rebuild-message-editor-toolbar");
+  const textarea = document.createElement("textarea");
+  textarea.className = "cc98-rebuild-message-editor-textarea";
+  textarea.placeholder = nativeInput.getAttribute("placeholder") || "";
+  textarea.value = nativeInput.value || "";
+  const preview = createElement("div", "cc98-rebuild-message-editor-preview");
+  preview.hidden = true;
+
+  const syncToNative = () => setNativeMessageInputValue(nativeInput, textarea.value);
+  const syncFromNative = (force = false) => {
+    const value = nativeInput.value || "";
+    if (value === textarea.value) {
+      return;
+    }
+    if (force || document.activeElement !== textarea || value.includes(textarea.value) || textarea.value.includes(value)) {
+      textarea.value = value;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  };
+  const scheduleSyncFromNative = () => {
+    [250, 700, 1400, 2600, 4200, 6500].forEach((delay) => {
+      window.setTimeout(() => syncFromNative(true), delay);
+    });
+  };
+  const addButton = (label, title, before, after = before) => {
+    const button = createButton("cc98-rebuild-message-editor-button", label, (event) => {
+      event?.preventDefault?.();
+      insertPrivateMessageUbb(textarea, before, after);
+    });
+    button.type = "button";
+    button.title = title;
+    toolbar.append(button);
+  };
+  const addActionButton = (label, title, onClick) => {
+    const button = createButton("cc98-rebuild-message-editor-button", label, (event) => {
+      event?.preventDefault?.();
+      onClick(event);
+    });
+    button.type = "button";
+    button.title = title;
+    toolbar.append(button);
+    return button;
+  };
+
+  addButton("B", "粗体", "[b]", "[/b]");
+  addButton("I", "斜体", "[i]", "[/i]");
+  addButton("U", "下划线", "[u]", "[/u]");
+  addButton("S", "删除线", "[del]", "[/del]");
+  addButton("左", "左对齐", "[align=left]", "[/align]");
+  addButton("中", "居中", "[align=center]", "[/align]");
+  addButton("右", "右对齐", "[align=right]", "[/align]");
+  addActionButton("链", "插入链接", () => insertPrivateMessageLink(textarea));
+  addActionButton("图", "上传图片", () => {
+    syncToNative();
+    if (triggerPrivateMessageUploadImage(source, container)) {
+      scheduleSyncFromNative();
+    } else {
+      insertPrivateMessageTaggedUrl(textarea, "img", "请输入图片地址");
+    }
+  });
+  addActionButton("影", "插入视频", () => insertPrivateMessageTaggedUrl(textarea, "video", "请输入视频地址"));
+  addActionButton("Bili", "插入 Bilibili 视频", () => insertPrivateMessageTaggedUrl(textarea, "bilibili", "请输入 Bilibili 地址或 BV 号"));
+  addActionButton("音", "插入音频", () => insertPrivateMessageTaggedUrl(textarea, "audio", "请输入音频地址"));
+  const emojiButton = addActionButton("☺", "插入表情", (event) => {
+    const panel = ensurePrivateMessageEmojiPanel(editor, textarea);
+    if (panel instanceof HTMLElement) {
+      const willOpen = panel.hidden;
+      panel.hidden = !willOpen;
+      editor.classList.toggle("cc98-rebuild-message-emoji-open", willOpen);
+      if (willOpen) {
+        positionPrivateMessageEmojiPanel(editor, panel, event?.currentTarget);
+        [60, 180].forEach((delay) => window.setTimeout(() => {
+          positionPrivateMessageEmojiPanel(editor, panel, event?.currentTarget);
+        }, delay));
+      }
+    }
+  });
+  emojiButton.dataset.cc98EmojiTrigger = "true";
+  addActionButton("预", "预览", () => {
+    const willShow = preview.hidden;
+    if (willShow) {
+      renderPrivateMessageEditorPreview(preview, textarea.value);
+    } else {
+      preview.hidden = true;
+    }
+    editor.classList.toggle("cc98-rebuild-message-preview-open", willShow);
+  });
+
+  const size = document.createElement("select");
+  size.className = "cc98-rebuild-message-editor-select";
+  size.title = "字号";
+  size.append(...["字号", "1", "2", "3", "4", "5", "6", "7"].map((value, index) => {
+    const option = document.createElement("option");
+    option.value = index === 0 ? "" : value;
+    option.textContent = value;
+    return option;
+  }));
+  size.addEventListener("change", () => {
+    if (size.value === EDITOR_TYPOGRAPHY_RESET_VALUE) {
+      clearEditorTypography(editor, "size", getStoredEditorFontSizeSelection(size, textarea));
+      size.value = "";
+    } else if (size.value) {
+      applyEditorFontSize(editor, size.value, getStoredEditorFontSizeSelection(size, textarea));
+    }
+  });
+  size.addEventListener("pointerdown", () => rememberEditorFontSizeSelection(editor, size));
+  appendEditorFontSizeSplitSelect(editor, toolbar, size);
+  appendEditorColorSplitButton(editor, toolbar);
+
+  const footer = createElement("div", "cc98-rebuild-message-editor-footer");
+  const send = createButton("cc98-rebuild-message-editor-send", "发送", (event) => {
+    event?.preventDefault?.();
+    syncToNative();
+    if (originalButton instanceof HTMLElement) {
+      triggerOriginalControl(originalButton);
+      window.setTimeout(() => {
+        textarea.value = nativeInput.value || "";
+      }, 420);
+      window.setTimeout(() => {
+        textarea.value = nativeInput.value || "";
+      }, 1200);
+    }
+  });
+  send.type = "button";
+  footer.append(send);
+  editor.append(toolbar, textarea, preview, footer);
+
+  textarea.addEventListener("input", () => {
+    syncToNative();
+    if (!preview.hidden) {
+      renderPrivateMessageEditorPreview(preview, textarea.value);
+    }
+  });
+  textarea.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      send.click();
+    }
+  });
+  nativeInput.addEventListener("input", () => {
+    if (document.activeElement !== textarea) {
+      textarea.value = nativeInput.value || "";
+      if (!preview.hidden) {
+        renderPrivateMessageEditorPreview(preview, textarea.value);
+      }
+    }
+  });
+  nativeInput.addEventListener("change", () => syncFromNative());
+  getPrivateMessageNativeControls(source, container).forEach((control) => {
+    const input = getPrivateMessageUploadFileInput(control, source);
+    if (input instanceof HTMLInputElement && input.dataset.cc98RebuildMessageUploadSync !== "true") {
+      input.dataset.cc98RebuildMessageUploadSync = "true";
+      input.addEventListener("change", scheduleSyncFromNative, true);
+    }
+  });
+
+  nativeInput.classList.add("cc98-rebuild-message-native-input");
+  if (originalButton instanceof HTMLElement) {
+    originalButton.classList.add("cc98-rebuild-message-native-send");
+  }
+  if (originalUploadButton instanceof HTMLElement) {
+    originalUploadButton.classList.add("cc98-rebuild-message-native-aux");
+  }
+  container.insertBefore(editor, nativeInput);
+  syncToNative();
+}
+
+function clearMessageTitleSync() {
   messageTitleObserver?.disconnect();
   messageTitleObserver = null;
+  if (messageTitleSource && messageTitleClickHandler) {
+    messageTitleSource.removeEventListener("click", messageTitleClickHandler, true);
+  }
+  messageTitleSource = null;
+  messageTitleClickHandler = null;
+  window.clearTimeout(messageTitleSyncTimer);
+  window.clearTimeout(messageTitleLateSyncTimer);
+  messageTitleSyncTimer = null;
+  messageTitleLateSyncTimer = null;
+}
+
+function bindMessageTitleSync(source, heroTitle, heroTop) {
+  clearMessageTitleSync();
   if (!source || !heroTitle) {
     return;
   }
+  messageTitleSource = source;
 
   const syncTitle = () => {
     const title = getMessagePageTitle(source);
@@ -6955,16 +20614,18 @@ function bindMessageTitleSync(source, heroTitle, heroTop) {
     }
   };
 
-  let titleSyncTimer = null;
   const scheduleTitleSync = (delay = 80) => {
-    window.clearTimeout(titleSyncTimer);
-    titleSyncTimer = window.setTimeout(() => {
+    window.clearTimeout(messageTitleSyncTimer);
+    messageTitleSyncTimer = window.setTimeout(() => {
+      messageTitleSyncTimer = null;
       syncTitle();
       syncMessageReadAllProxy(source, heroTop);
+      stabilizeNativeMessageSurfaces(source);
+      stabilizePrivateMessageEditor(source);
     }, delay);
   };
 
-  source.addEventListener("click", (event) => {
+  messageTitleClickHandler = (event) => {
     const person = event.target?.closest?.(".message-message-person");
     if (!person || !source.contains(person)) {
       return;
@@ -6974,13 +20635,99 @@ function bindMessageTitleSync(source, heroTitle, heroTop) {
       heroTitle.textContent = `\u4e0e ${name} \u7684\u79c1\u4fe1`;
     }
     scheduleTitleSync(180);
-    window.setTimeout(syncTitle, 650);
-  }, true);
+    window.clearTimeout(messageTitleLateSyncTimer);
+    messageTitleLateSyncTimer = window.setTimeout(() => {
+      messageTitleLateSyncTimer = null;
+      syncTitle();
+    }, 650);
+  };
+  source.addEventListener("click", messageTitleClickHandler, true);
 
   messageTitleObserver = new MutationObserver(() => scheduleTitleSync());
   messageTitleObserver.observe(source, { childList: true, subtree: true, characterData: true });
   syncTitle();
   syncMessageReadAllProxy(source, heroTop);
+  stabilizeNativeMessageSurfaces(source);
+  stabilizePrivateMessageEditor(source);
+}
+
+function getNativeSignInResult(source) {
+  if (!(source instanceof HTMLElement)) {
+    return null;
+  }
+  const expectedLines = [
+    "你已经连续签到了",
+    "上次签到时间是",
+    "获得财富值"
+  ];
+  const matchedRows = expectedLines.map((text) => [...source.querySelectorAll(".row")]
+    .find((row) => cleanupPostText(row.textContent).includes(text)));
+  if (matchedRows.some((row) => !(row instanceof HTMLElement))) {
+    return null;
+  }
+  const result = matchedRows[0].parentElement;
+  return result instanceof HTMLElement && matchedRows.every((row) => row.parentElement === result)
+    ? { result, rows: matchedRows }
+    : null;
+}
+
+function stabilizeNativeSignIn(source) {
+  if (!(source instanceof HTMLElement)) {
+    return;
+  }
+
+  // The sign-in button intentionally shares the native editor submit id. Keep
+  // this React subtree out of the post/reply dual-editor transaction entirely.
+  teardownNativeDualUbbEditor(source);
+  removeNativeEditorDraftControls(source);
+  source.classList.remove(
+    "cc98-rebuild-native-editor",
+    "cc98-rebuild-emoji-panel-open"
+  );
+  source.querySelectorAll(":scope > .cc98-rebuild-message-emoji-panel").forEach((panel) => panel.remove());
+  source.querySelectorAll(".cc98-rebuild-signin-result").forEach((result) => {
+    result.classList.remove("cc98-rebuild-signin-result");
+  });
+  source.querySelectorAll(".cc98-rebuild-signin-result-row").forEach((row) => {
+    row.classList.remove("cc98-rebuild-signin-result-row");
+  });
+
+  const signedIn = getNativeSignInResult(source);
+  if (signedIn) {
+    signedIn.result.classList.add("cc98-rebuild-signin-result");
+    signedIn.rows.forEach((row) => row.classList.add("cc98-rebuild-signin-result-row"));
+  }
+  source.classList.toggle("cc98-rebuild-native-signin-complete", Boolean(signedIn));
+}
+
+function bindNativeSignInStabilizer(source) {
+  if (!(source instanceof HTMLElement)) {
+    return;
+  }
+  stabilizeNativeSignIn(source);
+  if (nativeSignInStabilizers.has(source)) {
+    return;
+  }
+  nativeSignInStabilizers.add(source);
+  let frame = 0;
+  const observer = new MutationObserver(() => {
+    if (frame) {
+      window.cancelAnimationFrame(frame);
+    }
+    frame = window.requestAnimationFrame(() => {
+      frame = 0;
+      if (source.isConnected) {
+        stabilizeNativeSignIn(source);
+      } else {
+        observer.disconnect();
+      }
+    });
+  });
+  observer.observe(source, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
 }
 
 function renderSignInPage(app) {
@@ -6993,24 +20740,101 @@ function renderSignInPage(app) {
   if (!source) {
     const fallback = createElement("section", "cc98-rebuild-empty-state");
     fallback.append(createElement("h2", "", "签到页面还没有加载完成"));
-    fallback.append(createElement("p", "", "稍后会自动更新，也可以点击刷新。"));
+    fallback.append(createElement("p", "", "稍后会自动更新，也可以点击顶部同步。"));
     app.append(fallback);
     return;
   }
 
   rememberReparentedNativeNode(source);
-  source.classList.add("cc98-rebuild-native-signin", "cc98-rebuild-native-editor");
-  bindNativeEditorStabilizer(source);
+  source.classList.add("cc98-rebuild-native-signin");
+  bindNativeSignInStabilizer(source);
   app.append(source);
 }
 
+function isOpenIdLoginCenterPage() {
+  try {
+    return location.hostname === "openid.cc98.org"
+      && /\/(?:Account|PassKey)\/LogOn/i.test(location.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function stopPublicProfileTopbarRecovery() {
+  if (!publicProfileTopbarRecoveryTimer) {
+    return;
+  }
+  window.clearInterval(publicProfileTopbarRecoveryTimer);
+  publicProfileTopbarRecoveryTimer = null;
+}
+
+function armPublicProfileTopbarRecovery(app = document.querySelector("#cc98-comfort-app")) {
+  stopPublicProfileTopbarRecovery();
+  if (!isPublicUserProfilePage() || !(app instanceof HTMLElement)) {
+    return;
+  }
+  const deadline = Date.now() + 30000;
+  let finished = false;
+  const recover = () => {
+    if (!app.isConnected || !isPublicUserProfilePage() || Date.now() >= deadline) {
+      finished = true;
+      stopPublicProfileTopbarRecovery();
+      return;
+    }
+    const actions = app.querySelector(".cc98-rebuild-actions");
+    const completeEntry = actions?.querySelector(".cc98-rebuild-topbar-snapshot");
+    if (completeEntry instanceof HTMLElement) {
+      finished = true;
+      stopPublicProfileTopbarRecovery();
+      return;
+    }
+    stabilizeTopbarUserEntry(app);
+    const recoveredEntry = actions?.querySelector(".cc98-rebuild-topbar-snapshot");
+    if (recoveredEntry instanceof HTMLElement) {
+      finished = true;
+      stopPublicProfileTopbarRecovery();
+    }
+  };
+  recover();
+  if (!finished && !publicProfileTopbarRecoveryTimer) {
+    publicProfileTopbarRecoveryTimer = window.setInterval(recover, 360);
+  }
+}
+
+function getOpenIdLoginSource() {
+  if (!isOpenIdLoginCenterPage()) {
+    return null;
+  }
+  const form = document.querySelector('form[action*="/Account/LogOn"], form[action*="/PassKey/LogOn"]');
+  return form?.closest(".container.body-content")
+    || form?.closest(".col-12, [class*='col-']")
+    || document.querySelector(".container.body-content");
+}
+
+function prepareOpenIdLoginSource(source) {
+  if (!(source instanceof HTMLElement)) {
+    return;
+  }
+  document.documentElement.dataset.cc98RebuildOpenidLogin = "true";
+  source.classList.add("cc98-rebuild-openid-login");
+}
+
 function renderLoginPage(app) {
+  const openIdLogin = getOpenIdLoginSource();
+  if (openIdLogin) {
+    const layout = createElement("section", "cc98-rebuild-openid-login-layout");
+    layout.append(createElement("h1", "cc98-rebuild-login-title", "登录到 CC98"));
+    prepareOpenIdLoginSource(openIdLogin);
+    app.append(layout);
+    return;
+  }
+
   const login = document.querySelector(".login");
 
   if (!login) {
     const fallback = createElement("section", "cc98-rebuild-empty-state");
     fallback.append(createElement("h2", "", "登录页还没有加载完成"));
-    fallback.append(createElement("p", "", "稍后会自动刷新重建，也可以点击顶部刷新。"));
+    fallback.append(createElement("p", "", "稍后会自动同步重建，也可以点击顶部同步。"));
     app.append(fallback);
     return;
   }
@@ -7036,26 +20860,171 @@ function hasFreshCc98LoginSession() {
   }
 }
 
+function readCc98LoginStorageValue(key) {
+  try {
+    return String(localStorage.getItem(key) || "");
+  } catch {
+    return "";
+  }
+}
+
+function getCc98LoginSessionSnapshot() {
+  return {
+    fresh: hasFreshCc98LoginSession(),
+    refreshTokenExpiration: readCc98LoginStorageValue("refresh_token_expirationTime"),
+    refreshToken: readCc98LoginStorageValue("refresh_token"),
+    accessToken: readCc98LoginStorageValue("access_token"),
+    userInfo: readCc98LoginStorageValue("userInfo")
+  };
+}
+
+function hasCc98LoginSessionChangedSince(snapshot) {
+  const current = getCc98LoginSessionSnapshot();
+  if (!current.fresh) {
+    return false;
+  }
+  if (!snapshot || !snapshot.fresh) {
+    return true;
+  }
+  return current.refreshTokenExpiration !== snapshot.refreshTokenExpiration
+    || current.refreshToken !== snapshot.refreshToken
+    || current.accessToken !== snapshot.accessToken
+    || current.userInfo !== snapshot.userInfo;
+}
+
+function readLoginRedirectSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(LOGIN_REDIRECT_SNAPSHOT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLoginRedirectSnapshot(snapshot) {
+  try {
+    sessionStorage.setItem(LOGIN_REDIRECT_SNAPSHOT_KEY, JSON.stringify(snapshot || getCc98LoginSessionSnapshot()));
+  } catch {
+    // Snapshot is only used to avoid stale-token redirects.
+  }
+}
+
+function clearLoginRedirectIntent() {
+  try {
+    sessionStorage.removeItem(LOGIN_REDIRECT_MARK_KEY);
+    sessionStorage.removeItem(LOGIN_REDIRECT_SNAPSHOT_KEY);
+  } catch {
+    // No-op.
+  }
+}
+
+function isCc98HomePage() {
+  try {
+    const url = new URL(location.href);
+    return /^(?:www\.)?cc98\.org$/i.test(url.hostname) && url.pathname.replace(/\/+$/, "") === "";
+  } catch {
+    return location.pathname.replace(/\/+$/, "") === "";
+  }
+}
+
+function markLoginHomeRefreshIntent() {
+  try {
+    sessionStorage.setItem(LOGIN_HOME_REFRESH_MARK_KEY, String(Date.now()));
+  } catch {
+    // Session storage may be unavailable; the normal redirect still works.
+  }
+}
+
+function consumeLoginHomeRefreshIntent() {
+  if (!isCc98HomePage()) {
+    return false;
+  }
+  let markedAt = NaN;
+  try {
+    markedAt = Number.parseInt(sessionStorage.getItem(LOGIN_HOME_REFRESH_MARK_KEY) || "", 10);
+    sessionStorage.removeItem(LOGIN_HOME_REFRESH_MARK_KEY);
+  } catch {
+    return false;
+  }
+  if (!Number.isFinite(markedAt) || Date.now() - markedAt > 20000) {
+    return false;
+  }
+  markOpenIdBindPromptAfterLogin();
+  showLoadingOverlay("登录完成，正在刷新首页...");
+  window.setTimeout(() => {
+    location.reload();
+  }, 0);
+  return true;
+}
+
 function redirectToCc98Home() {
-  if (location.href === "https://www.cc98.org/") {
+  clearLogoutRedirectIntent();
+  markLoginHomeRefreshIntent();
+  if (stripUrlHash(location.href) === stripUrlHash(getCc98HomeHref())) {
+    consumeLoginHomeRefreshIntent();
     return;
   }
-  location.assign("https://www.cc98.org/");
+  location.assign(getCc98HomeHref());
 }
 
 function isCc98LoginPath() {
   try {
-    return new URL(location.href).pathname.replace(/\/+$/, "").toLowerCase() === "/logon";
+    const url = new URL(location.href);
+    const normalizePath = (value) => String(value || "")
+      .split(/[?#]/, 1)[0]
+      .replace(/\/+$/, "")
+      .toLowerCase();
+    const routePath = normalizePath(getCc98RoutePathFromHref(url.href));
+    if (routePath === "/logon") {
+      return true;
+    }
+    const pathname = normalizePath(url.pathname);
+    if (isDirectCc98Host(url.hostname)) {
+      return pathname === "/logon";
+    }
+    return isWebVpnHost(url.hostname) && pathname.endsWith("/logon");
   } catch {
-    return /\/logOn\/?$/i.test(location.href);
+    return /\/logOn\/?(?:[?#].*)?$/i.test(location.href);
   }
 }
 
+function isCc98NullRedirectPage() {
+  try {
+    const url = new URL(location.href);
+    const pathname = url.pathname.replace(/\/+$/, "").toLowerCase();
+    if (isDirectCc98Host(url.hostname)) {
+      return pathname === "/null";
+    }
+    if (!isWebVpnHost(url.hostname) || !pathname.endsWith("/null")) {
+      return false;
+    }
+    const currentPrefix = getWebVpnProxyPrefixFromUrl(url.href);
+    const confirmedPrefix = getConfirmedWebVpnCc98Prefix();
+    return Boolean(currentPrefix)
+      && (!confirmedPrefix
+        || normalizeWebVpnProxyPrefix(currentPrefix) === normalizeWebVpnProxyPrefix(confirmedPrefix));
+  } catch {
+    return /\/null\/?$/i.test(location.href);
+  }
+}
+
+function redirectNullPageToHome() {
+  if (!isCc98NullRedirectPage()) {
+    return false;
+  }
+  clearLoginRedirectWatcher();
+  clearLoginRedirectIntent();
+  markOpenIdBindPromptAfterLogin();
+  location.replace(getCc98HomeHref());
+  return true;
+}
+
 function redirectToCc98Login() {
-  if (location.hostname === "www.cc98.org" && isCc98LoginPath()) {
+  if ((isDirectCc98Host() || isWebVpnHost()) && isCc98LoginPath()) {
+    clearLogoutRedirectIntent();
     return;
   }
-  location.assign("https://www.cc98.org/logOn");
+  location.assign(buildCc98RouteHref("/logOn"));
 }
 
 function markLogoutRedirectIntent() {
@@ -7064,6 +21033,16 @@ function markLogoutRedirectIntent() {
   } catch {
     // Session storage may be unavailable; timed redirects below still run.
   }
+}
+
+function clearLogoutRedirectIntent() {
+  try {
+    sessionStorage.removeItem(LOGOUT_REDIRECT_MARK_KEY);
+  } catch {
+    // No-op.
+  }
+  logoutRedirectTimers.forEach((timer) => window.clearTimeout(timer));
+  logoutRedirectTimers = [];
 }
 
 function hasRecentLogoutRedirectIntent() {
@@ -7091,17 +21070,22 @@ function clearLikelyCc98LoginState() {
 }
 
 function enforceRecentLogoutRedirectIntent() {
-  if (hasRecentLogoutRedirectIntent() && !isCc98LoginPath()) {
-    window.setTimeout(redirectToCc98Login, 0);
+  if (!hasRecentLogoutRedirectIntent()) {
+    return;
   }
+  if (isCc98LoginPath()) {
+    clearLogoutRedirectIntent();
+    return;
+  }
+  window.setTimeout(redirectToCc98Login, 0);
 }
 
 function scheduleLogoutRedirect() {
+  clearLogoutRedirectIntent();
   markLogoutRedirectIntent();
+  clearOpenIdBindingForCc98Logout();
   window.setTimeout(clearLikelyCc98LoginState, 80);
-  [650, 1500, 3000, 5200].forEach((delay) => {
-    window.setTimeout(redirectToCc98Login, delay);
-  });
+  logoutRedirectTimers = [650, 1500, 3000, 5200].map((delay) => window.setTimeout(redirectToCc98Login, delay));
 }
 
 function clearLoginRedirectWatcher() {
@@ -7111,16 +21095,24 @@ function clearLoginRedirectWatcher() {
   }
 }
 
-function startLoginRedirectWatcher() {
-  if (hasFreshCc98LoginSession()) {
-    redirectToCc98Home();
-    return;
-  }
-  const startedAt = Date.now();
+function startLoginRedirectWatcher(snapshot = readLoginRedirectSnapshot()) {
+  clearLogoutRedirectIntent();
+  const startedAt = (() => {
+    try {
+      const markedAt = Number.parseInt(sessionStorage.getItem(LOGIN_REDIRECT_MARK_KEY) || "", 10);
+      return Number.isFinite(markedAt) ? markedAt : Date.now();
+    } catch {
+      return Date.now();
+    }
+  })();
   try {
     sessionStorage.setItem(LOGIN_REDIRECT_MARK_KEY, String(startedAt));
   } catch {
     // Session storage can be unavailable in restricted contexts; polling still works.
+  }
+  if (!snapshot) {
+    snapshot = getCc98LoginSessionSnapshot();
+    writeLoginRedirectSnapshot(snapshot);
   }
   clearLoginRedirectWatcher();
   loginRedirectWatcherTimer = window.setInterval(() => {
@@ -7134,23 +21126,37 @@ function startLoginRedirectWatcher() {
     const effectiveStart = Number.isFinite(markedAt) ? markedAt : startedAt;
     if (Date.now() - effectiveStart > 30000) {
       clearLoginRedirectWatcher();
-      try {
-        sessionStorage.removeItem(LOGIN_REDIRECT_MARK_KEY);
-      } catch {
-        // Ignore storage cleanup failures.
-      }
+      clearLoginRedirectIntent();
       return;
     }
-    if (hasFreshCc98LoginSession()) {
+    if (hasCc98LoginSessionChangedSince(snapshot)) {
       clearLoginRedirectWatcher();
-      try {
-        sessionStorage.removeItem(LOGIN_REDIRECT_MARK_KEY);
-      } catch {
-        // Ignore storage cleanup failures.
-      }
+      clearLoginRedirectIntent();
       redirectToCc98Home();
     }
   }, 250);
+}
+
+function armLoginRedirectWatcher() {
+  clearLogoutRedirectIntent();
+  let markedAt = NaN;
+  try {
+    markedAt = Number.parseInt(sessionStorage.getItem(LOGIN_REDIRECT_MARK_KEY) || "", 10);
+  } catch {
+    markedAt = NaN;
+  }
+  if (Number.isFinite(markedAt) && Date.now() - markedAt <= 1200) {
+    return;
+  }
+  const snapshot = getCc98LoginSessionSnapshot();
+  try {
+    sessionStorage.setItem(LOGIN_REDIRECT_MARK_KEY, String(Date.now()));
+  } catch {
+    // No-op.
+  }
+  writeLoginRedirectSnapshot(snapshot);
+  window.setTimeout(() => startLoginRedirectWatcher(snapshot), 120);
+  window.setTimeout(() => startLoginRedirectWatcher(snapshot), 650);
 }
 
 function bindLoginRedirect(login) {
@@ -7160,11 +21166,8 @@ function bindLoginRedirect(login) {
   login.dataset.cc98LoginRedirectBound = "true";
   const form = login.querySelector("form");
   const submitButton = login.querySelector("button[type='submit']");
-  const armRedirect = () => {
-    window.setTimeout(startLoginRedirectWatcher, 0);
-  };
-  form?.addEventListener("submit", armRedirect, true);
-  submitButton?.addEventListener("click", armRedirect, true);
+  form?.addEventListener("submit", armLoginRedirectWatcher, true);
+  submitButton?.addEventListener("click", armLoginRedirectWatcher, true);
 
   try {
     const markedAt = Number.parseInt(sessionStorage.getItem(LOGIN_REDIRECT_MARK_KEY) || "", 10);
@@ -7185,7 +21188,12 @@ function getUserCenterActiveTitle() {
 function updateUserCenterHero(app = document.querySelector("#cc98-comfort-app")) {
   const title = app?.querySelector(".cc98-rebuild-user-hero h1");
   if (title) {
-    title.textContent = getUserCenterActiveTitle();
+    const nextTitle = app.querySelector(".cc98-rebuild-user-blacklist-panel:not([hidden])")
+      ? "黑名单"
+      : getUserCenterActiveTitle();
+    if (title.textContent !== nextTitle) {
+      title.textContent = nextTitle;
+    }
   }
 }
 
@@ -7221,7 +21229,7 @@ function stabilizeUserCenterFavoriteActions(router) {
       return;
     }
     wrapper.classList.add("cc98-rebuild-favorite-action-offset");
-    wrapper.style.setProperty("transform", "translate(700px, 0px)", "important");
+    wrapper.style.setProperty("transform", "none", "important");
     wrapper.style.setProperty("white-space", "nowrap", "important");
     wrapper.style.setProperty("margin", "0", "important");
   });
@@ -7242,6 +21250,2368 @@ function stabilizeUserCenterSearchButtons(router) {
   });
 }
 
+function isLikelyProfileSignatureTextarea(textarea, textareas) {
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return false;
+  }
+  if (textarea.closest(".cc98-rebuild-profile-signature-editor, .cc98-rebuild-message-editor, .cc98-rebuild-native-message, .createTopic, #sendTopicInfo, .ubb-editor, .message-message-wPost")) {
+    return false;
+  }
+  const signaturePattern = /(?:\u7b7e\u540d|\u4e2a\u6027|\u7b80\u4ecb|\u4ecb\u7ecd|signature|description|intro|bio)/i;
+  const ownText = [
+    textarea.name,
+    textarea.id,
+    textarea.className,
+    textarea.placeholder,
+    textarea.getAttribute("aria-label"),
+    textarea.getAttribute("title")
+  ].filter(Boolean).join(" ");
+  if (signaturePattern.test(ownText)) {
+    return true;
+  }
+  let node = textarea.parentElement;
+  for (let depth = 0; node && depth < 5; depth += 1, node = node.parentElement) {
+    if (node.matches?.(".user-center-config, .cc98-rebuild-native-user-router")) {
+      break;
+    }
+    if (signaturePattern.test(cleanupPostText(node.textContent || ""))) {
+      return true;
+    }
+  }
+  return textareas.length === 1;
+}
+
+function insertProfileSignatureLink(textarea) {
+  const selected = getPrivateMessageSelectedText(textarea);
+  const urlDefault = /^https?:\/\//i.test(selected) ? selected : "";
+  const url = promptPrivateMessageValue("\u8bf7\u8f93\u5165\u94fe\u63a5\u5730\u5740", urlDefault);
+  if (!url) {
+    return;
+  }
+  const label = selected || promptPrivateMessageValue("\u8bf7\u8f93\u5165\u663e\u793a\u6587\u5b57\uff08\u53ef\u7559\u7a7a\uff09", url) || url;
+  insertPrivateMessageText(textarea, `[url=${url}]${label}[/url]`);
+}
+
+function insertProfileSignatureTaggedUrl(textarea, tag, label) {
+  const selected = getPrivateMessageSelectedText(textarea);
+  const url = promptPrivateMessageValue(label, /^https?:\/\//i.test(selected) ? selected : "");
+  if (!url) {
+    return;
+  }
+  insertPrivateMessageText(textarea, `[${tag}]${url}[/${tag}]`);
+}
+
+const PROFILE_SIGNATURE_UBB_CONTAINER_TAG_SOURCE = String.raw`\[(\/?)(b|i|u|s|del|url|color|size|font|align|audio|mp3|video|bili|bilibili)(?:=[^\]]+)?\]`;
+const PROFILE_SIGNATURE_UBB_SYNTAX_TOKEN_SOURCE = String.raw`\[(\/?)(b|i|u|s|del|url|color|size|font|align|audio|mp3|video|bili|bilibili|img)(?:=([^\]]+))?\]|\[(cc98\d{2}|ac(?:\d{2}|\d{4})|[acf]:\d{3}|tb\d{2}|ms\d{2}|em\d{2})\]`;
+
+function updateProfileSignatureUbbStack(stack, isClosing, tag) {
+  const normalizedTag = String(tag || "").toLowerCase();
+  if (!normalizedTag) {
+    return;
+  }
+  if (!isClosing) {
+    stack.push(normalizedTag);
+    return;
+  }
+  const index = stack.lastIndexOf(normalizedTag);
+  if (index >= 0) {
+    stack.length = index;
+  }
+}
+
+function getProfileSignatureUbbLineDepths(source) {
+  const stack = [];
+  return String(source ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => {
+      const pattern = new RegExp(PROFILE_SIGNATURE_UBB_CONTAINER_TAG_SOURCE, "gi");
+      let depth = stack.length;
+      let leading = true;
+      let cursor = 0;
+      let match;
+      while ((match = pattern.exec(line))) {
+        if (line.slice(cursor, match.index).trim()) {
+          leading = false;
+        }
+        const isClosing = Boolean(match[1]);
+        updateProfileSignatureUbbStack(stack, isClosing, match[2]);
+        if (isClosing && leading) {
+          depth = stack.length;
+        }
+        cursor = match.index + match[0].length;
+      }
+      return depth;
+    });
+}
+
+function getProfileSignatureUbbScope(source, position) {
+  const value = String(source ?? "");
+  const safePosition = Math.max(0, Math.min(value.length, Number(position) || 0));
+  const pattern = new RegExp(PROFILE_SIGNATURE_UBB_CONTAINER_TAG_SOURCE, "gi");
+  const stack = [];
+  const prefix = value.slice(0, safePosition);
+  let match;
+  while ((match = pattern.exec(prefix))) {
+    updateProfileSignatureUbbStack(stack, Boolean(match[1]), match[2]);
+  }
+  return stack;
+}
+
+function appendProfileSignatureSyntaxToken(target, match, colorIndex = null) {
+  const emotionTag = match[4];
+  if (emotionTag) {
+    target.append(createElement(
+      "span",
+      "cc98-rebuild-profile-signature-syntax-token is-emoji",
+      `[${emotionTag}]`
+    ));
+    return;
+  }
+
+  const closing = match[1] || "";
+  const tag = String(match[2] || "").toLowerCase();
+  const value = match[3];
+  const pairClass = Number.isInteger(colorIndex)
+    ? ` is-pair-${Math.abs(colorIndex) % 8}`
+    : "";
+  const token = createElement(
+    "span",
+    `cc98-rebuild-profile-signature-syntax-token${pairClass}`
+  );
+  token.dataset.cc98SyntaxTag = tag;
+  token.append(createElement("span", "cc98-rebuild-profile-signature-syntax-bracket", "["));
+  if (closing) {
+    token.append(createElement("span", "cc98-rebuild-profile-signature-syntax-bracket", "/"));
+  }
+  token.append(createElement("span", "cc98-rebuild-profile-signature-syntax-name", tag));
+  if (value !== undefined) {
+    token.append(createElement("span", "cc98-rebuild-profile-signature-syntax-symbol", "="));
+    token.append(createElement("span", "cc98-rebuild-profile-signature-syntax-value", value));
+  }
+  token.append(createElement("span", "cc98-rebuild-profile-signature-syntax-bracket", "]"));
+  target.append(token);
+}
+
+function appendProfileSignatureSyntaxPlainText(target, value = "", boundary = false) {
+  const span = createElement(
+    "span",
+    boundary
+      ? "cc98-rebuild-profile-signature-syntax-boundary"
+      : "cc98-rebuild-profile-signature-syntax-plain",
+    boundary ? "\u200b" : value
+  );
+  target.append(span);
+  return span;
+}
+
+function renderProfileSignatureSyntaxLayer(layer, source) {
+  if (!(layer instanceof HTMLElement)) {
+    return [];
+  }
+  const value = String(source ?? "").replace(/\r\n?/g, "\n");
+  // Keep the empty source truly empty.  The syntax layer uses a pseudo-element
+  // for its placeholder; inserting the usual zero-width boundary marker here
+  // turns that placeholder into a real (and selectable) text node, which moves
+  // the caret to the right of the hint on an empty editor.
+  if (!value) {
+    if (layer.__cc98SignatureSyntaxSource !== value || layer.childNodes.length > 0) {
+      layer.__cc98SignatureSyntaxSource = value;
+      layer.replaceChildren();
+    }
+    return [];
+  }
+  if (layer.__cc98SignatureSyntaxSource === value) {
+    return [...layer.querySelectorAll(".cc98-rebuild-profile-signature-syntax-line")];
+  }
+  layer.__cc98SignatureSyntaxSource = value;
+  const fragment = document.createDocumentFragment();
+  const stack = [];
+  let nextColorIndex = 0;
+  const lines = value.split("\n");
+  lines.forEach((line, lineIndex) => {
+    const lineNode = createElement("span", "cc98-rebuild-profile-signature-syntax-line");
+    appendProfileSignatureSyntaxPlainText(lineNode, "", true);
+    const pattern = new RegExp(PROFILE_SIGNATURE_UBB_SYNTAX_TOKEN_SOURCE, "gi");
+    let cursor = 0;
+    let match;
+    while ((match = pattern.exec(line))) {
+      if (match.index > cursor) {
+        appendProfileSignatureSyntaxPlainText(lineNode, line.slice(cursor, match.index));
+      }
+      appendProfileSignatureSyntaxPlainText(lineNode, "", true);
+      let colorIndex = null;
+      if (!match[4]) {
+        const isClosing = Boolean(match[1]);
+        const tag = String(match[2] || "").toLowerCase();
+        if (isClosing) {
+          const index = stack.map((item) => item.tag).lastIndexOf(tag);
+          if (index >= 0) {
+            colorIndex = stack[index].colorIndex;
+            stack.length = index;
+          } else {
+            colorIndex = nextColorIndex % 8;
+            nextColorIndex += 1;
+          }
+        } else {
+          colorIndex = nextColorIndex % 8;
+          nextColorIndex += 1;
+          stack.push({ tag, colorIndex });
+        }
+      }
+      appendProfileSignatureSyntaxToken(lineNode, match, colorIndex);
+      appendProfileSignatureSyntaxPlainText(lineNode, "", true);
+      cursor = match.index + match[0].length;
+    }
+    if (cursor < line.length) {
+      appendProfileSignatureSyntaxPlainText(lineNode, line.slice(cursor));
+    }
+    appendProfileSignatureSyntaxPlainText(lineNode, "", true);
+    fragment.append(lineNode);
+    if (lineIndex < lines.length - 1) {
+      fragment.append(document.createTextNode("\n"));
+    }
+  });
+  layer.replaceChildren(fragment);
+  return [...layer.querySelectorAll(".cc98-rebuild-profile-signature-syntax-line")];
+}
+
+function getProfileSignatureSourceText(sourceEditor) {
+  if (!(sourceEditor instanceof HTMLElement)) {
+    return "";
+  }
+  return String(sourceEditor.textContent || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u200b\uFEFF]/g, "");
+}
+
+function getProfileSignatureSourceSelection(sourceEditor) {
+  if (!(sourceEditor instanceof HTMLElement)) {
+    return null;
+  }
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount <= 0) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  if (!(container === sourceEditor || sourceEditor.contains(container))) {
+    return null;
+  }
+  const offsetTo = (node, offset) => {
+    const measure = document.createRange();
+    measure.selectNodeContents(sourceEditor);
+    try {
+      measure.setEnd(node, offset);
+    } catch {
+      measure.collapse(false);
+    }
+    return measure.toString().replace(/[\u200b\uFEFF]/g, "").length;
+  };
+  return {
+    start: offsetTo(range.startContainer, range.startOffset),
+    end: offsetTo(range.endContainer, range.endOffset)
+  };
+}
+
+function resolveProfileSignatureSourceOffset(sourceEditor, targetOffset, preferNeutralBoundary = true) {
+  const safeOffset = Math.max(0, Number(targetOffset) || 0);
+  const walker = document.createTreeWalker(sourceEditor, NodeFilter.SHOW_TEXT);
+  let remaining = safeOffset;
+  let lastTextNode = null;
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode;
+    const textLength = String(textNode.nodeValue || "").replace(/[\u200b\uFEFF]/g, "").length;
+    lastTextNode = textNode;
+    const isNeutralBoundary = textNode.parentElement?.classList?.contains(
+      "cc98-rebuild-profile-signature-syntax-boundary"
+    );
+    if (preferNeutralBoundary && isNeutralBoundary && remaining === 0) {
+      return {
+        node: textNode,
+        offset: 0
+      };
+    }
+    if (remaining < textLength || (!preferNeutralBoundary && remaining === textLength)) {
+      return {
+        node: textNode,
+        offset: Math.min(String(textNode.nodeValue || "").length, remaining)
+      };
+    }
+    remaining -= textLength;
+  }
+  if (lastTextNode) {
+    return {
+      node: lastTextNode,
+      offset: String(lastTextNode.nodeValue || "").length
+    };
+  }
+  return { node: sourceEditor, offset: sourceEditor.childNodes.length };
+}
+
+function restoreProfileSignatureSourceSelection(sourceEditor, selectionState) {
+  if (!(sourceEditor instanceof HTMLElement) || !selectionState) {
+    return;
+  }
+  const start = resolveProfileSignatureSourceOffset(sourceEditor, selectionState.start, true);
+  const end = resolveProfileSignatureSourceOffset(sourceEditor, selectionState.end, true);
+  const range = document.createRange();
+  try {
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+  } catch {
+    range.selectNodeContents(sourceEditor);
+    range.collapse(false);
+  }
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function insertProfileSignatureSourceTextAtSelection(sourceEditor, value) {
+  if (!(sourceEditor instanceof HTMLElement)) {
+    return false;
+  }
+  const selection = window.getSelection();
+  let range = null;
+  if (selection && selection.rangeCount > 0) {
+    const candidate = selection.getRangeAt(0);
+    const container = candidate.commonAncestorContainer;
+    if (container === sourceEditor || sourceEditor.contains(container)) {
+      range = candidate;
+    }
+  }
+  if (!(range instanceof Range)) {
+    range = document.createRange();
+    range.selectNodeContents(sourceEditor);
+    range.collapse(false);
+  }
+  range.deleteContents();
+  const textNode = document.createTextNode(String(value ?? ""));
+  range.insertNode(textNode);
+  range.setStartAfter(textNode);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  sourceEditor.focus({ preventScroll: true });
+  return true;
+}
+
+function renderEditableProfileSignatureSource(sourceEditor, source, preserveSelection = true) {
+  if (!(sourceEditor instanceof HTMLElement)) {
+    return;
+  }
+  const normalizedSource = String(source ?? "").replace(/\r\n?/g, "\n");
+  const selectionState = preserveSelection && document.activeElement === sourceEditor
+    ? getProfileSignatureSourceSelection(sourceEditor)
+    : null;
+  const scrollTop = sourceEditor.scrollTop;
+  const scrollLeft = sourceEditor.scrollLeft;
+  sourceEditor.dataset.cc98SourceEmpty = normalizedSource.length ? "false" : "true";
+  renderProfileSignatureSyntaxLayer(sourceEditor, normalizedSource);
+  sourceEditor.scrollTop = scrollTop;
+  sourceEditor.scrollLeft = scrollLeft;
+  if (selectionState) {
+    restoreProfileSignatureSourceSelection(sourceEditor, selectionState);
+  }
+}
+
+function getDualUbbSourceActiveLine(sourceEditor, source) {
+  const selection = getProfileSignatureSourceSelection(sourceEditor);
+  if (!selection) {
+    return -1;
+  }
+  const offset = Math.max(0, Math.min(String(source ?? "").length, selection.end));
+  return String(source ?? "").slice(0, offset).split("\n").length - 1;
+}
+
+function renderDualUbbLogicalLineGutter(gutter, sourceEditor, source) {
+  if (!(gutter instanceof HTMLElement) || !(sourceEditor instanceof HTMLElement)) {
+    return;
+  }
+  const normalizedSource = String(source ?? "").replace(/\r\n?/g, "\n");
+  const logicalLines = normalizedSource.split("\n");
+  const syntaxLines = [...sourceEditor.querySelectorAll(
+    ".cc98-rebuild-profile-signature-syntax-line"
+  )];
+  const computedLineHeight = Number.parseFloat(getComputedStyle(sourceEditor).lineHeight) || 24;
+  const activeLine = getDualUbbSourceActiveLine(sourceEditor, normalizedSource);
+  const fragment = document.createDocumentFragment();
+
+  logicalLines.forEach((_line, index) => {
+    const row = createElement("div", "cc98-rebuild-dual-ubb-source-gutter-row");
+    row.classList.toggle("is-active", index === activeLine);
+    const measuredHeight = syntaxLines[index]?.getBoundingClientRect?.().height || 0;
+    row.style.setProperty(
+      "--cc98-dual-source-logical-line-height",
+      `${Math.max(computedLineHeight, Math.ceil(measuredHeight))}px`
+    );
+    row.append(createElement(
+      "span",
+      "cc98-rebuild-dual-ubb-source-line-number",
+      String(index + 1)
+    ));
+    fragment.append(row);
+  });
+
+  gutter.replaceChildren(fragment);
+  gutter.scrollTop = sourceEditor.scrollTop;
+}
+
+function bindDualUbbLogicalLineGutter(gutter, sourceEditor, getSource) {
+  if (!(gutter instanceof HTMLElement)
+    || !(sourceEditor instanceof HTMLElement)
+    || gutter.dataset.cc98DualSourceGutterBound === "true") {
+    return;
+  }
+  gutter.dataset.cc98DualSourceGutterBound = "true";
+  const refresh = () => renderDualUbbLogicalLineGutter(
+    gutter,
+    sourceEditor,
+    typeof getSource === "function" ? getSource() : ""
+  );
+  sourceEditor.addEventListener("scroll", () => {
+    gutter.scrollTop = sourceEditor.scrollTop;
+  }, { passive: true });
+  ["focus", "keyup", "mouseup"].forEach((type) => {
+    sourceEditor.addEventListener(type, refresh);
+  });
+  return refresh;
+}
+
+function renderProfileSignatureCodeChrome(gutter, positionLabel, scopeLabel, textarea, syntaxLayer) {
+  if (!(gutter instanceof HTMLElement) || !(textarea instanceof HTMLTextAreaElement)) {
+    return;
+  }
+  const value = textarea.value || "";
+  const generatedSource = textarea.dataset.cc98GeneratedSource === "true";
+  const previousSyntaxScrollTop = syntaxLayer instanceof HTMLElement ? syntaxLayer.scrollTop : 0;
+  const previousSyntaxScrollLeft = syntaxLayer instanceof HTMLElement ? syntaxLayer.scrollLeft : 0;
+  const syntaxLines = renderProfileSignatureSyntaxLayer(syntaxLayer, value);
+  const computedLineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 24;
+  const caret = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : value.length;
+  const beforeCaret = value.slice(0, caret);
+  const activeLine = generatedSource ? -1 : beforeCaret.split("\n").length - 1;
+  const lineStart = beforeCaret.lastIndexOf("\n") + 1;
+  const depths = getProfileSignatureUbbLineDepths(value);
+  const fragment = document.createDocumentFragment();
+
+  depths.forEach((depth, index) => {
+    const row = createElement("div", "cc98-rebuild-profile-signature-code-gutter-row");
+    row.classList.toggle("is-active", index === activeLine);
+    const number = createElement("span", "cc98-rebuild-profile-signature-code-line-number", String(index + 1));
+    const guides = createElement("span", "cc98-rebuild-profile-signature-code-depth-guides");
+    const visibleDepth = Math.min(6, Math.max(0, depth));
+    for (let guideIndex = 0; guideIndex < visibleDepth; guideIndex += 1) {
+      guides.append(createElement("span", "cc98-rebuild-profile-signature-code-depth-guide"));
+    }
+    if (depth > visibleDepth) {
+      guides.append(createElement("span", "cc98-rebuild-profile-signature-code-depth-overflow", `+${depth - visibleDepth}`));
+    }
+    const syntaxLineHeight = syntaxLines[index]?.getBoundingClientRect().height || 0;
+    row.style.setProperty(
+      "--cc98-signature-code-row-height",
+      `${Math.max(computedLineHeight, syntaxLineHeight)}px`
+    );
+    row.append(number, guides);
+    fragment.append(row);
+  });
+
+  gutter.replaceChildren(fragment);
+  gutter.scrollTop = generatedSource ? previousSyntaxScrollTop : textarea.scrollTop;
+  if (syntaxLayer instanceof HTMLElement) {
+    syntaxLayer.scrollTop = generatedSource ? previousSyntaxScrollTop : textarea.scrollTop;
+    syntaxLayer.scrollLeft = generatedSource ? previousSyntaxScrollLeft : textarea.scrollLeft;
+  }
+  if (positionLabel instanceof HTMLElement) {
+    positionLabel.textContent = generatedSource
+      ? `${depths.length} \u884c \u00b7 \u81ea\u52a8\u751f\u6210`
+      : `${activeLine + 1} \u884c \u00b7 ${caret - lineStart + 1} \u5217`;
+  }
+  if (scopeLabel instanceof HTMLElement) {
+    const scope = generatedSource ? [] : getProfileSignatureUbbScope(value, caret);
+    scopeLabel.textContent = generatedSource
+      ? "UBB \u6e90\u7801"
+      : (scope.length
+        ? `UBB \u5c42\u7ea7\uff1a${scope.map((tag) => `[${tag}]`).join(" \u203a ")}`
+        : "UBB \u5c42\u7ea7\uff1a\u6839\u7ea7");
+    scopeLabel.title = scopeLabel.textContent;
+  }
+}
+
+function isProfileSignatureWysiwygBlock(node) {
+  if (!(node instanceof HTMLElement)) {
+    return false;
+  }
+  if (node.dataset.cc98UbbTag === "align") {
+    return true;
+  }
+  return /^(?:address|article|aside|blockquote|div|footer|h[1-6]|header|main|nav|p|pre|section)$/i.test(node.tagName);
+}
+
+function isProfileSignatureWysiwygPlaceholderBlock(node) {
+  if (!isProfileSignatureWysiwygBlock(node)) {
+    return false;
+  }
+  if (
+    node.dataset.cc98UbbTag
+    || node.dataset.cc98LocalUbbTag
+    || node.hasAttribute("data-cc98-local-ubb-source")
+  ) {
+    return false;
+  }
+  const children = [...node.childNodes].filter((child) => {
+    return !(child instanceof Text)
+      || Boolean(String(child.nodeValue || "").replace(/[\u200b\uFEFF]/g, ""));
+  });
+  return children.length === 0
+    || (children.length === 1 && children[0] instanceof HTMLBRElement);
+}
+
+function wrapProfileSignatureUbb(tag, value, content) {
+  const normalizedTag = String(tag || "").toLowerCase();
+  if (!normalizedTag) {
+    return content;
+  }
+  const suffix = value ? `=${String(value).replace(/\]/g, "")}` : "";
+  return `[${normalizedTag}${suffix}]${content}[/${normalizedTag}]`;
+}
+
+function serializeProfileSignatureWysiwygChildren(parent) {
+  const children = [...(parent?.childNodes || [])];
+  let output = "";
+  let previousWasBlock = false;
+  let previousWasPlaceholder = false;
+  children.forEach((child) => {
+    const block = isProfileSignatureWysiwygBlock(child);
+    const placeholder = block && isProfileSignatureWysiwygPlaceholderBlock(child);
+    if (block) {
+      if (previousWasBlock) {
+        if (!output.endsWith("\n") || previousWasPlaceholder) {
+          output += "\n";
+        }
+      } else if (output && !output.endsWith("\n")) {
+        output += "\n";
+      }
+      if (!placeholder) {
+        output += serializeProfileSignatureWysiwygNode(child);
+      }
+    } else {
+      if (
+        previousWasBlock
+        && !(child instanceof HTMLBRElement)
+        && !output.endsWith("\n")
+      ) {
+        output += "\n";
+      }
+      output += serializeProfileSignatureWysiwygNode(child);
+    }
+    previousWasBlock = block;
+    previousWasPlaceholder = placeholder;
+  });
+  return output;
+}
+
+function serializeProfileSignatureWysiwygNode(node) {
+  if (node instanceof Text) {
+    return String(node.nodeValue || "")
+      .replace(/[\u200b\uFEFF]/g, "")
+      .replace(/\u00a0/g, " ");
+  }
+  if (!(node instanceof HTMLElement)) {
+    return "";
+  }
+
+  const extendedRawUbbSource = node.getAttribute("data-cc98-local-ubb-source");
+  if (extendedRawUbbSource !== null) {
+    return extendedRawUbbSource;
+  }
+
+  const colorSelectionMarker = getEditorColorSelectionMarkerText(node);
+  if (colorSelectionMarker) {
+    return colorSelectionMarker;
+  }
+
+  const emotionTag = node.dataset.cc98UbbEmotionTag;
+  if (emotionTag) {
+    return `[${emotionTag}]`;
+  }
+
+  const tagName = node.tagName.toLowerCase();
+  if (tagName === "br") {
+    return "\n";
+  }
+
+  const explicitTag = String(node.dataset.cc98UbbTag || "").toLowerCase();
+  const explicitValue = node.dataset.cc98UbbValue || "";
+  if (explicitTag === "img" || tagName === "img") {
+    const src = explicitValue || node.getAttribute("src") || "";
+    return src ? `[img]${src}[/img]` : "";
+  }
+  if (/^(?:audio|mp3|video|bili|bilibili)$/i.test(explicitTag)) {
+    return explicitValue ? wrapProfileSignatureUbb(explicitTag, "", explicitValue) : "";
+  }
+
+  let content = serializeProfileSignatureWysiwygChildren(node);
+  const extendedUbbTag = String(node.dataset.cc98LocalUbbTag || "").toLowerCase();
+  if (extendedUbbTag === "code") {
+    const codeLines = [...node.querySelectorAll(":scope > ol > li")];
+    const codeContent = codeLines
+      .map((line) => serializeProfileSignatureWysiwygChildren(line).replace(/\n+$/g, ""))
+      .join("\n");
+    return wrapProfileSignatureUbb("code", "", codeContent);
+  }
+  if (extendedUbbTag === "md") {
+    const serializeMarkdown = window.CC98RebornExtendedUbb?.serializeEditableMarkdown;
+    const markdownContent = typeof serializeMarkdown === "function"
+      ? serializeMarkdown(node)
+      : String(node.innerText || node.textContent || "").replace(/\r\n?/g, "\n");
+    return wrapProfileSignatureUbb("md", "", markdownContent);
+  }
+  if (extendedUbbTag) {
+    return wrapProfileSignatureUbb(extendedUbbTag, node.dataset.cc98LocalUbbValue || "", content);
+  }
+  // An empty color wrapper is only a caret/typing helper.  It must not leak
+  // into the native UBB value as `[color]​[/color]` (or as an empty wrapper
+  // after a toolbar selection is lost).
+  if (
+    explicitTag === "color"
+    && !content.replace(/[\u200b\uFEFF]/g, "")
+    && !node.querySelector("img, audio, video, iframe, object, embed")
+  ) {
+    return "";
+  }
+  if (explicitTag && /^(?:b|i|u|s|del|url|color|size|font|align|replyview)$/i.test(explicitTag)) {
+    return wrapProfileSignatureUbb(explicitTag, explicitValue, content);
+  }
+
+  const styleText = node.getAttribute("style") || "";
+  const fontWeight = node.style.fontWeight || "";
+  const fontStyle = node.style.fontStyle || "";
+  const decoration = `${node.style.textDecoration || ""} ${node.style.textDecorationLine || ""}`;
+  const directColor = node.style.color || node.getAttribute("color") || "";
+  const directSize = node.getAttribute("size") || "";
+  const directAlign = node.style.textAlign || node.getAttribute("align") || "";
+
+  if (tagName === "a") {
+    const href = node.getAttribute("href") || "";
+    content = wrapProfileSignatureUbb("url", href, content || href);
+  }
+  if (tagName === "b" || tagName === "strong" || /^(?:bold|[6-9]00)$/i.test(fontWeight)) {
+    content = wrapProfileSignatureUbb("b", "", content);
+  }
+  if (tagName === "i" || tagName === "em" || /italic/i.test(fontStyle)) {
+    content = wrapProfileSignatureUbb("i", "", content);
+  }
+  if (tagName === "u" || /underline/i.test(decoration)) {
+    content = wrapProfileSignatureUbb("u", "", content);
+  }
+  if (/^(?:s|del|strike)$/i.test(tagName) || /line-through/i.test(decoration)) {
+    content = wrapProfileSignatureUbb("del", "", content);
+  }
+  if (directSize && EDITOR_FONT_SIZE_VALUES.includes(String(directSize))) {
+    content = wrapProfileSignatureUbb("size", directSize, content);
+  }
+  if (directColor) {
+    const normalizedColor = directColor.trim().toLowerCase() === "transparent"
+      ? "transparent"
+      : normalizeHexColor(directColor, "");
+    if (normalizedColor) {
+      content = wrapProfileSignatureUbb("color", normalizedColor, content);
+    }
+  }
+  if (/^(?:left|center|right)$/i.test(directAlign)) {
+    content = wrapProfileSignatureUbb("align", directAlign.toLowerCase(), content);
+  } else {
+    const alignMatch = styleText.match(/text-align\s*:\s*(left|center|right)/i);
+    if (alignMatch) {
+      content = wrapProfileSignatureUbb("align", alignMatch[1].toLowerCase(), content);
+    }
+  }
+  return content;
+}
+
+function serializeProfileSignatureWysiwyg(root) {
+  const output = serializeProfileSignatureWysiwygChildren(root)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u200b\uFEFF]/g, "")
+    .replace(/\uE000cc98-color-(?:start|end)-\d+\uE001/g, "");
+  const hasMedia = Boolean(root?.querySelector?.(
+    "img, audio, video, [data-cc98-ubb-emotion-tag], [data-cc98-ubb-tag='audio'], [data-cc98-ubb-tag='video'], [data-cc98-ubb-tag='bili'], [data-cc98-ubb-tag='bilibili']"
+  ));
+  const hasExtendedStructuredContent = Boolean(root?.querySelector?.(
+    "[data-cc98-local-ubb-tag='code'], [data-cc98-local-ubb-tag='md'], [data-cc98-local-ubb-tag='quote'], [data-cc98-local-ubb-tag='table'], [data-cc98-local-ubb-source]"
+  ));
+  return !hasMedia && !hasExtendedStructuredContent && !String(root?.textContent || "").replace(/[\u200b\uFEFF]/g, "").trim()
+    ? ""
+    : output;
+}
+
+function renderProfileSignatureWysiwygFromUbb(wysiwyg, source) {
+  if (!(wysiwyg instanceof HTMLElement)) {
+    return;
+  }
+  const article = buildNativeEditorUbbPreview(source);
+  markInlineUbbStyleClasses(article);
+  strengthenInlineTextStyles(article);
+  markInlineEmojiContainers(article);
+  stabilizeEmojiRendering(article);
+  const fragment = document.createDocumentFragment();
+  while (article.firstChild) {
+    fragment.append(article.firstChild);
+  }
+  wysiwyg.replaceChildren(fragment);
+  stabilizeDualUbbLeadingEmojiLayout(wysiwyg);
+  wysiwyg.querySelectorAll("img, audio, video, .aplayer").forEach((media) => {
+    if (media instanceof HTMLElement) {
+      media.contentEditable = "false";
+      media.draggable = false;
+    }
+  });
+}
+
+function getProfileSignatureWysiwygRange(wysiwyg) {
+  if (!(wysiwyg instanceof HTMLElement)) {
+    return null;
+  }
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount <= 0) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  return (container === wysiwyg || wysiwyg.contains(container)) ? range : null;
+}
+
+function hasMeaningfulProfileSignatureWysiwygRange(range) {
+  if (!(range instanceof Range) || range.collapsed) {
+    return false;
+  }
+  if (String(range.toString() || "").replace(/[\u200b\uFEFF\u00a0\s]/g, "")) {
+    return true;
+  }
+  try {
+    const fragment = range.cloneContents();
+    return Boolean(fragment.querySelector?.(
+      "img, audio, video, iframe, object, embed"
+    ));
+  } catch {
+    return false;
+  }
+}
+
+function rememberProfileSignatureWysiwygRange(editor, wysiwyg, options = {}) {
+  const lockedSnapshot = editor?.__cc98ColorSelectionSnapshot;
+  if (lockedSnapshot?.locked) {
+    const lockedRange = getEditorColorSelectionMarkerRange(lockedSnapshot);
+    if (lockedRange) {
+      editor.__cc98WysiwygRange = lockedRange.cloneRange();
+      return lockedRange;
+    }
+    // The live markers may have been removed by a visual-pane redraw.  Keep
+    // the logical source interval locked until the color action is completed
+    // or cancelled; a newly observed caret must not replace it.
+    if (lockedSnapshot.surface === "visual" && lockedSnapshot.logical) {
+      return null;
+    }
+  }
+
+  const range = getProfileSignatureWysiwygRange(wysiwyg);
+  const storedRange = editor.__cc98WysiwygRange;
+  const storedRangeIsValid = storedRange instanceof Range
+    && storedRange.startContainer?.isConnected
+    && storedRange.endContainer?.isConnected
+    && (
+      storedRange.commonAncestorContainer === wysiwyg
+      || wysiwyg.contains(storedRange.commonAncestorContainer)
+    );
+  let effectiveRange = range;
+  if (
+    options.preserveNonCollapsed
+    && storedRangeIsValid
+    && hasMeaningfulProfileSignatureWysiwygRange(storedRange)
+    && (!range || !hasMeaningfulProfileSignatureWysiwygRange(range))
+  ) {
+    effectiveRange = storedRange;
+  }
+  const logical = editor?.__cc98WysiwygLogicalSelection;
+  const logicalHasContent = Boolean(
+    logical
+    && logical.surface === "visual"
+    && logical.wysiwyg === wysiwyg
+    && (
+      normalizeEditorColorSelectionText(logical.selectedText).replace(/\s/g, "")
+      || normalizeEditorColorSelectionText(logical.sourceSelectedText).replace(/\s|\[[^\]]+\]/g, "")
+    )
+  );
+  if (
+    options.preserveNonCollapsed
+    && logicalHasContent
+    && (!effectiveRange || !hasMeaningfulProfileSignatureWysiwygRange(effectiveRange))
+    && !(storedRangeIsValid && hasMeaningfulProfileSignatureWysiwygRange(storedRange))
+  ) {
+    // Do not let the capture path turn a post-redraw caret into the active
+    // color selection.  The caller will promote the logical source interval.
+    effectiveRange = null;
+  }
+  if (options.captureColorSelection && effectiveRange) {
+    return captureEditorColorVisualSelection(editor, wysiwyg, effectiveRange)
+      ? effectiveRange
+      : effectiveRange;
+  }
+  if (effectiveRange) {
+    // Focus can briefly expose a collapsed caret while a toolbar/popover is
+    // taking focus.  Do not throw away a meaningful logical selection in that
+    // short window when the caller explicitly asked to preserve it.
+    if (!(options.preserveNonCollapsed && logicalHasContent && !hasMeaningfulProfileSignatureWysiwygRange(effectiveRange))) {
+      editor.__cc98WysiwygRange = effectiveRange.cloneRange();
+      rememberEditorColorVisualLogicalSelection(editor, wysiwyg, effectiveRange);
+    }
+  }
+  return effectiveRange;
+}
+
+function restoreProfileSignatureWysiwygRange(editor, wysiwyg) {
+  let range = getEditorColorSelectionMarkerRange(editor?.__cc98ColorSelectionSnapshot)
+    || editor.__cc98WysiwygRange;
+  if (
+    !(range instanceof Range)
+    || !range.startContainer?.isConnected
+    || !range.endContainer?.isConnected
+    || !(range.commonAncestorContainer === wysiwyg || wysiwyg.contains(range.commonAncestorContainer))
+  ) {
+    range = document.createRange();
+    range.selectNodeContents(wysiwyg);
+    range.collapse(false);
+  }
+  wysiwyg.focus({ preventScroll: true });
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  return range;
+}
+
+function isWysiwygDeletionInput(event) {
+  const inputType = String(event?.inputType || "");
+  return /^delete/i.test(inputType)
+    || event?.key === "Backspace"
+    || event?.key === "Delete";
+}
+
+function createWysiwygDeletionInputTracker(root) {
+  if (!(root instanceof HTMLElement)) {
+    return () => false;
+  }
+  let pendingDeletion = false;
+  let clearTimer = 0;
+  const markDeletion = (event) => {
+    if (!isWysiwygDeletionInput(event)) {
+      return;
+    }
+    pendingDeletion = true;
+    window.clearTimeout(clearTimer);
+    clearTimer = window.setTimeout(() => {
+      pendingDeletion = false;
+      clearTimer = 0;
+    }, 1000);
+  };
+  root.addEventListener("beforeinput", markDeletion);
+  root.addEventListener("keydown", markDeletion);
+  return (event) => {
+    const shouldNormalize = pendingDeletion || isWysiwygDeletionInput(event);
+    pendingDeletion = false;
+    window.clearTimeout(clearTimer);
+    clearTimer = 0;
+    return shouldNormalize;
+  };
+}
+
+function isWysiwygFormattingWrapper(node) {
+  if (!(node instanceof HTMLElement)) {
+    return false;
+  }
+  const explicitTag = String(node.dataset.cc98UbbTag || "").toLowerCase();
+  if (explicitTag === "color" || explicitTag === "font") {
+    return true;
+  }
+  if (node.style.color || node.getAttribute("color") || node.style.fontFamily) {
+    return true;
+  }
+  return false;
+}
+
+function isWysiwygColorWrapper(node) {
+  if (!(node instanceof HTMLElement)) {
+    return false;
+  }
+  const explicitTag = String(node.dataset.cc98UbbTag || "").toLowerCase();
+  return explicitTag === "color"
+    || Boolean(node.style.color)
+    || node.hasAttribute("color");
+}
+
+function clearWysiwygColorPresentation(root) {
+  const nodes = [
+    ...(root instanceof HTMLElement ? [root] : []),
+    ...(root.querySelectorAll?.("*") || [])
+  ];
+  nodes.forEach((node) => {
+    if (!(node instanceof HTMLElement)) {
+      return;
+    }
+    node.classList.remove("cc98-rebuild-preview-colored");
+    node.style.removeProperty("--cc98-preview-color");
+    node.style.removeProperty("color");
+    node.removeAttribute("color");
+    if (String(node.dataset.cc98UbbTag || "").toLowerCase() === "color") {
+      delete node.dataset.cc98UbbTag;
+      delete node.dataset.cc98UbbValue;
+    }
+  });
+}
+
+function unwrapWysiwygColorWrappers(root) {
+  if (!(root instanceof Node)) {
+    return false;
+  }
+  const candidates = [
+    ...(root instanceof HTMLElement && isWysiwygColorWrapper(root) ? [root] : []),
+    ...(root.querySelectorAll?.("*") || [])
+  ]
+    .filter((node) => isWysiwygColorWrapper(node))
+    .sort((left, right) => {
+      const depth = (node) => {
+        let count = 0;
+        let current = node;
+        while (current && current !== root) {
+          count += 1;
+          current = current.parentNode;
+        }
+        return count;
+      };
+      return depth(right) - depth(left);
+    });
+  let changed = false;
+  candidates.forEach((node) => {
+    if (!(node instanceof HTMLElement) || !(node.parentNode instanceof Node)) {
+      return;
+    }
+    const parent = node.parentNode;
+    while (node.firstChild) {
+      parent.insertBefore(node.firstChild, node);
+    }
+    node.remove();
+    changed = true;
+  });
+  if (changed) {
+    clearWysiwygColorPresentation(root);
+  }
+  return changed;
+}
+
+function splitWysiwygElementAtMarker(element, marker) {
+  if (!(element instanceof HTMLElement) || !(marker instanceof Node)) {
+    return false;
+  }
+  if (marker.parentNode === element) {
+    const parent = element.parentNode;
+    if (!(parent instanceof Node)) {
+      return false;
+    }
+    const suffix = element.cloneNode(false);
+    while (marker.nextSibling) {
+      suffix.append(marker.nextSibling);
+    }
+    parent.insertBefore(suffix, element.nextSibling);
+    parent.insertBefore(marker, suffix);
+    if (!suffix.childNodes.length) {
+      suffix.remove();
+    }
+    if (!element.childNodes.length) {
+      element.remove();
+    }
+    return true;
+  }
+  let child = marker;
+  while (child.parentNode && child.parentNode !== element) {
+    child = child.parentNode;
+  }
+  if (child.parentNode !== element || !(child instanceof HTMLElement)) {
+    return false;
+  }
+  if (!splitWysiwygElementAtMarker(child, marker)) {
+    return false;
+  }
+  return splitWysiwygElementAtMarker(element, marker);
+}
+
+function splitWysiwygFormattingAncestorsAtMarker(root, marker, isWrapper) {
+  if (!(root instanceof HTMLElement) || !(marker instanceof Node)) {
+    return false;
+  }
+  const ancestors = [];
+  let current = marker.parentElement;
+  while (current && current !== root) {
+    if (isWrapper(current)) {
+      ancestors.push(current);
+    }
+    current = current.parentElement;
+  }
+  let changed = false;
+  ancestors.forEach((ancestor) => {
+    if (ancestor instanceof HTMLElement && ancestor.contains(marker)) {
+      changed = splitWysiwygElementAtMarker(ancestor, marker) || changed;
+    }
+  });
+  return changed;
+}
+
+function clearProfileSignatureWysiwygColor(editor, wysiwyg) {
+  if (!(editor instanceof HTMLElement) || !(wysiwyg instanceof HTMLElement)) {
+    return false;
+  }
+  const range = restoreProfileSignatureWysiwygRange(editor, wysiwyg);
+  const wasCollapsed = range.collapsed;
+  const startMarker = document.createElement("span");
+  const endMarker = document.createElement("span");
+  startMarker.dataset.cc98ColorClearMarker = "start";
+  endMarker.dataset.cc98ColorClearMarker = "end";
+  startMarker.append(document.createTextNode("\u200b"));
+  endMarker.append(document.createTextNode("\u200b"));
+
+  const startRange = range.cloneRange();
+  const endRange = range.cloneRange();
+  startRange.collapse(true);
+  endRange.collapse(false);
+  if (wasCollapsed) {
+    startRange.insertNode(startMarker);
+    const markerEndRange = document.createRange();
+    markerEndRange.setStartAfter(startMarker);
+    markerEndRange.collapse(true);
+    markerEndRange.insertNode(endMarker);
+  } else {
+    endRange.insertNode(endMarker);
+    startRange.insertNode(startMarker);
+  }
+  const startBoundaryChanged = splitWysiwygFormattingAncestorsAtMarker(wysiwyg, startMarker, isWysiwygColorWrapper);
+  const endBoundaryChanged = splitWysiwygFormattingAncestorsAtMarker(wysiwyg, endMarker, isWysiwygColorWrapper);
+  const boundaryChanged = startBoundaryChanged || endBoundaryChanged;
+
+  if (wasCollapsed) {
+    const changed = boundaryChanged;
+    const parent = startMarker.parentNode;
+    const offset = parent instanceof Node
+      ? [...parent.childNodes].indexOf(startMarker)
+      : -1;
+    if (!changed || !(parent instanceof Node) || offset < 0) {
+      startMarker.remove();
+      endMarker.remove();
+      return false;
+    }
+    startMarker.remove();
+    endMarker.remove();
+    const caret = document.createRange();
+    caret.setStart(parent, Math.min(offset, parent.childNodes.length));
+    caret.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(caret);
+    editor.__cc98WysiwygRange = caret.cloneRange();
+    clearEditorColorSelectionSnapshot(editor);
+    delete editor.__cc98WysiwygLogicalSelection;
+    normalizeEmptyWysiwygFormatting(wysiwyg);
+    wysiwyg.focus({ preventScroll: true });
+    editor.__cc98WysiwygSyncSource?.();
+    return true;
+  }
+
+  const selectedRange = document.createRange();
+  selectedRange.setStartAfter(startMarker);
+  selectedRange.setEndBefore(endMarker);
+  const fragment = selectedRange.extractContents();
+  const changed = unwrapWysiwygColorWrappers(fragment);
+  if (!changed) {
+    selectedRange.insertNode(fragment);
+    startMarker.remove();
+    endMarker.remove();
+    return false;
+  }
+  selectedRange.insertNode(fragment);
+  const nextRange = document.createRange();
+  nextRange.setStartAfter(startMarker);
+  nextRange.setEndBefore(endMarker);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(nextRange);
+  startMarker.remove();
+  endMarker.remove();
+  editor.__cc98WysiwygRange = nextRange.cloneRange();
+  clearEditorColorSelectionSnapshot(editor);
+  delete editor.__cc98WysiwygLogicalSelection;
+  normalizeEmptyWysiwygFormatting(wysiwyg);
+  wysiwyg.focus({ preventScroll: true });
+  editor.__cc98WysiwygSyncSource?.();
+  return true;
+}
+
+function hasMeaningfulWysiwygContent(node) {
+  for (const child of [...(node?.childNodes || [])]) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      const text = String(child.nodeValue || "").replace(/[\u200b\uFEFF\u00a0]/g, "");
+      if (text.length) {
+        return true;
+      }
+      continue;
+    }
+    if (!(child instanceof HTMLElement)) {
+      continue;
+    }
+    const tagName = child.tagName.toLowerCase();
+    if (/^(?:img|audio|video|iframe|object|embed)$/i.test(tagName)
+      || child.matches(".aplayer, [data-cc98-ubb-media-tag], [data-cc98-ubb-emotion-tag]")) {
+      return true;
+    }
+    if (hasMeaningfulWysiwygContent(child)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getWysiwygNodeDepth(node, root) {
+  let depth = 0;
+  let current = node;
+  while (current && current !== root) {
+    depth += 1;
+    current = current.parentNode;
+  }
+  return depth;
+}
+
+function normalizeEmptyWysiwygFormatting(root) {
+  if (!(root instanceof HTMLElement)) {
+    return false;
+  }
+  const selection = window.getSelection();
+  const selectionAnchor = selection?.rangeCount
+    ? selection.getRangeAt(0).startContainer
+    : null;
+  const canNormalizeWrapper = (node) => {
+    if (!isWysiwygFormattingWrapper(node) || hasMeaningfulWysiwygContent(node)) {
+      return false;
+    }
+    if (node.dataset.cc98WysiwygTypingWrapper !== "true") {
+      return true;
+    }
+    return Boolean(
+      selectionAnchor
+      && (selectionAnchor === node || node.contains(selectionAnchor))
+    );
+  };
+  let caretTarget = null;
+  if (selection?.rangeCount) {
+    const range = selection.getRangeAt(0);
+    if (range.startContainer === root || root.contains(range.startContainer)) {
+      let current = range.startContainer instanceof HTMLElement
+        ? range.startContainer
+        : range.startContainer.parentElement;
+      let emptyAncestor = null;
+      while (current && current !== root) {
+        if (canNormalizeWrapper(current)) {
+          emptyAncestor = current;
+        }
+        current = current.parentElement;
+      }
+      if (emptyAncestor?.parentNode) {
+        caretTarget = {
+          parent: emptyAncestor.parentNode,
+          index: [...emptyAncestor.parentNode.childNodes].indexOf(emptyAncestor)
+        };
+      }
+    }
+  }
+
+  let changed = false;
+  for (let pass = 0; pass < 4; pass += 1) {
+    const candidates = [...root.querySelectorAll("*")]
+      .filter(canNormalizeWrapper)
+      .sort((left, right) => getWysiwygNodeDepth(right, root) - getWysiwygNodeDepth(left, root));
+    if (!candidates.length) {
+      break;
+    }
+    let changedThisPass = false;
+    candidates.forEach((node) => {
+      if (!node.isConnected || !root.contains(node) || !canNormalizeWrapper(node)) {
+        return;
+      }
+      const parent = node.parentNode;
+      if (!parent) {
+        return;
+      }
+      [...node.childNodes].forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE
+          && !String(child.nodeValue || "").replace(/[\u200b\uFEFF\u00a0]/g, "").length) {
+          return;
+        }
+        parent.insertBefore(child, node);
+      });
+      node.remove();
+      changed = true;
+      changedThisPass = true;
+    });
+    if (!changedThisPass) {
+      break;
+    }
+  }
+
+  if (changed && caretTarget?.parent?.isConnected && root.contains(caretTarget.parent)) {
+    const range = document.createRange();
+    const offset = Math.max(0, Math.min(caretTarget.index, caretTarget.parent.childNodes.length));
+    range.setStart(caretTarget.parent, offset);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+  return changed;
+}
+
+function selectProfileSignatureInsertedNode(editor, wysiwyg, node, selectContents = false) {
+  const range = document.createRange();
+  if (selectContents && node instanceof HTMLElement) {
+    range.selectNodeContents(node);
+  } else {
+    range.setStartAfter(node);
+    range.collapse(true);
+  }
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  editor.__cc98WysiwygRange = range.cloneRange();
+  wysiwyg.focus({ preventScroll: true });
+}
+
+function insertProfileSignatureWysiwygNode(editor, wysiwyg, node, preserveSelection = false) {
+  if (!(node instanceof Node)) {
+    return false;
+  }
+  const range = restoreProfileSignatureWysiwygRange(editor, wysiwyg);
+  range.deleteContents();
+  range.insertNode(node);
+  stabilizeDualUbbLeadingEmojiLayout(wysiwyg);
+  selectProfileSignatureInsertedNode(editor, wysiwyg, node, preserveSelection);
+  editor.__cc98WysiwygSyncSource?.();
+  return true;
+}
+
+function applyProfileSignatureWysiwygCommand(editor, wysiwyg, command, value = null) {
+  restoreProfileSignatureWysiwygRange(editor, wysiwyg);
+  let applied = false;
+  try {
+    applied = document.execCommand(command, false, value);
+  } catch {
+    applied = false;
+  }
+  rememberProfileSignatureWysiwygRange(editor, wysiwyg);
+  editor.__cc98WysiwygSyncSource?.();
+  return applied;
+}
+
+function applyProfileSignatureWysiwygTypography(editor, wysiwyg, tag, value) {
+  const range = restoreProfileSignatureWysiwygRange(editor, wysiwyg);
+  const wasCollapsed = range.collapsed;
+  const startMarker = document.createElement("span");
+  const endMarker = document.createElement("span");
+  const endRange = range.cloneRange();
+  endRange.collapse(false);
+  endRange.insertNode(endMarker);
+  const startRange = range.cloneRange();
+  startRange.collapse(true);
+  startRange.insertNode(startMarker);
+  const cssProperty = tag === "font" ? "font-family" : "font-size";
+  const legacyAttribute = tag === "font" ? "face" : "size";
+  const isPropertyTag = (candidate) => candidate === tag || (tag === "font" && candidate === "english");
+  const isWrapper = (node) => isPropertyTag(node.dataset.cc98UbbTag)
+    || isPropertyTag(node.dataset.cc98LocalUbbTag)
+    || Boolean(node.style.getPropertyValue(cssProperty))
+    || (node.tagName === "FONT" && node.hasAttribute(legacyAttribute));
+  splitWysiwygFormattingAncestorsAtMarker(wysiwyg, startMarker, isWrapper);
+  splitWysiwygFormattingAncestorsAtMarker(wysiwyg, endMarker, isWrapper);
+  const selectedRange = document.createRange();
+  selectedRange.setStartAfter(startMarker);
+  selectedRange.setEndBefore(endMarker);
+  const fragment = selectedRange.extractContents();
+  // Clear only the selected property; keep the other typography and formatting.
+  fragment.querySelectorAll("*").forEach((node) => {
+    if (tag === "size") {
+      node.classList.remove("cc98-rebuild-preview-size");
+      node.style.removeProperty("--cc98-preview-size");
+    }
+    if (!isWrapper(node)) {
+      return;
+    }
+    if (isPropertyTag(node.dataset.cc98UbbTag)) {
+      delete node.dataset.cc98UbbTag;
+      delete node.dataset.cc98UbbValue;
+    }
+    if (isPropertyTag(node.dataset.cc98LocalUbbTag)) {
+      delete node.dataset.cc98LocalUbbTag;
+      delete node.dataset.cc98LocalUbbValue;
+    }
+    node.style.removeProperty(cssProperty);
+    node.removeAttribute(legacyAttribute);
+    if (node.tagName === "SPAN" && [...node.attributes].every((attribute) =>
+      ["style", "class"].includes(attribute.name) && !attribute.value.trim())) {
+      node.replaceWith(...node.childNodes);
+    }
+  });
+  const wrapper = document.createElement("span");
+  if (value !== null) {
+    wrapper.dataset.cc98UbbTag = tag;
+    wrapper.dataset.cc98UbbValue = value;
+  }
+  wrapper.style.setProperty(cssProperty, value === null ? "inherit"
+    : (tag === "font" ? value : `${0.72 + Number(value) * 0.14}em`), "important");
+  wrapper.append(fragment);
+  if (wasCollapsed || !wrapper.childNodes.length) {
+    wrapper.replaceChildren(document.createTextNode("\u200b"));
+  }
+  selectedRange.insertNode(wrapper);
+  [startMarker.previousSibling, endMarker.nextSibling].forEach((node) => {
+    if (node instanceof HTMLElement && isWrapper(node)
+      && !hasMeaningfulWysiwygContent(node) && !node.querySelector("br")) {
+      node.remove();
+    }
+  });
+  startMarker.remove();
+  endMarker.remove();
+  clearEditorColorSelectionSnapshot(editor);
+  delete editor.__cc98WysiwygLogicalSelection;
+  selectProfileSignatureInsertedNode(editor, wysiwyg, wrapper, true);
+  editor.__cc98WysiwygSyncSource?.();
+  return true;
+}
+
+function applyProfileSignatureWysiwygInlineTag(editor, wysiwyg, tag, value, style = {}) {
+  const range = restoreProfileSignatureWysiwygRange(editor, wysiwyg);
+  const hasSelectedContent = hasMeaningfulProfileSignatureWysiwygRange(range);
+  const savedSelection = editor?.__cc98ColorSelectionSnapshot;
+  const savedVisibleText = normalizeEditorColorSelectionText(savedSelection?.selectedText);
+  const savedSourceText = normalizeEditorColorSelectionText(savedSelection?.sourceSelectedText);
+  const storedRange = editor?.__cc98WysiwygRange;
+  const savedSelectionHasContent = Boolean(
+    savedSelection
+    && savedSelection.surface === "visual"
+    && !savedSelection.collapsed
+    && (
+      savedVisibleText.replace(/\s/g, "")
+      || savedSourceText.replace(/\s|\[[^\]]+\]/g, "")
+    )
+  );
+  const storedSelectionHasContent = Boolean(
+    storedRange instanceof Range
+    && !storedRange.collapsed
+    && hasMeaningfulProfileSignatureWysiwygRange(storedRange)
+  );
+  if (
+    String(tag || "").toLowerCase() === "color"
+    && (savedSelectionHasContent || storedSelectionHasContent)
+    && !hasSelectedContent
+  ) {
+    // Never turn a lost non-collapsed selection into an empty color wrapper.
+    // The caller can still retry through the source interval when available.
+    return false;
+  }
+  // Reply-only content is a structured block, not an unstyled inline wrapper.
+  // Reuse the preview renderer immediately without replacing the live selection.
+  const span = (tag === "replyview"
+    ? buildNativeEditorUbbPreview("[replyview][/replyview]").firstElementChild
+    : null) || document.createElement("span");
+  if (!span.dataset.cc98LocalUbbTag) {
+    span.dataset.cc98UbbTag = tag;
+  }
+  if (value) {
+    span.dataset.cc98UbbValue = value;
+  }
+  if (String(tag || "").toLowerCase() === "color" && !hasSelectedContent) {
+    span.dataset.cc98WysiwygTypingWrapper = "true";
+  }
+  Object.entries(style).forEach(([property, propertyValue]) => {
+    span.style.setProperty(property, propertyValue, "important");
+  });
+  if (!hasSelectedContent) {
+    // A browser can leave a non-collapsed range that only contains the
+    // zero-width caret helper.  Treat it as a caret instead of producing an
+    // empty color wrapper beside the text the user actually selected.
+    if (!range.collapsed) {
+      range.deleteContents();
+      range.collapse(true);
+    }
+    span.append(document.createTextNode("\u200b"));
+  } else {
+    const extracted = range.extractContents();
+    stripEditorInvisibleTextNodes(extracted);
+    span.append(extracted);
+  }
+  range.insertNode(span);
+  // Do not let the temporary selection markers enter the next serialization.
+  // The inserted wrapper now owns the real selection boundary.
+  clearEditorColorSelectionSnapshot(editor);
+  delete editor.__cc98WysiwygLogicalSelection;
+  selectProfileSignatureInsertedNode(editor, wysiwyg, span, true);
+  editor.__cc98WysiwygSyncSource?.();
+  return true;
+}
+
+function applyProfileSignatureWysiwygGradient(editor, wysiwyg, stops, density = 1) {
+  const range = restoreProfileSignatureWysiwygRange(editor, wysiwyg);
+  const selected = range.toString();
+  if (!selected) {
+    return false;
+  }
+  const article = buildNativeEditorUbbPreview(
+    buildEditorGradientUbb(selected, stops, density)
+  );
+  const nodes = [...article.childNodes];
+  if (!nodes.length) {
+    return false;
+  }
+  const fragment = document.createDocumentFragment();
+  nodes.forEach((node) => fragment.append(node));
+  range.deleteContents();
+  range.insertNode(fragment);
+  clearEditorColorSelectionSnapshot(editor);
+  delete editor.__cc98WysiwygLogicalSelection;
+  selectProfileSignatureInsertedNode(editor, wysiwyg, nodes.at(-1));
+  editor.__cc98WysiwygSyncSource?.();
+  return true;
+}
+
+function insertProfileSignatureWysiwygLink(editor, wysiwyg) {
+  const range = restoreProfileSignatureWysiwygRange(editor, wysiwyg);
+  const selected = range.toString();
+  const defaultUrl = /^https?:\/\//i.test(selected) ? selected : "";
+  const url = promptPrivateMessageValue("\u8bf7\u8f93\u5165\u94fe\u63a5\u5730\u5740", defaultUrl);
+  if (!url) {
+    return false;
+  }
+  const link = document.createElement("a");
+  link.dataset.cc98UbbTag = "url";
+  link.dataset.cc98UbbValue = url;
+  link.href = makeAbsoluteCc98Url(url);
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  if (range.collapsed) {
+    const label = promptPrivateMessageValue("\u8bf7\u8f93\u5165\u663e\u793a\u6587\u5b57\uff08\u53ef\u7559\u7a7a\uff09", url) || url;
+    link.textContent = label;
+  } else {
+    link.append(range.extractContents());
+  }
+  range.deleteContents();
+  range.insertNode(link);
+  selectProfileSignatureInsertedNode(editor, wysiwyg, link);
+  editor.__cc98WysiwygSyncSource?.();
+  return true;
+}
+
+function insertProfileSignatureWysiwygMedia(editor, wysiwyg, tag, promptLabel) {
+  const url = promptPrivateMessageValue(promptLabel, "");
+  if (!url) {
+    return false;
+  }
+  let node = null;
+  if (tag === "img") {
+    node = createContentImageFromUrl(makeAbsoluteCc98Url(url), "");
+    node.dataset.cc98UbbTag = "img";
+    node.dataset.cc98UbbValue = url;
+  } else {
+    node = createUbbMediaPreviewNode(tag, url);
+  }
+  if (!(node instanceof HTMLElement)) {
+    return false;
+  }
+  node.contentEditable = "false";
+  node.draggable = false;
+  return insertProfileSignatureWysiwygNode(editor, wysiwyg, node);
+}
+
+function stabilizeProfileSignatureToolbar(router) {
+  const config = router.querySelector(".user-center-config") || router;
+  const textareas = [...config.querySelectorAll("textarea")]
+    .filter((textarea) => textarea instanceof HTMLTextAreaElement);
+  textareas
+    .filter((textarea) => isLikelyProfileSignatureTextarea(textarea, textareas))
+    .forEach((textarea) => {
+      if (textarea.dataset.cc98ProfileSignatureToolbarBound === "true") {
+        return;
+      }
+      const parent = textarea.parentElement;
+      if (!(parent instanceof HTMLElement)) {
+        return;
+      }
+      textarea.dataset.cc98ProfileSignatureToolbarBound = "true";
+      const editor = createElement("div", "cc98-rebuild-profile-signature-editor");
+      editor.dataset.cc98ProfileSignatureEditor = "true";
+      const toolbar = createElement("div", "cc98-rebuild-message-editor-toolbar");
+      const workspace = createElement(
+        "div",
+        "cc98-rebuild-profile-signature-workspace cc98-rebuild-dual-ubb-workspace"
+      );
+      const wysiwygPane = createElement(
+        "div",
+        "cc98-rebuild-message-editor-preview cc98-rebuild-profile-signature-wysiwyg-pane cc98-rebuild-dual-ubb-visual-pane"
+      );
+      const wysiwygHeader = createElement("div", "cc98-rebuild-profile-signature-preview-header");
+      const wysiwygTitle = createElement("span", "cc98-rebuild-profile-signature-preview-title", "上下都可以编辑哦~");
+      const wysiwygMeta = createElement("span", "cc98-rebuild-profile-signature-preview-meta");
+      const wysiwyg = createElement(
+        "div",
+        "cc98-rebuild-profile-signature-preview-body cc98-rebuild-profile-signature-wysiwyg cc98-rebuild-dual-ubb-visual"
+      );
+      applyImportantStyle(wysiwyg, {
+        margin: "5px",
+        padding: "24px 28px",
+        border: "1px solid transparent",
+        "box-sizing": "border-box"
+      });
+      wysiwyg.contentEditable = "true";
+      wysiwyg.spellcheck = true;
+      wysiwyg.setAttribute("role", "textbox");
+      wysiwyg.setAttribute("aria-multiline", "true");
+      wysiwyg.setAttribute("aria-label", "签名档可视化编辑器");
+      wysiwyg.setAttribute("aria-placeholder", "在这里直接编辑并预览内容");
+      wysiwyg.dataset.placeholder = "在这里直接编辑并预览内容";
+      wysiwygHeader.append(wysiwygTitle, wysiwygMeta);
+      wysiwygPane.append(wysiwygHeader, wysiwyg);
+
+      const divider = createElement("div", "cc98-rebuild-dual-editor-divider");
+      divider.setAttribute("role", "separator");
+      divider.setAttribute("aria-orientation", "horizontal");
+      divider.setAttribute("aria-label", "调整上下编辑区高度");
+      divider.tabIndex = 0;
+      const codePane = createElement(
+        "div",
+        "cc98-rebuild-profile-signature-code-pane cc98-rebuild-dual-ubb-source-pane"
+      );
+      const codeGutter = createElement("div", "cc98-rebuild-dual-ubb-source-gutter");
+      codeGutter.setAttribute("aria-hidden", "true");
+      const syntaxLayer = createElement(
+        "pre",
+        "cc98-rebuild-profile-signature-syntax-layer cc98-rebuild-dual-ubb-source"
+      );
+      const legacyPreview = createLegacy031UbbPreviewPanel();
+      let syncingNativeSource = false;
+      let sourceIsComposing = false;
+      let sourceHighlightFrame = 0;
+      let activeSurface = "visual";
+      let sourceSelection = null;
+      let refreshSourceGutter = null;
+      let legacyPreviewButton = null;
+
+      const refreshCodeChrome = (preserveSelection = true) => {
+        renderEditableProfileSignatureSource(syntaxLayer, textarea.value, preserveSelection);
+        renderDualUbbLogicalLineGutter(codeGutter, syntaxLayer, textarea.value);
+      };
+      const updateWysiwygMeta = () => {
+        const textLength = String(wysiwyg.textContent || "").replace(/\u200b/g, "").length;
+        wysiwygMeta.textContent = `${textLength} 字符`;
+      };
+      const refreshLegacyPreview = (force = false) => {
+        if (!force && legacyPreview.hidden) {
+          return;
+        }
+        renderLegacy031UbbPreview(legacyPreview, textarea.value);
+      };
+      const getWysiwygDeletionNormalization = createWysiwygDeletionInputTracker(wysiwyg);
+      const writeNativeSource = (nextValue) => {
+        const normalized = String(nextValue ?? "").replace(/[\u200b\uFEFF]/g, "");
+        if (textarea.value === normalized) {
+          refreshLegacyPreview();
+          return;
+        }
+        syncingNativeSource = true;
+        setNativeMessageInputValue(textarea, normalized);
+        syncingNativeSource = false;
+        refreshLegacyPreview();
+      };
+      const syncGeneratedSource = (normalizeEmptyFormatting = false) => {
+        activeSurface = "visual";
+        if (normalizeEmptyFormatting) {
+          normalizeEmptyWysiwygFormatting(wysiwyg);
+        }
+        stabilizeDualUbbLeadingEmojiLayout(wysiwyg);
+        const nextValue = serializeProfileSignatureWysiwyg(wysiwyg);
+        writeNativeSource(nextValue);
+        updateWysiwygMeta();
+        refreshCodeChrome();
+        rememberProfileSignatureWysiwygRange(editor, wysiwyg);
+      };
+      const scheduleSourceHighlight = (immediate = false) => {
+        if (sourceHighlightFrame) {
+          window.cancelAnimationFrame(sourceHighlightFrame);
+          sourceHighlightFrame = 0;
+        }
+        const run = () => {
+          sourceHighlightFrame = 0;
+          refreshCodeChrome(true);
+        };
+        if (immediate) {
+          run();
+        } else {
+          sourceHighlightFrame = window.requestAnimationFrame(run);
+        }
+      };
+      const syncFromSourceEditor = (rehighlight = !sourceIsComposing) => {
+        activeSurface = "source";
+        sourceSelection = getProfileSignatureSourceSelection(syntaxLayer) || sourceSelection;
+        const nextValue = getProfileSignatureSourceText(syntaxLayer);
+        writeNativeSource(nextValue);
+        renderProfileSignatureWysiwygFromUbb(wysiwyg, nextValue);
+        editor.__cc98WysiwygRange = null;
+        updateWysiwygMeta();
+        if (rehighlight) {
+          scheduleSourceHighlight();
+        }
+      };
+      const forceSynchronize = () => {
+        const sourceActive = activeSurface === "source"
+          || document.activeElement === syntaxLayer
+          || syntaxLayer.contains(document.activeElement);
+        const nextValue = sourceActive
+          ? getProfileSignatureSourceText(syntaxLayer)
+          : serializeProfileSignatureWysiwyg(wysiwyg);
+        writeNativeSource(nextValue);
+        renderProfileSignatureWysiwygFromUbb(wysiwyg, textarea.value);
+        updateWysiwygMeta();
+        refreshCodeChrome(sourceActive);
+        refreshLegacyPreview(true);
+        editor.__cc98WysiwygRange = null;
+        return textarea.value;
+      };
+      const updateLegacyPreviewButton = () => {
+        if (!(legacyPreviewButton instanceof HTMLElement)) {
+          return;
+        }
+        const open = !legacyPreview.hidden;
+        legacyPreviewButton.classList.toggle("is-active", open);
+        legacyPreviewButton.setAttribute("aria-pressed", String(open));
+      };
+      const setLegacyPreviewOpen = (open) => {
+        const shouldOpen = Boolean(open);
+        if (shouldOpen) {
+          forceSynchronize();
+        }
+        legacyPreview.hidden = !shouldOpen;
+        workspace.classList.toggle("is-legacy-preview-open", shouldOpen);
+        updateLegacyPreviewButton();
+      };
+      const rememberActiveSelection = (options = {}) => {
+        const lockedColorSelection = editor.__cc98ColorSelectionSnapshot;
+        if (lockedColorSelection?.locked && lockedColorSelection.surface === "source") {
+          activeSurface = "source";
+          sourceSelection = lockedColorSelection;
+          return lockedColorSelection;
+        }
+        const currentSourceSelection = getProfileSignatureSourceSelection(syntaxLayer);
+        if (currentSourceSelection) {
+          activeSurface = "source";
+          const effectiveSourceSelection = (
+            options.preserveNonCollapsed
+            && sourceSelection
+            && sourceSelection.start !== sourceSelection.end
+            && currentSourceSelection.start === currentSourceSelection.end
+          ) ? sourceSelection : currentSourceSelection;
+          sourceSelection = effectiveSourceSelection;
+          if (options.captureColorSelection) {
+            captureEditorColorSourceSelection(editor, textarea, effectiveSourceSelection);
+          }
+          return effectiveSourceSelection;
+        }
+        const visualRange = getProfileSignatureWysiwygRange(wysiwyg);
+        if (visualRange) {
+          activeSurface = "visual";
+          return rememberProfileSignatureWysiwygRange(editor, wysiwyg, options) || visualRange;
+        }
+        return null;
+      };
+      const getActiveSourceSelection = () => {
+        const current = getProfileSignatureSourceSelection(syntaxLayer);
+        if (current) {
+          sourceSelection = current;
+          return current;
+        }
+        return sourceSelection || {
+          start: textarea.value.length,
+          end: textarea.value.length
+        };
+      };
+      const replaceSourceSelection = (before, after = "", requireSelection = false, selectionOverride = null) => {
+        const sourceValue = String(textarea.value || "").replace(/[\u200b\uFEFF]/g, "");
+        const resolvedSelection = selectionOverride
+          ? getEditorColorSourceSelectionForApply(selectionOverride, sourceValue)
+          : null;
+        if (
+          selectionOverride?.surface === "visual"
+          && normalizeEditorColorSelectionText(selectionOverride.selectedText)
+          && !resolvedSelection
+        ) {
+          return false;
+        }
+        const selection = resolvedSelection || selectionOverride || getActiveSourceSelection();
+        const start = Math.max(0, Math.min(sourceValue.length, Number(selection?.start) || 0));
+        const end = Math.max(start, Math.min(sourceValue.length, Number(selection?.end) || start));
+        const selected = sourceValue.slice(start, end);
+        if (requireSelection && !selected) {
+          return false;
+        }
+        if (selectionOverride?.surface === "visual") {
+          clearEditorColorSelectionSnapshot(editor);
+          delete editor.__cc98WysiwygLogicalSelection;
+        }
+        const inserted = `${before}${selected}${after}`;
+        const nextValue = `${sourceValue.slice(0, start)}${inserted}${sourceValue.slice(end)}`;
+        writeNativeSource(nextValue);
+        renderProfileSignatureWysiwygFromUbb(wysiwyg, nextValue);
+        updateWysiwygMeta();
+        refreshCodeChrome(false);
+        const nextSelection = selected
+          ? { start: start + before.length, end: start + before.length + selected.length }
+          : { start: start + before.length, end: start + before.length };
+        activeSurface = "source";
+        sourceSelection = nextSelection;
+        syntaxLayer.focus({ preventScroll: true });
+        restoreProfileSignatureSourceSelection(syntaxLayer, nextSelection);
+        return true;
+      };
+      const replaceSourceText = (replacement, requireSelection = false) => {
+        const selection = getActiveSourceSelection();
+        const start = Math.max(0, Math.min(textarea.value.length, selection.start));
+        const end = Math.max(start, Math.min(textarea.value.length, selection.end));
+        if (requireSelection && start === end) {
+          return false;
+        }
+        const inserted = String(replacement ?? "");
+        const nextValue = `${textarea.value.slice(0, start)}${inserted}${textarea.value.slice(end)}`;
+        writeNativeSource(nextValue);
+        renderProfileSignatureWysiwygFromUbb(wysiwyg, nextValue);
+        updateWysiwygMeta();
+        refreshCodeChrome(false);
+        const caret = start + inserted.length;
+        const nextSelection = { start: caret, end: caret };
+        activeSurface = "source";
+        sourceSelection = nextSelection;
+        syntaxLayer.focus({ preventScroll: true });
+        restoreProfileSignatureSourceSelection(syntaxLayer, nextSelection);
+        return true;
+      };
+      editor.__cc98WysiwygSyncSource = syncGeneratedSource;
+      editor.__cc98WysiwygRememberSelection = rememberActiveSelection;
+      editor.__cc98WysiwygApplyColor = (color, selectionOverride = null) => {
+        const normalized = String(color || "").trim().toLowerCase();
+        if (normalized !== "transparent" && !/^#[0-9a-f]{6}$/i.test(normalized)) {
+          return false;
+        }
+        const selection = selectionOverride
+          || editor.__cc98ColorSelectionSnapshot
+          || promoteEditorColorLogicalSelection(editor, wysiwyg, textarea.value);
+        if (selection?.surface === "source") {
+          return replaceSourceSelection(
+            `[color=${normalized}]`,
+            "[/color]",
+            false,
+            selection
+          );
+        }
+        if (selection?.surface === "visual") {
+          const sourceSelection = getEditorColorSourceSelectionForApply(selection, textarea.value);
+          if (isUsableEditorColorSourceSelection(selection, textarea.value, sourceSelection)) {
+            return replaceSourceSelection(
+              `[color=${normalized}]`,
+              "[/color]",
+              false,
+              selection
+            );
+          }
+          const markerRange = getEditorColorSelectionMarkerRange(selection);
+          const expectedSelection = getEditorColorSelectionExpectedSourceText(selection);
+          if (
+            expectedSelection.replace(/\s|\[[^\]]+\]/g, "")
+            && (!markerRange || !hasMeaningfulProfileSignatureWysiwygRange(markerRange))
+          ) {
+            return false;
+          }
+          activeSurface = "visual";
+          return applyProfileSignatureWysiwygInlineTag(
+            editor,
+            wysiwyg,
+            "color",
+            normalized,
+            { color: normalized }
+          );
+        }
+        if (activeSurface === "source") {
+          return replaceSourceSelection(`[color=${normalized}]`, "[/color]");
+        }
+        return applyProfileSignatureWysiwygInlineTag(
+          editor,
+          wysiwyg,
+          "color",
+          normalized,
+          { color: normalized }
+        );
+      };
+      editor.__cc98WysiwygClearColor = (selectionOverride = null) => {
+        if (activeSurface === "source") {
+          const selection = selectionOverride?.surface === "source"
+            ? selectionOverride
+            : getActiveSourceSelection();
+          const result = removeEditorColorTagsFromSource(
+            textarea.value,
+            selection.start,
+            selection.end
+          );
+          if (!result.changed) {
+            return false;
+          }
+          writeNativeSource(result.value);
+          renderProfileSignatureWysiwygFromUbb(wysiwyg, result.value);
+          updateWysiwygMeta();
+          refreshCodeChrome(false);
+          const nextSelection = { start: result.start, end: result.end };
+          sourceSelection = nextSelection;
+          syntaxLayer.focus({ preventScroll: true });
+          restoreProfileSignatureSourceSelection(syntaxLayer, nextSelection);
+          return true;
+        }
+        return clearProfileSignatureWysiwygColor(editor, wysiwyg);
+      };
+      editor.__cc98WysiwygApplyGradient = (stops, density) => {
+        if (activeSurface === "source") {
+          const selection = getActiveSourceSelection();
+          const selected = textarea.value.slice(selection.start, selection.end);
+          if (!selected) {
+            return false;
+          }
+          return replaceSourceText(buildEditorGradientUbb(selected, stops, density), true);
+        }
+        return applyProfileSignatureWysiwygGradient(editor, wysiwyg, stops, density);
+      };
+      const applyTypography = (tag, value) => {
+        if (activeSurface === "source") {
+          const result = window.CC98RebornExtendedUbbCore?.applyTypographyToSource(
+            textarea.value, getActiveSourceSelection(), tag, value
+          );
+          if (!result) {
+            return false;
+          }
+          writeNativeSource(result.value);
+          renderProfileSignatureWysiwygFromUbb(wysiwyg, result.value);
+          updateWysiwygMeta();
+          refreshCodeChrome(false);
+          const nextSelection = { start: result.start, end: result.end };
+          syntaxLayer.focus({ preventScroll: true });
+          restoreProfileSignatureSourceSelection(syntaxLayer, nextSelection);
+          sourceSelection = nextSelection;
+          return true;
+        }
+        activeSurface = "visual";
+        return applyProfileSignatureWysiwygTypography(editor, wysiwyg, tag, value);
+      };
+      editor.__cc98WysiwygApplyFontFamily = (fontFamily) => {
+        const normalized = normalizeEditorFontFamilyValue(fontFamily);
+        return normalized ? applyTypography("font", normalized) : false;
+      };
+      editor.__cc98WysiwygApplyFontSize = (size) => {
+        const normalized = normalizeEditorFontSizeValue(size, "");
+        return normalized ? applyTypography("size", normalized) : false;
+      };
+      editor.__cc98WysiwygClearFontFamily = () => applyTypography("font", null);
+      editor.__cc98WysiwygClearFontSize = () => applyTypography("size", null);
+
+      const preserveWysiwygSelection = (control) => {
+        control.addEventListener("pointerdown", (event) => {
+          rememberActiveSelection({ preserveNonCollapsed: true });
+          event.preventDefault();
+        });
+      };
+      const addCommandButton = (label, title, command) => {
+        const button = createButton("cc98-rebuild-message-editor-button", label, (event) => {
+          event.preventDefault();
+          applyProfileSignatureWysiwygCommand(editor, wysiwyg, command);
+        });
+        button.title = title;
+        preserveWysiwygSelection(button);
+        toolbar.append(button);
+        return button;
+      };
+      const addActionButton = (label, title, onClick) => {
+        const button = createButton("cc98-rebuild-message-editor-button", label, (event) => {
+          event.preventDefault();
+          onClick(event);
+        });
+        button.title = title;
+        preserveWysiwygSelection(button);
+        toolbar.append(button);
+        return button;
+      };
+
+      addCommandButton("B", "\u7c97\u4f53", "bold");
+      addCommandButton("I", "\u659c\u4f53", "italic");
+      addCommandButton("U", "\u4e0b\u5212\u7ebf", "underline");
+      addCommandButton("S", "\u5220\u9664\u7ebf", "strikeThrough");
+      addCommandButton("\u5de6", "\u5de6\u5bf9\u9f50", "justifyLeft");
+      addCommandButton("\u4e2d", "\u5c45\u4e2d", "justifyCenter");
+      addCommandButton("\u53f3", "\u53f3\u5bf9\u9f50", "justifyRight");
+      addActionButton("\u94fe", "\u63d2\u5165\u94fe\u63a5", () => insertProfileSignatureWysiwygLink(editor, wysiwyg));
+      addActionButton("\u56fe", "\u63d2\u5165\u56fe\u7247", () => (
+        insertProfileSignatureWysiwygMedia(editor, wysiwyg, "img", "\u8bf7\u8f93\u5165\u56fe\u7247\u5730\u5740")
+      ));
+      addActionButton("\u5f71", "\u63d2\u5165\u89c6\u9891", () => (
+        insertProfileSignatureWysiwygMedia(editor, wysiwyg, "video", "\u8bf7\u8f93\u5165\u89c6\u9891\u5730\u5740")
+      ));
+      addActionButton("Bili", "\u63d2\u5165 Bilibili \u89c6\u9891", () => (
+        insertProfileSignatureWysiwygMedia(editor, wysiwyg, "bilibili", "\u8bf7\u8f93\u5165 Bilibili \u5730\u5740\u6216 BV \u53f7")
+      ));
+      addActionButton("\u97f3", "\u63d2\u5165\u97f3\u9891", () => (
+        insertProfileSignatureWysiwygMedia(editor, wysiwyg, "audio", "\u8bf7\u8f93\u5165\u97f3\u9891\u5730\u5740")
+      ));
+      const sourceButton = addActionButton("\u6e90\u7801", "\u663e\u793a\u6216\u9690\u85cf\u53ef\u76f4\u63a5\u7f16\u8f91\u7684 UBB \u6e90\u7801", () => {
+        const willShow = codePane.hidden;
+        codePane.hidden = !willShow;
+        divider.hidden = !willShow;
+        workspace.classList.toggle("is-source-hidden", !willShow);
+        sourceButton.classList.toggle("is-active", willShow);
+        sourceButton.setAttribute("aria-pressed", String(willShow));
+        if (willShow) {
+          refreshCodeChrome();
+        }
+      });
+      sourceButton.classList.add("is-active");
+      sourceButton.setAttribute("aria-pressed", "true");
+
+      legacyPreviewButton = addActionButton(
+        "旧预览",
+        "打开 0.3.1 版 UBB 预览（备用）",
+        () => setLegacyPreviewOpen(legacyPreview.hidden)
+      );
+      legacyPreviewButton.classList.add("cc98-rebuild-dual-ubb-toolbar-utility");
+      legacyPreviewButton.setAttribute("aria-pressed", "false");
+      const syncButton = addActionButton(
+        "同步",
+        "同步上下编辑区并重新渲染",
+        () => {
+          forceSynchronize();
+          showRebuiltTransientToast(syncButton, "上下编辑区已同步");
+        }
+      );
+      syncButton.classList.add("cc98-rebuild-dual-ubb-toolbar-utility");
+
+      const fontFamily = createEditorFontFamilyControl(
+        editor,
+        "cc98-rebuild-profile-signature-font-select cc98-rebuild-message-editor-select"
+      );
+      toolbar.append(fontFamily);
+
+      const size = document.createElement("select");
+      size.className = "cc98-rebuild-message-editor-select";
+      size.title = "\u5b57\u53f7";
+      ["\u5b57\u53f7", "1", "2", "3", "4", "5", "6", "7"].forEach((value, index) => {
+        const option = document.createElement("option");
+        option.value = index === 0 ? "" : value;
+        option.textContent = value;
+        size.append(option);
+      });
+      size.addEventListener("change", () => {
+        if (size.value === EDITOR_TYPOGRAPHY_RESET_VALUE) {
+          clearEditorTypography(editor, "size");
+          size.value = "";
+          return;
+        }
+        if (!size.value) {
+          return;
+        }
+        applyEditorFontSize(editor, size.value);
+      });
+      size.addEventListener("pointerdown", () => {
+        rememberActiveSelection({ preserveNonCollapsed: true });
+      });
+      appendEditorFontSizeSplitSelect(editor, toolbar, size);
+      appendEditorColorSplitButton(editor, toolbar);
+
+      parent.insertBefore(editor, textarea);
+      textarea.readOnly = true;
+      textarea.dataset.cc98GeneratedSource = "true";
+      textarea.tabIndex = -1;
+      textarea.setAttribute("aria-hidden", "true");
+      textarea.spellcheck = false;
+      syntaxLayer.contentEditable = "true";
+      syntaxLayer.spellcheck = false;
+      syntaxLayer.setAttribute("role", "textbox");
+      syntaxLayer.setAttribute("aria-multiline", "true");
+      syntaxLayer.setAttribute("aria-label", "UBB 源码编辑器");
+      syntaxLayer.setAttribute("aria-placeholder", "在这里以经典代码形式编辑内容");
+      syntaxLayer.dataset.placeholder = "在这里以经典代码形式编辑内容";
+      syntaxLayer.tabIndex = 0;
+      codePane.append(codeGutter, syntaxLayer, textarea);
+      workspace.append(wysiwygPane, divider, codePane, legacyPreview);
+      editor.append(toolbar, workspace);
+      legacyPreview.addEventListener("cc98:legacy-preview-close", () => {
+        setLegacyPreviewOpen(false);
+      });
+      bindDualUbbPaneDivider(workspace, wysiwygPane, codePane, divider);
+      refreshSourceGutter = bindDualUbbLogicalLineGutter(
+        codeGutter,
+        syntaxLayer,
+        () => textarea.value
+      );
+      textarea.classList.add("cc98-rebuild-profile-signature-textarea");
+      textarea.addEventListener("input", () => {
+        if (syncingNativeSource) {
+          return;
+        }
+        renderProfileSignatureWysiwygFromUbb(wysiwyg, textarea.value);
+        editor.__cc98WysiwygRange = null;
+        updateWysiwygMeta();
+        refreshCodeChrome(document.activeElement === syntaxLayer);
+        refreshLegacyPreview();
+      });
+      syntaxLayer.addEventListener("input", () => {
+        syncFromSourceEditor(!sourceIsComposing);
+      });
+      syntaxLayer.addEventListener("focus", () => {
+        activeSurface = "source";
+        sourceSelection = getProfileSignatureSourceSelection(syntaxLayer) || sourceSelection;
+      });
+      ["keyup", "mouseup"].forEach((type) => {
+        syntaxLayer.addEventListener(type, () => {
+          activeSurface = "source";
+          sourceSelection = getProfileSignatureSourceSelection(syntaxLayer) || sourceSelection;
+        });
+      });
+      syntaxLayer.addEventListener("compositionstart", () => {
+        sourceIsComposing = true;
+      });
+      syntaxLayer.addEventListener("compositionend", () => {
+        sourceIsComposing = false;
+        syncFromSourceEditor(true);
+      });
+      syntaxLayer.addEventListener("keydown", (event) => {
+        if (!["Tab", "Enter"].includes(event.key)) {
+          return;
+        }
+        if (event.key === "Enter" && (event.isComposing || event.ctrlKey || event.metaKey || event.altKey)) {
+          return;
+        }
+        event.preventDefault();
+        if (insertProfileSignatureSourceTextAtSelection(syntaxLayer, event.key === "Tab" ? "\t" : "\n")) {
+          syncFromSourceEditor(true);
+        }
+      });
+      syntaxLayer.addEventListener("paste", (event) => {
+        const plainText = event.clipboardData?.getData("text/plain");
+        if (typeof plainText !== "string") {
+          return;
+        }
+        event.preventDefault();
+        document.execCommand("insertText", false, plainText);
+        syncFromSourceEditor(true);
+      });
+      syntaxLayer.addEventListener("blur", () => {
+        if (!sourceIsComposing) {
+          scheduleSourceHighlight(true);
+        }
+      });
+      wysiwyg.addEventListener("input", (event) => {
+        syncGeneratedSource(getWysiwygDeletionNormalization(event));
+      });
+      wysiwyg.addEventListener("compositionend", () => syncGeneratedSource(false));
+      wysiwyg.addEventListener("paste", (event) => {
+        const plainText = event.clipboardData?.getData("text/plain");
+        if (typeof plainText !== "string") {
+          return;
+        }
+        event.preventDefault();
+        restoreProfileSignatureWysiwygRange(editor, wysiwyg);
+        document.execCommand("insertText", false, plainText);
+        rememberProfileSignatureWysiwygRange(editor, wysiwyg);
+        syncGeneratedSource(false);
+      });
+      ["keyup", "mouseup", "focus"].forEach((type) => {
+        wysiwyg.addEventListener(type, () => {
+          activeSurface = "visual";
+          rememberProfileSignatureWysiwygRange(
+            editor,
+            wysiwyg,
+            type === "focus" ? { preserveNonCollapsed: true } : {}
+          );
+        });
+      });
+      wysiwyg.addEventListener("click", (event) => {
+        if (event.target instanceof Element && event.target.closest("a[href]")) {
+          event.preventDefault();
+        }
+      });
+      editor.classList.add("cc98-rebuild-message-preview-open");
+      renderProfileSignatureWysiwygFromUbb(wysiwyg, textarea.value);
+      updateWysiwygMeta();
+      refreshCodeChrome();
+      if (typeof ResizeObserver === "function") {
+        let resizeFrame = 0;
+        const resizeObserver = new ResizeObserver(() => {
+          if (!editor.isConnected) {
+            resizeObserver.disconnect();
+            return;
+          }
+          if (resizeFrame) {
+            window.cancelAnimationFrame(resizeFrame);
+          }
+          resizeFrame = window.requestAnimationFrame(() => {
+            resizeFrame = 0;
+            refreshCodeChrome();
+            refreshSourceGutter?.();
+          });
+        });
+        resizeObserver.observe(codePane);
+        resizeObserver.observe(wysiwyg);
+      }
+    });
+}
+
+function normalizeProfileAccountStateText(value) {
+  return cleanupPostText(value)
+    .replace(/^\uD83D\uDEAB\s*/, "")
+    .trim();
+}
+
+function isProfileAccountStateText(value) {
+  return /^\u8be5\u8d26\u53f7/.test(normalizeProfileAccountStateText(value));
+}
+
+function collectProfileAccountStateMessages(router) {
+  const grid = router.querySelector(".user-profile #userGenderAndBirthday");
+  if (!(grid instanceof HTMLElement)) {
+    return [];
+  }
+
+  const entries = [];
+  const seen = new Set();
+  const addEntry = (text, source) => {
+    const normalized = normalizeProfileAccountStateText(text);
+    if (!normalized || !isProfileAccountStateText(normalized) || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    entries.push({ text: normalized, source });
+  };
+
+  grid.querySelectorAll("span").forEach((node) => {
+    if (!(node instanceof HTMLElement)) {
+      return;
+    }
+    if (node.closest(".user-description, .signature, .cc98-rebuild-signature-content, .cc98-rebuild-profile-badge-panel")) {
+      return;
+    }
+    addEntry(node.textContent, node);
+  });
+
+  [...grid.childNodes].forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      addEntry(node.nodeValue, node);
+    }
+  });
+
+  return entries;
+}
+
+function hideProfileAccountStateSource(entry) {
+  const source = entry?.source;
+  if (source instanceof HTMLElement) {
+    source.classList.add("cc98-rebuild-profile-account-state-source");
+    source.toggleAttribute("hidden", true);
+    source.setAttribute("aria-hidden", "true");
+    source.style.setProperty("display", "none", "important");
+    const grid = source.closest("#userGenderAndBirthday");
+    const parent = source.parentElement;
+    if (
+      grid instanceof HTMLElement
+      && parent instanceof HTMLElement
+      && parent.parentElement === grid
+      && normalizeProfileAccountStateText(parent.textContent) === entry.text
+    ) {
+      parent.classList.add("cc98-rebuild-profile-account-state-source");
+      parent.toggleAttribute("hidden", true);
+      parent.setAttribute("aria-hidden", "true");
+      parent.style.setProperty("display", "none", "important");
+    }
+    return;
+  }
+  if (source?.nodeType === Node.TEXT_NODE) {
+    const parent = source.parentElement;
+    if (!(parent instanceof HTMLElement)) {
+      return;
+    }
+    const holder = createElement("span", "cc98-rebuild-profile-account-state-source", source.nodeValue || "");
+    holder.toggleAttribute("hidden", true);
+    holder.setAttribute("aria-hidden", "true");
+    holder.style.setProperty("display", "none", "important");
+    source.replaceWith(holder);
+  }
+}
+
+function resetProfileBadgeInlineHiding(badge) {
+  [
+    "display",
+    "width",
+    "height",
+    "min-width",
+    "min-height",
+    "max-height",
+    "padding",
+    "margin",
+    "border",
+    "overflow"
+  ].forEach((property) => badge.style.removeProperty(property));
+}
+
+function updateProfileBadgeLayoutState(badge) {
+  const count = [...badge.children].filter((item) => {
+    if (!(item instanceof HTMLElement)) {
+      return false;
+    }
+    if (item.hidden || item.classList.contains("cc98-rebuild-profile-account-state-source")) {
+      return false;
+    }
+    return Boolean(cleanupPostText(item.textContent));
+  }).length;
+  badge.dataset.cc98BadgeCount = String(count);
+  badge.classList.toggle("cc98-rebuild-profile-badge-single", count === 1);
+  badge.classList.toggle("cc98-rebuild-profile-badge-multiple", count > 1);
+}
+
+function stabilizeUserProfileBadges(router, avatar) {
+  const badge = router.querySelector(".user-badge");
+  if (!(badge instanceof HTMLElement)) {
+    return;
+  }
+
+  const accountStateMessages = collectProfileAccountStateMessages(router);
+  const existingAccountStateItems = new Map();
+  badge.querySelectorAll(".cc98-rebuild-profile-badge-account-state").forEach((item) => {
+    if (!(item instanceof HTMLElement)) {
+      return;
+    }
+    const key = normalizeProfileAccountStateText(
+      item.dataset.cc98AccountState || item.textContent
+    );
+    if (!key || existingAccountStateItems.has(key)) {
+      item.remove();
+      return;
+    }
+    existingAccountStateItems.set(key, item);
+  });
+  const desiredAccountStates = new Set(accountStateMessages.map((entry) => entry.text));
+  existingAccountStateItems.forEach((item, key) => {
+    if (!desiredAccountStates.has(key)) {
+      item.remove();
+      existingAccountStateItems.delete(key);
+    }
+  });
+  accountStateMessages.forEach((entry) => {
+    hideProfileAccountStateSource(entry);
+    let item = existingAccountStateItems.get(entry.text);
+    if (!(item instanceof HTMLElement)) {
+      item = createElement(
+        "span",
+        "cc98-rebuild-profile-badge-item cc98-rebuild-profile-badge-item-colored cc98-rebuild-profile-badge-account-state",
+        `\uD83D\uDEAB ${entry.text}`
+      );
+      item.dataset.cc98AccountState = entry.text;
+      badge.append(item);
+      existingAccountStateItems.set(entry.text, item);
+    }
+    const color = entry.source instanceof HTMLElement ? entry.source.style.color : "";
+    if (color) {
+      item.style.setProperty("color", color, "important");
+    } else {
+      item.style.removeProperty("color");
+    }
+  });
+  const hasBadgeContent = Boolean(cleanupPostText(badge.textContent) || accountStateMessages.length);
+  if (!hasBadgeContent && badge.parentElement?.classList.contains("user-avatar")) {
+    badge.classList.remove("cc98-rebuild-profile-badge-panel");
+    badge.classList.remove("cc98-rebuild-profile-badge-single", "cc98-rebuild-profile-badge-multiple");
+    badge.classList.add("cc98-rebuild-profile-badge-empty");
+    delete badge.dataset.cc98BadgeCount;
+    badge.toggleAttribute("hidden", true);
+    badge.setAttribute("aria-hidden", "true");
+    badge.style.setProperty("display", "none", "important");
+    badge.style.setProperty("width", "0", "important");
+    badge.style.setProperty("height", "0", "important");
+    badge.style.setProperty("min-width", "0", "important");
+    badge.style.setProperty("min-height", "0", "important");
+    badge.style.setProperty("padding", "0", "important");
+    badge.style.setProperty("margin", "0", "important");
+    badge.style.setProperty("border", "0", "important");
+    return;
+  }
+
+  badge.classList.add("cc98-rebuild-profile-badge-panel");
+  badge.classList.toggle("cc98-rebuild-profile-badge-empty", !hasBadgeContent);
+  badge.toggleAttribute("hidden", !hasBadgeContent);
+  badge.setAttribute("aria-hidden", hasBadgeContent ? "false" : "true");
+  if (!hasBadgeContent) {
+    badge.classList.remove("cc98-rebuild-profile-badge-single", "cc98-rebuild-profile-badge-multiple");
+    delete badge.dataset.cc98BadgeCount;
+    badge.style.setProperty("display", "none", "important");
+    return;
+  }
+
+  badge.removeAttribute("hidden");
+  resetProfileBadgeInlineHiding(badge);
+  badge.setAttribute("aria-label", "\u7528\u6237\u5934\u8854");
+  [...badge.children].forEach((item) => {
+    if (!(item instanceof HTMLElement)) {
+      return;
+    }
+    item.classList.add("cc98-rebuild-profile-badge-item");
+    const ownColor = item.style.color;
+    if (ownColor) {
+      item.style.setProperty("color", ownColor, "important");
+      item.classList.add("cc98-rebuild-profile-badge-item-colored");
+    }
+    item.querySelectorAll("[style]").forEach((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+      const color = node.style.color;
+      if (color) {
+        node.style.setProperty("color", color, "important");
+        item.classList.add("cc98-rebuild-profile-badge-item-colored");
+      }
+    });
+  });
+  updateProfileBadgeLayoutState(badge);
+
+  if (avatar instanceof HTMLElement) {
+    const messageAction = avatar.querySelector(".cc98-rebuild-profile-message-action");
+    if (badge.parentElement !== avatar) {
+      avatar.insertBefore(badge, messageAction?.parentElement === avatar ? messageAction : null);
+    }
+    const avatarImage = avatar.querySelector(".user-avatar-img, img");
+    const syncBadgeHeight = () => {
+      const rect = avatarImage instanceof HTMLElement ? avatarImage.getBoundingClientRect() : null;
+      if (rect && rect.height >= 96) {
+        badge.style.setProperty("--cc98-profile-avatar-height", `${Math.round(rect.height)}px`);
+      }
+    };
+    syncBadgeHeight();
+    requestAnimationFrame(syncBadgeHeight);
+    if (avatarImage instanceof HTMLImageElement && badge.dataset.cc98BadgeImageBound !== "true") {
+      badge.dataset.cc98BadgeImageBound = "true";
+      avatarImage.addEventListener("load", syncBadgeHeight);
+    }
+  }
+}
+
 function stabilizeUserProfileStats(router) {
   const stabilizeProfileHeader = () => {
     const profile = router.querySelector(".user-profile");
@@ -7255,16 +23625,39 @@ function stabilizeUserProfileStats(router) {
     profile.classList.add("cc98-rebuild-profile-info");
     userId.classList.add("cc98-rebuild-profile-user-id");
 
+    const nameLine = userId.querySelector(":scope > p:first-child");
+    [...userId.querySelectorAll("a, button")].forEach((control) => {
+      if (!(control instanceof HTMLElement)) {
+        return;
+      }
+      if (control.tagName === "BUTTON" && control.closest("a")) {
+        return;
+      }
+      const label = cleanupPostText(control.textContent);
+      if (!/^(?:\u5173\u6ce8|\u53d6\u5173|\u53d6\u6d88\u5173\u6ce8)$/.test(label)) {
+        return;
+      }
+      control.classList.add("cc98-rebuild-profile-inline-action", "cc98-rebuild-profile-follow-action");
+      if (control instanceof HTMLButtonElement) {
+        control.classList.add("cc98-rebuild-profile-action-button", "cc98-rebuild-profile-follow-button");
+      } else {
+        control.querySelector("button")?.classList.add("cc98-rebuild-profile-action-button", "cc98-rebuild-profile-follow-button");
+      }
+      if (nameLine instanceof HTMLElement && control.parentElement !== nameLine) {
+        nameLine.append(control);
+      }
+    });
+
     const messageLink = [...userId.querySelectorAll("a")]
       .find((link) => cleanupPostText(link.textContent) === "\u79c1\u4fe1");
-    if (!(messageLink instanceof HTMLElement)) {
-      return;
+    if (messageLink instanceof HTMLElement) {
+      messageLink.classList.add("cc98-rebuild-profile-inline-action", "cc98-rebuild-profile-message-action");
+      messageLink.querySelector("button")?.classList.add("cc98-rebuild-profile-action-button", "cc98-rebuild-profile-message-button");
+      if (nameLine instanceof HTMLElement && messageLink.parentElement !== nameLine) {
+        nameLine.append(messageLink);
+      }
     }
-    messageLink.classList.add("cc98-rebuild-profile-message-action");
-    messageLink.querySelector("button")?.classList.add("cc98-rebuild-profile-message-button");
-    if (messageLink.parentElement !== avatar) {
-      avatar.append(messageLink);
-    }
+    stabilizeUserProfileBadges(router, avatar);
   };
 
   stabilizeProfileHeader();
@@ -7374,12 +23767,211 @@ function stabilizeUserDescriptionSignatures(router) {
     article.classList.add("cc98-rebuild-profile-signature-content", "cc98-rebuild-signature-content");
     parseInlineUbbTextNodes(article);
     strengthenInlineTextStyles(article);
+    markInlineUbbStyleClasses(article);
     markInlineEmojiContainers(article);
     stabilizeEmojiRendering(article);
   });
 }
 
+function appendMultilineInlineUbb(target, source) {
+  String(source ?? "").split(/\r?\n/).forEach((line, index) => {
+    if (index > 0) {
+      target.append(document.createElement("br"));
+    }
+    appendInlineUbbText(target, line);
+  });
+}
+
+function bindUserReplyContentNavigation(content, href) {
+  if (!(content instanceof HTMLElement) || content.dataset.cc98ReplyNavigationBound === "true") {
+    return;
+  }
+  content.dataset.cc98ReplyNavigationBound = "true";
+  content.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.target?.closest?.("a[href]")) {
+      return;
+    }
+    if (lastSettings?.openLinksInNewTab || event.ctrlKey || event.metaKey || event.shiftKey) {
+      window.open(href, "_blank", "noopener");
+      return;
+    }
+    navigateToRebuiltHref(href);
+  });
+  content.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.target !== content) {
+      return;
+    }
+    event.preventDefault();
+    if (lastSettings?.openLinksInNewTab) {
+      window.open(href, "_blank", "noopener");
+      return;
+    }
+    navigateToRebuiltHref(href);
+  });
+}
+
+function stabilizeUserReplyUbbContents(router) {
+  const ubbPattern = /\[(?:cc98\d{2}|ac(?:\d{2}|\d{4})|[acf]:\d{3}|tb\d{2}|ms\d{2}|em\d{2}|\/?(?:b|i|u|s|del|url|color|size|align|img|audio|mp3|video|bili|bilibili)(?:=[^\]]+)?)\]/i;
+  router.querySelectorAll('.user-post-content a[href*="/topic/"]').forEach((link) => {
+    if (!(link instanceof HTMLAnchorElement)) {
+      return;
+    }
+    const rawText = link.textContent || "";
+    if (!ubbPattern.test(rawText)) {
+      return;
+    }
+    const href = link.href || makeAbsoluteCc98Url(link.getAttribute("href") || "");
+    if (!href) {
+      return;
+    }
+    const content = createElement("div", "cc98-rebuild-user-reply-ubb");
+    content.dataset.cc98ReplyUbbSource = rawText;
+    content.dataset.cc98ReplyHref = href;
+    content.setAttribute("role", "link");
+    content.setAttribute("tabindex", "0");
+    content.setAttribute("aria-label", link.getAttribute("aria-label") || "查看原帖");
+    appendMultilineInlineUbb(content, rawText);
+    strengthenInlineTextStyles(content);
+    markInlineUbbStyleClasses(content);
+    markInlineEmojiContainers(content);
+    stabilizeEmojiRendering(content);
+    bindUserReplyContentNavigation(content, href);
+    link.replaceWith(content);
+  });
+}
+
+function isUserProfileRouteHref(href) {
+  try {
+    const url = new URL(href, location.href);
+    return url.origin === location.origin && /^\/user\/(?:id|name)\//i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function stabilizeUserCenterUserLinks(router) {
+  router.querySelectorAll([
+    ".user-center-myfollowings-user a[href*='/user/']",
+    ".user-center-myfans a[href*='/user/']",
+    ".user-center-myfans-user a[href*='/user/']",
+    ".user-center-myfollowers-user a[href*='/user/']",
+    "a[href*='/user/id/']",
+    "a[href*='/user/name/']"
+  ].join(",")).forEach((link) => {
+    if (!(link instanceof HTMLAnchorElement) || link.dataset.cc98UserCenterUserLinkBound === "true") {
+      return;
+    }
+    const href = makeAbsoluteCc98Url(link.getAttribute("href") || link.href || "");
+    if (!isUserProfileRouteHref(href)) {
+      return;
+    }
+    link.dataset.cc98UserCenterUserLinkBound = "true";
+    link.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0) {
+        return;
+      }
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || link.target === "_blank") {
+        return;
+      }
+      const targetHref = makeAbsoluteCc98Url(link.getAttribute("href") || link.href || "");
+      if (!isUserProfileRouteHref(targetHref)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      navigateToRebuiltHref(targetHref);
+      scheduleRouteFollowup(targetHref);
+    }, true);
+  });
+}
+
+function hasActiveTextSelectionWithin(root) {
+  if (!(root instanceof Node) || typeof window.getSelection !== "function") {
+    return false;
+  }
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    return false;
+  }
+  return Boolean(
+    (selection.anchorNode && root.contains(selection.anchorNode))
+    || (selection.focusNode && root.contains(selection.focusNode))
+  );
+}
+
+function hasActivePublicProfileTextSelection() {
+  if (!isPublicUserProfilePage()) {
+    return false;
+  }
+  const app = document.querySelector("#cc98-comfort-app");
+  const router = app?.querySelector(".cc98-rebuild-native-user-router")
+    || document.querySelector(".user-center-router");
+  return hasActiveTextSelectionWithin(app) || hasActiveTextSelectionWithin(router);
+}
+
+function isPublicProfileSelectionProtected() {
+  return isPublicUserProfilePage()
+    && (publicProfilePointerSelectionActive || hasActivePublicProfileTextSelection());
+}
+
+function bindPublicProfileSelectionRebuildGuard() {
+  if (publicProfileSelectionGuardBound) {
+    return;
+  }
+  publicProfileSelectionGuardBound = true;
+  const flushDeferredRebuild = () => {
+    if (!publicProfileRebuildDeferredForSelection || isPublicProfileSelectionProtected()) {
+      return;
+    }
+    publicProfileRebuildDeferredForSelection = false;
+    window.setTimeout(() => {
+      if (!isPublicProfileSelectionProtected()) {
+        scheduleRebuild();
+      }
+    }, 80);
+  };
+  document.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || !isPublicUserProfilePage()) {
+      return;
+    }
+    const router = document.querySelector("#cc98-comfort-app .cc98-rebuild-native-user-router")
+      || document.querySelector(".user-center-router");
+    if (router instanceof HTMLElement && event.target instanceof Node && router.contains(event.target)) {
+      publicProfilePointerSelectionActive = true;
+    }
+  }, true);
+  const releasePointerSelection = () => {
+    if (!publicProfilePointerSelectionActive) {
+      return;
+    }
+    publicProfilePointerSelectionActive = false;
+    flushDeferredRebuild();
+  };
+  document.addEventListener("pointerup", releasePointerSelection, true);
+  document.addEventListener("pointercancel", releasePointerSelection, true);
+  window.addEventListener("blur", releasePointerSelection);
+  document.addEventListener("selectionchange", () => {
+    flushDeferredRebuild();
+  }, true);
+}
+
+function deferPublicProfileRebuildForSelection() {
+  if (!isPublicProfileSelectionProtected()) {
+    return false;
+  }
+  publicProfileRebuildDeferredForSelection = true;
+  bindPublicProfileSelectionRebuildGuard();
+  return true;
+}
+
 function stabilizeNativeUserCenter(router) {
+  if (
+    hasActiveTextSelectionWithin(router)
+    || (isPublicUserProfilePage() && publicProfilePointerSelectionActive)
+  ) {
+    return false;
+  }
   router.querySelectorAll(".user-center-config-avatar").forEach((block) => {
     if (!block.classList.contains("cc98-avatar-crop-active")) {
       block.classList.remove("cc98-avatar-crop-active");
@@ -7387,15 +23979,23 @@ function stabilizeNativeUserCenter(router) {
   });
   stabilizeUserCenterFavoriteActions(router);
   stabilizeUserCenterSearchButtons(router);
+  stabilizeProfileSignatureToolbar(router);
   stabilizeUserProfileStats(router);
   stabilizeUserDescriptionSignatures(router);
+  stabilizeUserReplyUbbContents(router);
+  stabilizeUserCenterUserLinks(router);
+  return true;
 }
 
 function bindNativeUserCenterStabilizer(router) {
   if (!router || nativeUserCenterStabilizers.has(router)) {
     return;
   }
+  if (isPublicUserProfilePage()) {
+    bindPublicProfileSelectionRebuildGuard();
+  }
   nativeUserCenterStabilizers.add(router);
+  eagerUserCenterImages(router);
   stabilizeNativeUserCenter(router);
   router.addEventListener("change", (event) => {
     const input = event.target?.closest?.('input[type="file"]#uploadAvatar, input[type="file"][accept*="image"]');
@@ -7413,17 +24013,26 @@ function bindNativeUserCenterStabilizer(router) {
     }
   }, true);
   let userCenterStabilizeTimer = null;
-  const scheduleUserCenterStabilize = () => {
+  const scheduleUserCenterStabilize = (delay = 80) => {
     window.clearTimeout(userCenterStabilizeTimer);
-    userCenterStabilizeTimer = window.setTimeout(() => stabilizeNativeUserCenter(router), 80);
+    userCenterStabilizeTimer = window.setTimeout(() => {
+      if (!router.isConnected) {
+        userCenterObserver.disconnect();
+        return;
+      }
+      eagerUserCenterImages(router);
+      if (!stabilizeNativeUserCenter(router)) {
+        scheduleUserCenterStabilize(240);
+      }
+    }, delay);
   };
-  const userCenterObserver = new MutationObserver(scheduleUserCenterStabilize);
+  const userCenterObserver = new MutationObserver(() => scheduleUserCenterStabilize());
   userCenterObserver.observe(router, {
     childList: true,
     subtree: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ["style", "class"]
+    attributeFilter: ["src", "data-src", "data-original", "data-url", "data-avatar", "data-portrait"]
   });
 }
 
@@ -7646,7 +24255,6 @@ function stabilizeNativeAntUi() {
   if (!lastSettings?.enabled) {
     return;
   }
-  stabilizeEmojiRendering(document);
   cleanupAntFullPaginationOutsideModals();
   const nativeRoot = document.querySelector("#root");
   nativeRoot?.querySelectorAll(".ant-list, .ant-list-item, .ant-list-item-meta, .ant-list-item-content, .ant-list-item-meta-content").forEach((node) => {
@@ -7665,11 +24273,31 @@ function scheduleNativeAntUiStabilize() {
   nativeAntUiStabilizeTimer = window.setTimeout(stabilizeNativeAntUi, 80);
 }
 
+function isNativeAntUiMutation(record) {
+  const candidates = [record.target, ...record.addedNodes, ...record.removedNodes];
+  return candidates.some((node) => {
+    const element = node instanceof Element ? node : node?.parentElement;
+    if (!(element instanceof Element)) {
+      return false;
+    }
+    if (element.closest(".cc98-rebuild-ant-simple-pager, .cc98-rebuild-ant-full-pager")) {
+      return false;
+    }
+    return element.matches(NATIVE_ANT_UI_SELECTOR)
+      || Boolean(element.closest(NATIVE_ANT_UI_SELECTOR))
+      || Boolean(element.querySelector?.(NATIVE_ANT_UI_SELECTOR));
+  });
+}
+
 function ensureNativeAntUiStabilizer() {
   if (nativeAntUiObserver || !document.body) {
     return;
   }
-  nativeAntUiObserver = new MutationObserver(scheduleNativeAntUiStabilize);
+  nativeAntUiObserver = new MutationObserver((records) => {
+    if (records.some(isNativeAntUiMutation)) {
+      scheduleNativeAntUiStabilize();
+    }
+  });
   nativeAntUiObserver.observe(document.body, {
     childList: true,
     subtree: true,
@@ -7686,7 +24314,7 @@ function renderHome(app) {
   const visibleSections = hotOnly && hotSections.length > 0 ? hotSections : sections;
   if (hotOnly && visibleSections.length > 0) {
     const hero = createElement("section", "cc98-rebuild-hero cc98-rebuild-home-hot-hero");
-    hero.append(createElement("p", "cc98-rebuild-kicker", `Reborn View · v${EXTENSION_VERSION}`));
+    hero.append(createElement("p", "cc98-rebuild-kicker cc98-rebuild-version-kicker", `Reborn View · v${EXTENSION_VERSION}`));
     hero.append(createElement("h1", "", visibleSections[0].title));
     app.append(hero);
   }
@@ -7696,19 +24324,25 @@ function renderHome(app) {
   }
   visibleSections.forEach((section) => {
     const block = createElement("section", "cc98-rebuild-section");
+    const hotSection = isHotHomeSection(section);
     if (!hotOnly) {
-      block.append(createElement("h2", "", section.title));
+      const header = createElement("div", "cc98-rebuild-section-heading");
+      header.append(createElement("h2", "", section.title));
+      block.append(header);
     }
-    if (hotOnly && isHotHomeSection(section)) {
+    if (hotOnly && hotSection) {
       block.classList.add("cc98-rebuild-home-hot-section");
     }
     const list = createElement("div", "cc98-rebuild-list");
-    const hotSection = isHotHomeSection(section);
-    section.items.slice(0, 12).forEach((item, index) => {
-      list.append(renderTopicCard({
+    const rankedItems = hotSection ? getHomeHotItemsWithRankMovement(section) : section.items;
+    const visibleItemLimit = hotOnly && hotSection ? 10 : 12;
+    rankedItems.slice(0, visibleItemLimit).forEach((item, index) => {
+      const card = renderTopicCard({
         ...item,
         rank: hotSection && index < 10 ? index + 1 : 0
-      }));
+      });
+      card.dataset.itemKey = `home-topic:${item.href || `${section.title}:${index}:${item.title}`}`;
+      list.append(card);
     });
     block.append(list);
     grid.append(block);
@@ -7716,16 +24350,276 @@ function renderHome(app) {
   app.append(grid);
 }
 
+function getSearchRouteAge() {
+  const routeKey = getRoutePageKey();
+  if (searchPageRouteKey !== routeKey) {
+    searchPageRouteKey = routeKey;
+    searchPageRouteFirstSeenAt = Date.now();
+  }
+  return Date.now() - searchPageRouteFirstSeenAt;
+}
+
+function hasNativeSearchLoadingSignal() {
+  const candidate = document.querySelector([
+    ".ant-spin-spinning",
+    ".ant-spin-nested-loading .ant-spin",
+    ".ant-spin-blur",
+    "[class*='loading']",
+    "[class*='Loading']",
+    "[class*='loadMore']",
+    "[id*='loading']",
+    "[id*='Loading']"
+  ].join(","));
+  if (!(candidate instanceof HTMLElement)) {
+    return false;
+  }
+  const text = cleanupPostText(candidate.textContent || "");
+  const className = String(candidate.className || "");
+  // The native search empty-state wrapper includes `loading` in its class on
+  // some Forum builds. It is not a live spinner, so it must not keep the
+  // rebuilt search view in its pending state indefinitely.
+  if (/noResult|emptyResult|searchNone/i.test(className) || /抱歉呢前辈|没有找到|查询出错/.test(text)) {
+    return false;
+  }
+  return true;
+}
+
+function shouldDeferSearchEmptyState() {
+  const kind = getPageKind();
+  if (kind !== "search" && kind !== "boardSearch") {
+    return false;
+  }
+  const age = getSearchRouteAge();
+  if (document.readyState === "loading") {
+    return true;
+  }
+  if (age < SEARCH_EMPTY_INITIAL_GRACE_MS) {
+    return true;
+  }
+  return hasNativeSearchLoadingSignal() && age < SEARCH_EMPTY_LOADING_GRACE_MS;
+}
+
+function scheduleSearchEmptyRecheck() {
+  window.clearTimeout(searchPageEmptyRecheckTimer);
+  const age = getSearchRouteAge();
+  const initialRemaining = SEARCH_EMPTY_INITIAL_GRACE_MS - age;
+  const nextDelay = initialRemaining > 0
+    ? Math.max(360, Math.min(900, initialRemaining + 80))
+    : 900;
+  searchPageEmptyRecheckTimer = window.setTimeout(scheduleRebuild, nextDelay);
+}
+
+function renderSearchPendingState(app) {
+  scheduleSearchEmptyRecheck();
+  const section = createElement("section", "cc98-rebuild-empty-state cc98-rebuild-search-pending");
+  const spinner = createElement("div", "cc98-rebuild-search-pending-spinner");
+  spinner.style.setProperty("--cc98-search-pending-spin-offset", `${-(Math.round(performance.now()) % 860)}ms`);
+  section.append(spinner);
+  section.append(createElement("h2", "", "\u6b63\u5728\u7b49\u5f85\u641c\u7d22\u7ed3\u679c"));
+  section.append(createElement("p", "", "\u539f\u9875\u9762\u8fd8\u5728\u52a0\u8f7d\uff0c\u7a0d\u540e\u4f1a\u81ea\u52a8\u5237\u65b0\u7ed3\u679c\u533a\u3002"));
+  app.append(section);
+}
+
+function getNewTopicNativeSyncToken() {
+  return `${getNativeNewTopicViewMode()}:${getSeamlessNativeContentSignature("topics")}`;
+}
+
+function syncNewTopicModePanel(panel) {
+  if (!(panel instanceof HTMLElement)) {
+    return;
+  }
+  const activeMode = getNativeNewTopicViewMode();
+  panel.querySelectorAll("[data-new-topic-mode]").forEach((button) => {
+    const active = button.getAttribute("data-new-topic-mode") === activeMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function scheduleNewTopicModeSync(initialToken = "") {
+  const revision = ++newTopicModeSyncRevision;
+  seamlessScrollSyncIntentUntil = Math.max(seamlessScrollSyncIntentUntil, Date.now() + 4500);
+  newTopicModeSyncTimers.forEach((timer) => window.clearTimeout(timer));
+  newTopicModeSyncTimers = [];
+  let previousToken = initialToken;
+  const delays = [35, 180, 520, 1080, 1680];
+  newTopicModeSyncTimers = delays.map((delay, index) => window.setTimeout(() => {
+    if (revision !== newTopicModeSyncRevision || !isNewTopicsPage()) {
+      return;
+    }
+    const panel = document.querySelector("#cc98-comfort-app .cc98-rebuild-new-topic-controls");
+    syncNewTopicModePanel(panel);
+    const token = getNewTopicNativeSyncToken();
+    if (index === 0 || token !== previousToken || index === delays.length - 1) {
+      refreshRebuiltFromLoadedNativeContent(null, { automatic: true });
+      previousToken = token;
+    }
+    if (index === delays.length - 1) {
+      newTopicModeSyncTimers = [];
+      document.querySelector("#cc98-comfort-app .cc98-rebuild-new-topic-controls")
+        ?.classList.remove("is-syncing");
+    }
+  }, delay));
+}
+
+function triggerNewTopicNativeControl(controlId, panel) {
+  const source = getNativeNewTopicControl(controlId);
+  if (!source) {
+    showRebuiltTransientToast(panel, "\u539f\u9875\u9762\u63a7\u4ef6\u5c1a\u672a\u52a0\u8f7d");
+    scheduleDelayedRebuilds();
+    return;
+  }
+  const initialToken = getNewTopicNativeSyncToken();
+  panel?.classList.add("is-syncing");
+  triggerOriginalControl(source);
+  scheduleNewTopicModeSync(initialToken);
+}
+
+function updateNewTopicAutoRefreshVisitState() {
+  if (isNewTopicsPage()) {
+    if (!newTopicAutoRefreshVisitActive) {
+      newTopicAutoRefreshVisitActive = true;
+      newTopicAutoRefreshTriggered = false;
+    }
+    return;
+  }
+  newTopicAutoRefreshVisitActive = false;
+  newTopicAutoRefreshTriggered = false;
+  if (newTopicAutoRefreshTimer) {
+    window.clearTimeout(newTopicAutoRefreshTimer);
+    newTopicAutoRefreshTimer = null;
+  }
+}
+
+function scheduleNewTopicEntryAutoRefresh() {
+  updateNewTopicAutoRefreshVisitState();
+  if (!newTopicAutoRefreshVisitActive
+    || newTopicAutoRefreshTriggered
+    || newTopicAutoRefreshTimer) {
+    return;
+  }
+  newTopicAutoRefreshTriggered = true;
+  let attempts = 0;
+  const attemptRefresh = () => {
+    newTopicAutoRefreshTimer = null;
+    if (!newTopicAutoRefreshVisitActive || !isNewTopicsPage()) {
+      return;
+    }
+    const source = getNativeNewTopicControl("new-topic-refresh-button");
+    if (!source && attempts < 12) {
+      attempts += 1;
+      newTopicAutoRefreshTimer = window.setTimeout(attemptRefresh, 180);
+      return;
+    }
+    if (!source) {
+      return;
+    }
+    const initialToken = getNewTopicNativeSyncToken();
+    document.querySelector("#cc98-comfort-app .cc98-rebuild-new-topic-controls")
+      ?.classList.add("is-syncing");
+    triggerOriginalControl(source);
+    scheduleNewTopicModeSync(initialToken);
+  };
+  // The native first load keeps its refresh handler locked for at least one second.
+  newTopicAutoRefreshTimer = window.setTimeout(attemptRefresh, 1150);
+}
+
+function createNewTopicModeControls() {
+  if (!isNewTopicsPage()) {
+    return null;
+  }
+  const definitions = [
+    {
+      mode: "classic",
+      id: "new-topic-classic-button",
+      label: "\u7ecf\u5178\u6a21\u5f0f"
+    },
+    {
+      mode: "card",
+      id: "new-topic-card-button",
+      label: "\u5361\u7247\u6a21\u5f0f"
+    },
+    {
+      mode: "media",
+      id: "new-topic-media-only-button",
+      label: "\u53ea\u770b\u5a92\u4f53"
+    }
+  ];
+  if (!definitions.some(({ id }) => getNativeNewTopicControl(id))) {
+    return null;
+  }
+
+  const panel = createElement("section", "cc98-rebuild-new-topic-controls");
+  panel.setAttribute("aria-label", "\u65b0\u5e16\u6d4f\u89c8\u65b9\u5f0f");
+  const heading = createElement("div", "cc98-rebuild-new-topic-controls-heading");
+  heading.append(createElement("strong", "", "\u6d4f\u89c8\u65b9\u5f0f"));
+  const refresh = createButton("cc98-rebuild-new-topic-refresh", "\u21bb \u5237\u65b0", (event) => {
+    event.preventDefault();
+    triggerNewTopicNativeControl("new-topic-refresh-button", panel);
+  });
+  refresh.title = "\u5237\u65b0\u539f\u9875\u9762\u65b0\u5e16\u6570\u636e";
+  heading.append(refresh);
+
+  const modes = createElement("div", "cc98-rebuild-new-topic-mode-group");
+  modes.setAttribute("role", "group");
+  modes.setAttribute("aria-label", "\u65b0\u5e16\u663e\u793a\u6a21\u5f0f");
+  definitions.forEach(({ mode, id, label }) => {
+    const button = createButton("cc98-rebuild-new-topic-mode", label, (event) => {
+      event.preventDefault();
+      triggerNewTopicNativeControl(id, panel);
+    });
+    button.dataset.newTopicMode = mode;
+    button.setAttribute("aria-pressed", "false");
+    modes.append(button);
+  });
+
+  panel.append(heading, modes);
+  syncNewTopicModePanel(panel);
+  return panel;
+}
+
 function renderTopics(app) {
+  const pageKind = getPageKind();
+  const isSearchPage = pageKind === "search";
+  const hasReadLaterSidebar = isReadLaterSidebarTopicsPage() || isSearchPage;
+  if (isNewTopicsPage()) {
+    scheduleNewTopicEntryAutoRefresh();
+  }
   const topics = getTopicItems();
-  const searchKeyword = getPageKind() === "search" ? getCurrentSearchKeyword() : "";
+  const searchKeyword = isSearchPage ? getCurrentSearchKeyword() : "";
+  const sortedTopics = isSearchPage ? sortSearchTopicItems(topics, searchKeyword) : topics;
   const fuzzyTerms = searchKeyword && lastSettings?.advancedFuzzySearch ? tokenizeSearchQuery(searchKeyword) : [];
   const fallbackFuzzyTerms = fuzzyTerms.length ? fuzzyTerms : [normalizeSuggestionText(searchKeyword)].filter(Boolean);
   const useAdvancedFuzzy = Boolean(lastSettings?.advancedFuzzySearch && (
     fuzzyTerms.length >= 2
     || (lastSettings?.aiSearchSuggestEnabled && normalizeSuggestionText(searchKeyword).length >= 4)
   ));
+  if (!topics.length && !isSearchPage) {
+    const nativeEmptyMessage = cleanupPostText(document.querySelector(
+      ".noResultText, .focus-empty, [class*='emptyResult'], [class*='noResult']"
+    )?.textContent || "");
+    if (nativeEmptyMessage) {
+      const section = createElement("section", "cc98-rebuild-empty-state");
+      section.append(createElement("h2", "", "暂时没有帖子"));
+      section.append(createElement("p", "", nativeEmptyMessage));
+      app.append(section);
+      return;
+    }
+    if (isNewTopicsPage()) {
+      scheduleNewTopicsPendingRecheck();
+    }
+    const section = createElement("section", "cc98-rebuild-empty-state cc98-rebuild-search-pending");
+    section.append(createElement("div", "cc98-rebuild-search-pending-spinner"));
+    section.append(createElement("h2", "", "正在等待帖子列表"));
+    section.append(createElement("p", "", "原页面仍在加载帖子，内容就绪后会自动应用到新界面。"));
+    app.append(section);
+    return;
+  }
   if (!topics.length && getPageKind() === "search") {
+    if (shouldDeferSearchEmptyState()) {
+      renderSearchPendingState(app);
+      return;
+    }
     if (useAdvancedFuzzy) {
       const feed = createElement("section", "cc98-rebuild-feed");
       feed.dataset.feedKind = "search-fuzzy";
@@ -7742,29 +24636,176 @@ function renderTopics(app) {
     return;
   }
   const feed = createElement("section", "cc98-rebuild-feed");
-  feed.dataset.feedKind = "topics";
+  feed.dataset.feedKind = isSearchPage ? "search" : "topics";
   if (useAdvancedFuzzy) {
     feed.dataset.feedKind = "search-fuzzy";
-    app.append(createAdvancedFuzzySearchPanel(searchKeyword, fallbackFuzzyTerms, feed, topics));
+    app.append(createAdvancedFuzzySearchPanel(searchKeyword, fallbackFuzzyTerms, feed, sortedTopics));
   }
   if (!useAdvancedFuzzy) {
-    topics.forEach((item) => {
+    sortedTopics.forEach((item) => {
       const card = renderTopicCard(item);
       card.dataset.itemKey = `topic:${item.href}`;
       feed.append(card);
     });
   }
+  if (hasReadLaterSidebar) {
+    const layout = createElement("div", "cc98-rebuild-topics-read-later-layout");
+    feed.classList.add("cc98-rebuild-topics-read-later-feed");
+    const readLaterSidebar = createReadLaterSidebar();
+    const sideColumn = createElement("div", "cc98-rebuild-topics-side-column");
+    if (isSearchPage && !useAdvancedFuzzy) {
+      sideColumn.append(createSearchSortControls(sortedTopics.length, searchKeyword));
+      layout.classList.add("has-search-sort-controls");
+    }
+    const modeControls = createNewTopicModeControls();
+    if (modeControls) {
+      sideColumn.append(modeControls);
+      layout.classList.add("has-new-topic-controls");
+    }
+    sideColumn.append(readLaterSidebar, createRebuiltBackToTopControl());
+    layout.append(feed, sideColumn);
+    app.append(layout);
+    return;
+  }
   app.append(feed);
 }
 
+function renderBoardSearch(app) {
+  const items = getBoardSearchItems();
+  if (!items.length) {
+    if (shouldDeferSearchEmptyState()) {
+      renderSearchPendingState(app);
+      return;
+    }
+    const message = cleanupPostText(document.querySelector("#noResultBoard .noResultText, .noResultText")?.textContent)
+      || "抱歉呢前辈，没有找到你想要的版面哦~";
+    const section = createElement("section", "cc98-rebuild-empty-state");
+    section.append(createElement("h2", "", "没有找到版面"));
+    section.append(createElement("p", "", message.replace(/^-+|-+$/g, "").trim() || "抱歉呢前辈，没有找到你想要的版面哦~"));
+    app.append(section);
+    return;
+  }
+
+  const feed = createElement("section", "cc98-rebuild-feed cc98-rebuild-board-search-feed");
+  feed.dataset.feedKind = "boardSearch";
+  items.forEach((item) => {
+    const card = renderTopicCard(item);
+    card.dataset.itemKey = `board-search:${item.href}`;
+    feed.append(card);
+  });
+  app.append(feed);
+}
+
+function getProfileUserIdText() {
+  const node = document.querySelector(".user-profile #userId p:first-child, #userId p:first-child");
+  if (node) {
+    const directText = [...node.childNodes]
+      .filter((child) => child.nodeType === Node.TEXT_NODE)
+      .map((child) => child.nodeValue || "")
+      .join("")
+      .trim();
+    if (directText) {
+      return directText;
+    }
+  }
+  return cleanupPostText(document.querySelector(
+    ".user-profile [class*='userName'], .user-avatar + p, h1, h2"
+  )?.textContent || "");
+}
+
+function getCurrentProfilePageBlockedInfo() {
+  const uid = location.pathname.match(/\/user\/id\/(\d+)/i)?.[1] || "";
+  const userIdText = getProfileUserIdText();
+  const reason = getUserBlockReason({
+    id: userIdText,
+    user: userIdText,
+    uid
+  });
+  if (!reason) {
+    return null;
+  }
+  return {
+    uid,
+    name: userIdText,
+    role: "本页用户",
+    reason
+  };
+}
+
+function getCurrentTopicBlockedAuthorInfo(postItems = null) {
+  if (getPageKind() !== "post") {
+    return null;
+  }
+  const items = postItems || getPostItems();
+  const author = items.find((item) => item.uid && (item.isOriginalPoster || Number(item.index) === 1))
+    || items.find((item) => item.uid && Number(item.index) === 1);
+  const reason = getUserBlockReason({
+    id: author?.user,
+    user: author?.user,
+    uid: author?.uid
+  });
+  if (!reason) {
+    return null;
+  }
+  return {
+    uid: author.uid,
+    name: author.user,
+    role: "本页作者",
+    reason
+  };
+}
+
+function getCurrentPageBlockedInfo(postItems = null) {
+  if (isBlacklistRoute()) {
+    return null;
+  }
+  return getCurrentProfilePageBlockedInfo() || getCurrentTopicBlockedAuthorInfo(postItems);
+}
+
+function isCurrentBlockedPageRevealed(info) {
+  const key = info?.uid || info?.name || info?.reason || "";
+  return Boolean(key && isBlacklistRevealed(BLACKLIST_PAGE_REVEAL_PREFIX, key));
+}
+
+function renderBlockedPageGate(app, info) {
+  const section = createElement("section", "cc98-rebuild-blocked-page");
+  section.append(createElement("p", "cc98-rebuild-kicker", "Blacklist"));
+  section.append(createElement("h1", "", `${info.role}在你的黑名单内`));
+  const detail = [info.reason, info.name, info.uid ? `UID ${info.uid}` : ""].filter(Boolean).join(" · ");
+  section.append(createElement("p", "cc98-rebuild-card-meta", detail || "已根据你的黑名单规则隐藏本页内容。"));
+  const actions = createElement("div", "cc98-rebuild-blocked-page-actions");
+  actions.append(createButton("cc98-rebuild-action", "查看内容", () => {
+    revealBlacklistScope(BLACKLIST_PAGE_REVEAL_PREFIX, info.uid || info.name || info.reason || "");
+    scheduleRebuild();
+  }));
+  actions.append(createLink("cc98-rebuild-action", "管理黑名单", getBlacklistPageHref()));
+  section.append(actions);
+  app.append(section);
+}
+
 function renderPost(app) {
+  const postItems = getPostItems();
+  const blockedPageInfo = getCurrentPageBlockedInfo(postItems);
+  if (blockedPageInfo && !isCurrentBlockedPageRevealed(blockedPageInfo)) {
+    renderBlockedPageGate(app, blockedPageInfo);
+    return;
+  }
+
   const topPager = renderPostPager();
   if (topPager) {
     app.append(topPager);
   }
+  if (hasTopicLockedNotice()) {
+    const lockedCard = createElement("section", "cc98-rebuild-topic-locked-card", "\ud83d\udd12 \u672c\u5e16\u5df2\u88ab\u9501\u5b9a");
+    app.append(lockedCard);
+  }
   const feed = createElement("section", "cc98-rebuild-feed cc98-rebuild-post-feed");
   feed.dataset.feedKind = "post";
-  getPostItems().forEach((item) => {
+  postItems.forEach((item, index) => {
+    const previous = postItems[index - 1];
+    if (previous?.isHot && !item.isHot) {
+      feed.append(createElement("div", "cc98-rebuild-hot-divider"));
+    }
     const card = renderPostCard(item);
     card.dataset.itemKey = `post:${item.id}`;
     feed.append(card);
@@ -7777,40 +24818,203 @@ function renderPost(app) {
   renderPostReplyEditor(app);
 }
 
+function renderBoardCard(board, pinned = false) {
+  const card = createElement("article", `cc98-rebuild-board${pinned ? " is-pinned" : ""}`);
+  card.dataset.itemKey = `board:${normalizePinnedBoardHref(board.href) || board.title}`;
+  const pinButton = createButton("cc98-rebuild-board-pin", pinned ? "\u2212" : "+", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    togglePinnedBoard(board);
+  });
+  pinButton.type = "button";
+  pinButton.title = pinned ? `\u53d6\u6d88\u7f6e\u9876 ${board.title}` : `\u7f6e\u9876 ${board.title}`;
+  pinButton.setAttribute("aria-label", pinButton.title);
+  card.append(pinButton);
+  if (board.image) {
+    const image = createElement("img", "cc98-rebuild-board-image");
+    image.src = board.image;
+    image.alt = "";
+    card.append(image);
+  }
+  card.append(createLink("cc98-rebuild-card-title", board.title, board.href));
+  if (board.meta) {
+    card.append(createCardMetaElement(board.meta));
+  }
+  return card;
+}
+
 function renderBoards(app) {
   const sections = getBoardSections();
+  const pinnedHrefs = readPinnedBoardHrefs();
+  const pinnedSet = new Set(pinnedHrefs);
+  const boardsByHref = new Map();
   sections.forEach((section) => {
+    section.boards.forEach((board) => {
+      const href = normalizePinnedBoardHref(board.href);
+      if (href) {
+        boardsByHref.set(href, board);
+      }
+    });
+  });
+  const pinnedBoards = pinnedHrefs.map((href) => boardsByHref.get(href)).filter(Boolean);
+  if (pinnedBoards.length) {
+    const block = createElement("section", "cc98-rebuild-section cc98-rebuild-pinned-board-section");
+    block.append(createElement("h2", "", "\u7f6e\u9876\u7248\u9762"));
+    const grid = createElement("div", "cc98-rebuild-board-grid cc98-rebuild-pinned-board-grid");
+    pinnedBoards.forEach((board) => grid.append(renderBoardCard(board, true)));
+    block.append(grid);
+    app.append(block);
+  }
+  sections.forEach((section) => {
+    const visibleBoards = section.boards.filter((board) => !pinnedSet.has(normalizePinnedBoardHref(board.href)));
+    if (!visibleBoards.length) {
+      return;
+    }
     const block = createElement("section", "cc98-rebuild-section");
     block.append(createElement("h2", "", section.title));
     const grid = createElement("div", "cc98-rebuild-board-grid");
-    section.boards.forEach((board) => {
-      const card = createElement("article", "cc98-rebuild-board");
-      if (board.image) {
-        const image = createElement("img", "cc98-rebuild-board-image");
-        image.src = board.image;
-        image.alt = "";
-        card.append(image);
-      }
-      card.append(createLink("cc98-rebuild-card-title", board.title, board.href));
-      if (board.meta) {
-        card.append(createElement("p", "cc98-rebuild-card-meta", board.meta));
-      }
-      grid.append(card);
-    });
+    visibleBoards.forEach((board) => grid.append(renderBoardCard(board, false)));
     block.append(grid);
     app.append(block);
   });
 }
 
+function showEmbeddedBlacklistPanel(router, panel, app, navSource) {
+  if (!(router instanceof HTMLElement) || !(panel instanceof HTMLElement)) {
+    navigateToRebuiltHref(getBlacklistPageHref());
+    return;
+  }
+  embeddedBlacklistOpenPath = getCurrentCc98RoutePath();
+  router.hidden = true;
+  router.dataset.cc98EmbeddedBlacklistHidden = "true";
+  panel.hidden = false;
+  navSource?.querySelectorAll?.(".cc98-rebuild-blacklist-nav-entry").forEach((entry) => {
+    entry.classList.add("is-active");
+  });
+  const title = app?.querySelector?.(".cc98-rebuild-user-hero h1");
+  if (title) {
+    title.textContent = "黑名单";
+  }
+}
+
+function hideEmbeddedBlacklistPanel(router, panel, app) {
+  embeddedBlacklistOpenPath = "";
+  if (router instanceof HTMLElement) {
+    router.hidden = false;
+    delete router.dataset.cc98EmbeddedBlacklistHidden;
+  }
+  if (panel instanceof HTMLElement) {
+    panel.hidden = true;
+  }
+  panel?.closest?.(".cc98-rebuild-user-layout")?.querySelectorAll?.(".cc98-rebuild-blacklist-nav-entry").forEach((entry) => {
+    entry.classList.remove("is-active");
+  });
+  updateUserCenterHero(app);
+}
+
+function createBlacklistNavLink(router = null, panel = null, app = null, navSource = null) {
+  const link = createElement("button", "fa fa-ban cc98-rebuild-blacklist-nav-entry");
+  link.type = "button";
+  const label = createElement("span", "center-nav-item", "黑名单");
+  link.append(label);
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showEmbeddedBlacklistPanel(router, panel, app, navSource);
+  });
+  return link;
+}
+
+function injectBlacklistUserNavEntry(navSource, router = null, panel = null, app = null) {
+  if (!(navSource instanceof HTMLElement) || navSource.querySelector(".cc98-rebuild-blacklist-nav-entry")) {
+    return;
+  }
+  const link = createBlacklistNavLink(router, panel, app, navSource);
+  const controls = [...navSource.querySelectorAll("a, button, li, div")]
+    .filter((node) => node instanceof HTMLElement);
+  const target = [...controls].reverse().find((node) => {
+    const text = cleanupPostText(node.textContent);
+    return /我的粉丝|粉丝|我的关注/.test(text);
+  });
+  const targetContainer = target?.closest?.("li") || target;
+  if (targetContainer instanceof HTMLLIElement && targetContainer.parentElement) {
+    const li = document.createElement("li");
+    li.className = "cc98-rebuild-blacklist-nav-row";
+    li.append(link);
+    targetContainer.after(li);
+    return;
+  }
+  if (targetContainer instanceof HTMLElement && targetContainer.parentElement) {
+    link.classList.add("cc98-rebuild-blacklist-nav-separated");
+    targetContainer.after(link);
+    return;
+  }
+  const list = navSource.querySelector("ul");
+  if (list) {
+    const li = document.createElement("li");
+    li.className = "cc98-rebuild-blacklist-nav-row";
+    li.append(link);
+    list.append(li);
+    return;
+  }
+  link.classList.add("cc98-rebuild-blacklist-nav-separated");
+  navSource.append(link);
+}
+
+function createEmbeddedBlacklistPanel() {
+  const panel = createElement("section", "cc98-rebuild-native-user-router cc98-rebuild-user-blacklist-panel");
+  panel.hidden = true;
+  renderBlacklistPage(panel, { embedded: true });
+  return panel;
+}
+
 function renderUserCenter(app) {
-  const navSource = document.querySelector(".user-center-navigation");
-  const router = document.querySelector(".user-center-router");
+  const blockedPageInfo = getCurrentPageBlockedInfo();
+  if (blockedPageInfo && !isCurrentBlockedPageRevealed(blockedPageInfo)) {
+    renderBlockedPageGate(app, blockedPageInfo);
+    return;
+  }
+
+  const { navSource, router } = getUserCenterNativeShell();
   const activeTitle = getUserCenterActiveTitle();
+  const isPublicProfile = isPublicUserProfilePage();
 
   const hero = createElement("section", "cc98-rebuild-user-hero");
+  hero.classList.toggle("cc98-rebuild-user-hero-public", isPublicProfile);
   hero.append(createElement("p", "cc98-rebuild-kicker", "User Center"));
   hero.append(createElement("h1", "", activeTitle));
   app.append(hero);
+
+  if (isPublicProfile) {
+    const layout = createElement("div", "cc98-rebuild-user-layout cc98-rebuild-user-layout-public");
+    if (router instanceof HTMLElement) {
+      eagerUserCenterImages(router);
+      rememberReparentedNativeNode(router);
+      router.classList.add("cc98-rebuild-native-user-router");
+      bindNativeUserCenterStabilizer(router);
+      layout.append(router);
+      app.append(layout);
+      return;
+    }
+    const data = getUserCenterData();
+    const main = createElement("section", "cc98-rebuild-section");
+    main.append(createElement("h2", "", data.heading));
+    data.summary.forEach((line) => main.append(createElement("p", "cc98-rebuild-card-meta", line)));
+    layout.append(main);
+    app.append(layout);
+    return;
+  }
+
+  if (isUserCenterPendingNativeLoad()) {
+    app.dataset.cc98UserCenterPending = "true";
+    const pending = createElement("section", "cc98-rebuild-section cc98-rebuild-user-center-pending");
+    pending.append(createElement("h2", "", "正在加载个人中心"));
+    pending.append(createElement("p", "cc98-rebuild-card-meta", "原页面内容还没有完全载入，稍后会自动显示。"));
+    app.append(pending);
+    showLoadingOverlay("正在加载个人中心...", { allowUserCenter: true });
+    scheduleUserCenterPendingRebuild();
+    return;
+  }
 
   if (!navSource || !router) {
     const data = getUserCenterData();
@@ -7830,8 +25034,15 @@ function renderUserCenter(app) {
       });
       main.append(actionGrid);
     }
-    layout.append(nav, main);
+    const panel = createEmbeddedBlacklistPanel();
+    nav.append(createBlacklistNavLink(main, panel, app, nav));
+    const host = createElement("div", "cc98-rebuild-user-router-host");
+    host.append(main, panel);
+    layout.append(nav, host);
     app.append(layout);
+    if (embeddedBlacklistOpenPath === getCurrentCc98RoutePath()) {
+      showEmbeddedBlacklistPanel(main, panel, app, nav);
+    }
     return;
   }
 
@@ -7840,17 +25051,32 @@ function renderUserCenter(app) {
   rememberReparentedNativeNode(router);
   navSource.classList.add("cc98-rebuild-native-user-nav");
   router.classList.add("cc98-rebuild-native-user-router");
+  const panel = createEmbeddedBlacklistPanel();
+  injectBlacklistUserNavEntry(navSource, router, panel, app);
   bindNativeUserCenterStabilizer(router);
-  navSource.addEventListener("click", () => {
+  navSource.addEventListener("click", (event) => {
+    if (event.target?.closest?.(".cc98-rebuild-blacklist-nav-entry")) {
+      return;
+    }
+    hideEmbeddedBlacklistPanel(router, panel, app);
     window.setTimeout(() => updateUserCenterHero(app), 120);
     window.setTimeout(() => updateUserCenterHero(app), 600);
   });
-  layout.append(navSource, router);
+  const host = createElement("div", "cc98-rebuild-user-router-host");
+  host.append(router, panel);
+  layout.append(navSource, host);
   app.append(layout);
+  if (embeddedBlacklistOpenPath === getCurrentCc98RoutePath()) {
+    showEmbeddedBlacklistPanel(router, panel, app, navSource);
+  }
 }
 
 function encodeSearchKeyword(keyword) {
   return encodeURIComponent(normalizeSuggestionText(keyword)).replace(/%20/g, "%2520");
+}
+
+function encodeNativeSearchKeyword(keyword) {
+  return encodeURI(encodeURI(normalizeSuggestionText(keyword)));
 }
 
 function decodeSearchKeywordParam(value) {
@@ -7987,19 +25213,314 @@ function getCurrentSearchKeyword() {
   return decodeSearchKeywordParam(new URLSearchParams(location.search).get("keyword"));
 }
 
+function getNativeSearchRoot() {
+  return [...document.querySelectorAll("#search")]
+    .find((node) => node instanceof HTMLElement && !node.closest("#cc98-comfort-app")) || null;
+}
+
+function getNativeSearchState() {
+  const root = getNativeSearchRoot();
+  const selected = cleanupPostText(root?.querySelector?.(".searchBoxSelect")?.textContent) || "\u4e3b\u9898";
+  const options = root
+    ? [...root.querySelectorAll(".searchBoxSub li")]
+        .filter((item) => item instanceof HTMLElement)
+        .filter((item) => getComputedStyle(item).display !== "none")
+        .map((item) => cleanupPostText(item.textContent))
+        .filter(Boolean)
+    : [];
+  const uniqueOptions = [...new Set(options.length ? options : [selected, "\u7528\u6237", "\u7248\u9762"].filter(Boolean))];
+  return {
+    root,
+    selected,
+    options: uniqueOptions.includes(selected) ? uniqueOptions : [selected, ...uniqueOptions]
+  };
+}
+
+function canShowSearchSuggestionsForType(type) {
+  const normalized = cleanupPostText(type);
+  return /^(?:\u4e3b\u9898|\u5168\u7ad9)$/.test(normalized);
+}
+
+function selectNativeSearchType(root, type) {
+  if (!(root instanceof HTMLElement) || !type) {
+    return false;
+  }
+  const current = cleanupPostText(root.querySelector(".searchBoxSelect")?.textContent);
+  if (current === type) {
+    return true;
+  }
+  const option = [...root.querySelectorAll(".searchBoxSub li")]
+    .find((item) => item instanceof HTMLElement
+      && getComputedStyle(item).display !== "none"
+      && cleanupPostText(item.textContent) === type);
+  if (!(option instanceof HTMLElement)) {
+    return false;
+  }
+  dispatchMouseSequence(root.querySelector(".searchBoxSelect") || root.querySelector(".caret-down") || option);
+  dispatchMouseSequence(option);
+  return true;
+}
+
+function getCurrentSearchBoardId() {
+  const boardMatch = location.pathname.match(/\/board\/(\d+)/i);
+  if (boardMatch) {
+    return Math.max(0, Number(boardMatch[1]) || 0);
+  }
+  const searchBoardId = Number(new URLSearchParams(location.search).get("boardId"));
+  if (Number.isFinite(searchBoardId) && searchBoardId > 0) {
+    return searchBoardId;
+  }
+  const boardLink = [...document.querySelectorAll('a[href*="/board/"]')]
+    .map((link) => link instanceof HTMLAnchorElement ? (link.href || link.getAttribute("href") || "") : "")
+    .map((href) => href.match(/\/board\/(\d+)/i)?.[1])
+    .find(Boolean);
+  return Math.max(0, Number(boardLink) || 0);
+}
+
 function getSearchUrl(keyword) {
-  const url = new URL("/search", location.origin);
+  const url = new URL(buildCc98RouteHref("/search"));
   url.search = `?boardId=0&keyword=${encodeSearchKeyword(keyword)}`;
   return url;
 }
 
-function submitRebuiltSearch(keyword) {
+function getRebuiltSearchTargetHref(keyword, type) {
+  const normalized = normalizeSuggestionText(keyword);
+  const normalizedType = cleanupPostText(type);
+  if (!normalized) {
+    return "";
+  }
+  if (normalizedType === "\u7528\u6237") {
+    return buildCc98RouteHref(`/user/name/${encodeURIComponent(normalized)}`);
+  }
+  if (normalizedType === "\u7248\u9762") {
+    return buildCc98RouteHref(`/searchBoard?keyword=${encodeNativeSearchKeyword(normalized)}`);
+  }
+  const boardId = normalizedType === "\u7248\u5185" ? getCurrentSearchBoardId() : 0;
+  return buildCc98RouteHref(`/search?boardId=${boardId}&keyword=${encodeNativeSearchKeyword(normalized)}`);
+}
+
+function captureRebuiltSearchUiState(app = document.querySelector("#cc98-comfort-app")) {
+  if (!(app instanceof HTMLElement) || app.dataset.routeKey !== getRoutePageKey()) {
+    return null;
+  }
+  const form = app.querySelector(".cc98-rebuild-search");
+  const input = form?.querySelector('input[type="search"]');
+  const typeButton = form?.querySelector(".cc98-rebuild-search-type");
+  const typeMenu = form?.querySelector(".cc98-rebuild-search-type-menu");
+  if (!(form instanceof HTMLFormElement) || !(input instanceof HTMLInputElement)) {
+    return null;
+  }
+  return {
+    value: input.value,
+    type: form.dataset.searchType || "",
+    focused: document.activeElement === input,
+    typeButtonFocused: document.activeElement === typeButton,
+    typeMenuOpen: typeMenu instanceof HTMLElement && !typeMenu.hidden,
+    selectionStart: input.selectionStart,
+    selectionEnd: input.selectionEnd
+  };
+}
+
+function restoreRebuiltSearchUiState(app, state) {
+  if (!(app instanceof HTMLElement) || !state) {
+    return;
+  }
+  const form = app.querySelector(".cc98-rebuild-search");
+  const input = form?.querySelector('input[type="search"]');
+  const typeButton = form?.querySelector(".cc98-rebuild-search-type");
+  const typeMenu = form?.querySelector(".cc98-rebuild-search-type-menu");
+  if (!(input instanceof HTMLInputElement)) {
+    return;
+  }
+  requestAnimationFrame(() => {
+    if (!input.isConnected) {
+      return;
+    }
+    if (
+      state.typeMenuOpen
+      && typeButton instanceof HTMLButtonElement
+      && typeMenu instanceof HTMLElement
+    ) {
+      typeMenu.hidden = false;
+      typeButton.setAttribute("aria-expanded", "true");
+      if (state.typeButtonFocused) {
+        typeButton.focus({ preventScroll: true });
+      }
+    }
+    if (state.focused) {
+      input.focus({ preventScroll: true });
+      const start = Number.isInteger(state.selectionStart) ? state.selectionStart : input.value.length;
+      const end = Number.isInteger(state.selectionEnd) ? state.selectionEnd : start;
+      try {
+        input.setSelectionRange(start, end);
+      } catch {
+        // Search focus restoration is best-effort.
+      }
+    }
+    delete form?.dataset.cc98PreserveTypeMenu;
+  });
+}
+
+function isEditingRebuiltSearchOnCurrentRoute() {
+  const app = document.querySelector("#cc98-comfort-app");
+  const active = document.activeElement;
+  return app instanceof HTMLElement
+    && app.dataset.routeKey === getRoutePageKey()
+    && active instanceof HTMLInputElement
+    && active.matches('.cc98-rebuild-search input[type="search"]');
+}
+
+function submitRebuiltSearch(keyword, type = getNativeSearchState().selected) {
   const normalized = String(keyword ?? "").trim();
   if (!normalized) {
     return false;
   }
-  location.href = getSearchUrl(normalized).href;
+  rememberSearchHistoryQuery(normalized);
+  const targetHref = repairWebVpnNakedCc98Href(getRebuiltSearchTargetHref(normalized, type) || getSearchUrl(normalized).href);
+  const startedAt = getRoutePageKey();
+  const targetRouteKey = getRoutePageKey(targetHref);
+  scheduleRouteFollowup(targetHref, startedAt);
+  if (targetRouteKey === startedAt) {
+    if (isWebVpnHost()) {
+      showLoadingOverlay("正在通过 WebVPN 刷新搜索结果...");
+    }
+    location.reload();
+    return true;
+  }
+  if (isWebVpnHost()) {
+    showLoadingOverlay("正在通过 WebVPN 跳转搜索结果...");
+  }
+  location.assign(targetHref);
+  window.setTimeout(() => {
+    if (getRoutePageKey() === startedAt) {
+      location.replace(targetHref);
+    }
+  }, 360);
   return true;
+}
+
+function normalizeSearchHistoryQuery(value) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+function getSearchHistoryStorageKey(userId = getCurrentReadLaterUserId()) {
+  return `${SEARCH_HISTORY_STORAGE_KEY}:uid:${encodeURIComponent(normalizeCc98AccountId(userId) || "guest")}`;
+}
+
+function normalizeSearchHistoryItems(items) {
+  const source = Array.isArray(items) ? items : [];
+  const byQuery = new Map();
+  source.forEach((item, index) => {
+    const query = normalizeSearchHistoryQuery(typeof item === "string" ? item : item?.query);
+    if (!query) {
+      return;
+    }
+    const key = query.toLocaleLowerCase();
+    const searchedAt = Number(typeof item === "string" ? 0 : item?.searchedAt) || (source.length - index);
+    const existing = byQuery.get(key);
+    if (!existing || searchedAt > existing.searchedAt) {
+      byQuery.set(key, { query, searchedAt });
+    }
+  });
+  return [...byQuery.values()]
+    .sort((left, right) => right.searchedAt - left.searchedAt)
+    .slice(0, SEARCH_HISTORY_LIMIT);
+}
+
+function readLocalSearchHistory(storageKey) {
+  try {
+    return normalizeSearchHistoryItems(JSON.parse(localStorage.getItem(storageKey) || "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalSearchHistory(storageKey, items) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(items));
+  } catch {
+    // Per-origin storage is only a fallback for extension storage.
+  }
+}
+
+function notifySearchHistoryChanged() {
+  document.querySelectorAll('.cc98-rebuild-search input[type="search"]').forEach((input) => {
+    input.dispatchEvent(new Event(SEARCH_HISTORY_CHANGE_EVENT));
+  });
+}
+
+function hydrateSearchHistoryStorage() {
+  const storageKey = getSearchHistoryStorageKey();
+  if (searchHistoryStorageHydratedKey === storageKey || searchHistoryStorageHydratingKey === storageKey) {
+    return;
+  }
+  if (!globalThis.chrome?.storage?.local?.get) {
+    searchHistoryStorageHydratedKey = storageKey;
+    return;
+  }
+  searchHistoryStorageHydratingKey = storageKey;
+  const localItems = readLocalSearchHistory(storageKey);
+  globalThis.chrome.storage.local.get(storageKey, (result) => {
+    if (searchHistoryStorageHydratingKey !== storageKey) {
+      return;
+    }
+    searchHistoryStorageHydratingKey = "";
+    if (globalThis.chrome.runtime?.lastError) {
+      searchHistoryStorageHydratedKey = storageKey;
+      return;
+    }
+    const cachedItems = searchHistoryCache?.storageKey === storageKey ? searchHistoryCache.items : [];
+    const storedItems = normalizeSearchHistoryItems(result?.[storageKey]);
+    const merged = normalizeSearchHistoryItems([...cachedItems, ...storedItems, ...localItems]);
+    searchHistoryCache = { storageKey, items: merged };
+    searchHistoryStorageHydratedKey = storageKey;
+    writeLocalSearchHistory(storageKey, merged);
+    if (JSON.stringify(storedItems) !== JSON.stringify(merged)) {
+      globalThis.chrome.storage.local.set({ [storageKey]: merged });
+    }
+    notifySearchHistoryChanged();
+  });
+}
+
+function readSearchHistory() {
+  const storageKey = getSearchHistoryStorageKey();
+  if (searchHistoryCache?.storageKey === storageKey) {
+    hydrateSearchHistoryStorage();
+    return searchHistoryCache.items;
+  }
+  const items = readLocalSearchHistory(storageKey);
+  searchHistoryCache = { storageKey, items };
+  hydrateSearchHistoryStorage();
+  return items;
+}
+
+function writeSearchHistory(items) {
+  const storageKey = getSearchHistoryStorageKey();
+  const normalized = normalizeSearchHistoryItems(items);
+  searchHistoryCache = { storageKey, items: normalized };
+  searchHistoryStorageHydratedKey = storageKey;
+  searchHistoryStorageHydratingKey = "";
+  writeLocalSearchHistory(storageKey, normalized);
+  try {
+    globalThis.chrome?.storage?.local?.set?.({ [storageKey]: normalized });
+  } catch {
+    // Local fallback remains available in static previews.
+  }
+  notifySearchHistoryChanged();
+  return normalized;
+}
+
+function rememberSearchHistoryQuery(query) {
+  const normalized = normalizeSearchHistoryQuery(query);
+  if (!normalized) {
+    return;
+  }
+  const key = normalized.toLocaleLowerCase();
+  const previous = readSearchHistory().filter((item) => item.query.toLocaleLowerCase() !== key);
+  writeSearchHistory([{ query: normalized, searchedAt: Date.now() }, ...previous]);
 }
 
 function normalizeSuggestionText(text) {
@@ -8302,7 +25823,7 @@ function extractSuggestionTerms(title, keyword) {
 }
 
 function getSearchSuggestionEntryWeight(entry) {
-  const views = Number(entry.viewCount) || 0;
+  const views = parseCountValue(entry.viewCount);
   const replies = Number(entry.replyCount) || 0;
   return 1 + Math.log10(views + 1) * 1.8 + Math.log10(replies + 1) * 2.4;
 }
@@ -8325,13 +25846,13 @@ function collectSearchSuggestionEntriesFromDocument(doc) {
     let viewCount = structured?.viewCount || textParsed?.viewCount || "";
     let replyCount = structured?.replyCount || textParsed?.replyCount || "";
     if (!viewCount && infoParts?.info.classList.contains("card-topic-info")) {
-      viewCount = getFirstNumber(infoParts.parts[0]?.text);
+      viewCount = getFirstCountText(infoParts.parts[0]?.text);
     }
     if (!replyCount && infoParts?.info.classList.contains("card-topic-info")) {
       replyCount = getFirstNumber(infoParts.parts[1]?.text);
     }
     if (!viewCount && infoParts?.info.classList.contains("focus-topic-info")) {
-      viewCount = getFirstNumber(infoParts.parts[1]?.text);
+      viewCount = getFirstCountText(infoParts.parts[1]?.text);
     }
     entries.push({
       title: cleanTitle,
@@ -8615,7 +26136,7 @@ function getFuzzyItemScore(item, terms, combo, index) {
   const titleHitBonus = matchedTerms
     .filter((term) => title.includes(term.toLowerCase()))
     .reduce((sum, term) => sum + getTermImportance(term) * 22, 0);
-  const views = Number(item.viewCount) || 0;
+  const views = parseCountValue(item.viewCount);
   const replies = Number(item.replyCount) || 0;
   return matchedTerms.reduce((sum, term) => sum + getTermImportance(term) * 55, 0)
     + comboHitBonus
@@ -8838,14 +26359,69 @@ function createAdvancedFuzzySearchPanel(query, terms, feed, initialItems) {
   return section;
 }
 
-function renderSearchSuggestions(box, input, suggestions, state = "ready") {
+function renderSearchHistory(box, input, suggestions, state, onSubmit) {
+  const history = readSearchHistory();
+  if (!history.length) {
+    return false;
+  }
+  const section = createElement("section", "cc98-rebuild-search-history");
+  section.setAttribute("aria-label", "\u641c\u7d22\u5386\u53f2");
+  const header = createElement("div", "cc98-rebuild-search-history-header");
+  header.append(createElement("span", "cc98-rebuild-search-history-title", "\u641c\u7d22\u5386\u53f2"));
+  const clearButton = createElement("button", "cc98-rebuild-search-history-clear", "\u5168\u90e8\u6e05\u7a7a");
+  clearButton.type = "button";
+  clearButton.addEventListener("mousedown", (event) => event.preventDefault());
+  clearButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    writeSearchHistory([]);
+    renderSearchSuggestions(box, input, suggestions, state, onSubmit);
+  });
+  header.append(clearButton);
+  const list = createElement("div", "cc98-rebuild-search-history-list");
+  history.forEach((item) => {
+    const row = createElement("div", "cc98-rebuild-search-history-item");
+    const queryButton = createElement("button", "cc98-rebuild-search-history-query", item.query);
+    queryButton.type = "button";
+    queryButton.title = item.query;
+    queryButton.addEventListener("mousedown", (event) => event.preventDefault());
+    queryButton.addEventListener("click", () => {
+      input.value = item.query;
+      onSubmit(item.query);
+    });
+    const deleteButton = createElement("button", "cc98-rebuild-search-history-delete", "\u00d7");
+    deleteButton.type = "button";
+    deleteButton.title = `\u5220\u9664\u201c${item.query}\u201d`;
+    deleteButton.setAttribute("aria-label", `\u5220\u9664\u641c\u7d22\u5386\u53f2\uff1a${item.query}`);
+    deleteButton.addEventListener("mousedown", (event) => event.preventDefault());
+    deleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const itemKey = item.query.toLocaleLowerCase();
+      writeSearchHistory(readSearchHistory().filter((entry) => entry.query.toLocaleLowerCase() !== itemKey));
+      renderSearchSuggestions(box, input, suggestions, state, onSubmit);
+    });
+    row.append(queryButton, deleteButton);
+    list.append(row);
+  });
+  section.append(header, list);
+  box.append(section);
+  return true;
+}
+
+function renderSearchSuggestions(box, input, suggestions, state = "ready", onSubmit = submitRebuiltSearch) {
   box.textContent = "";
   box.dataset.state = state;
+  const hasHistory = renderSearchHistory(box, input, suggestions, state, onSubmit);
+  box.dataset.hasHistory = String(hasHistory);
   if (state === "idle") {
-    box.hidden = true;
+    box.hidden = !hasHistory;
     return;
   }
   box.hidden = false;
+  if (hasHistory) {
+    box.append(createElement("div", "cc98-rebuild-search-suggestion-heading", "\u641c\u7d22\u8054\u60f3"));
+  }
   if (state === "loading") {
     box.append(createElement("div", "cc98-rebuild-search-suggestion-status", "正在分析相关搜索..."));
     return;
@@ -8862,7 +26438,7 @@ function renderSearchSuggestions(box, input, suggestions, state = "ready") {
     });
     option.addEventListener("click", () => {
       input.value = suggestion;
-      submitRebuiltSearch(suggestion);
+      onSubmit(suggestion);
     });
     box.append(option);
   });
@@ -9186,7 +26762,33 @@ async function fetchSearchSuggestions(keyword) {
 }
 
 function createSearchForm() {
+  const nativeSearchState = getNativeSearchState();
+  let selectedSearchType = nativeSearchState.selected;
   const form = createElement("form", "cc98-rebuild-search");
+  form.dataset.searchType = selectedSearchType;
+  const typeWrap = createElement("div", "cc98-rebuild-search-type-wrap");
+  const typeButton = createElement("button", "cc98-rebuild-search-type", selectedSearchType);
+  typeButton.type = "button";
+  typeButton.setAttribute("aria-haspopup", "listbox");
+  typeButton.setAttribute("aria-expanded", "false");
+  const typeMenu = createElement("div", "cc98-rebuild-search-type-menu");
+  typeMenu.hidden = true;
+  typeMenu.setAttribute("role", "listbox");
+  const closeTypeMenu = () => {
+    typeMenu.hidden = true;
+    typeButton.setAttribute("aria-expanded", "false");
+  };
+  const setSearchType = (type) => {
+    selectedSearchType = type;
+    form.dataset.searchType = type;
+    typeButton.textContent = type;
+    closeTypeMenu();
+    selectNativeSearchType(getNativeSearchRoot(), type);
+    if (!canShowSearchSuggestionsForType(type)) {
+      window.clearTimeout(suggestTimer);
+      renderSearchSuggestions(suggestionBox, input, [], "idle");
+    }
+  };
   const input = createElement("input", "");
   input.type = "search";
   input.placeholder = "搜索主题";
@@ -9231,6 +26833,11 @@ function createSearchForm() {
 
   input.addEventListener("input", scheduleSuggestions);
   input.addEventListener("focus", scheduleSuggestions);
+  input.addEventListener(SEARCH_HISTORY_CHANGE_EVENT, () => {
+    if (document.activeElement === input || !suggestionBox.hidden) {
+      scheduleSuggestions();
+    }
+  });
   input.addEventListener("blur", () => {
     window.setTimeout(() => {
       suggestionBox.hidden = true;
@@ -9246,6 +26853,763 @@ function createSearchForm() {
     submitRebuiltSearch(keyword);
   });
   return form;
+}
+
+function createRebuiltSearchForm(preservedState = null) {
+  const nativeSearchState = getNativeSearchState();
+  let selectedSearchType = cleanupPostText(preservedState?.type) || nativeSearchState.selected;
+  if (!nativeSearchState.options.includes(selectedSearchType)) {
+    selectedSearchType = nativeSearchState.selected;
+  }
+  let suggestTimer = 0;
+  const form = createElement("form", "cc98-rebuild-search");
+  form.dataset.searchType = selectedSearchType;
+
+  const typeWrap = createElement("div", "cc98-rebuild-search-type-wrap");
+  const typeButton = createElement("button", "cc98-rebuild-search-type", selectedSearchType);
+  typeButton.type = "button";
+  typeButton.setAttribute("aria-haspopup", "listbox");
+  typeButton.setAttribute("aria-expanded", "false");
+  const typeMenu = createElement("div", "cc98-rebuild-search-type-menu");
+  typeMenu.hidden = true;
+  typeMenu.setAttribute("role", "listbox");
+
+  const input = createElement("input", "");
+  input.type = "search";
+  input.placeholder = "\u8bf7\u8f93\u5165\u641c\u7d22\u5185\u5bb9";
+  input.value = typeof preservedState?.value === "string"
+    ? preservedState.value
+    : getCurrentSearchKeyword();
+  input.autocomplete = "off";
+  const inputWrap = createElement("div", "cc98-rebuild-search-field");
+  const suggestionBox = createElement("div", "cc98-rebuild-search-suggestions");
+  suggestionBox.hidden = true;
+  inputWrap.append(input, suggestionBox);
+
+  const closeTypeMenu = () => {
+    typeMenu.hidden = true;
+    typeButton.setAttribute("aria-expanded", "false");
+  };
+  const submitCurrentSearch = (value) => submitRebuiltSearch(value, selectedSearchType);
+  const setSearchType = (type) => {
+    selectedSearchType = type;
+    form.dataset.searchType = type;
+    typeButton.textContent = type;
+    closeTypeMenu();
+    selectNativeSearchType(getNativeSearchRoot(), type);
+    if (!canShowSearchSuggestionsForType(type)) {
+      window.clearTimeout(suggestTimer);
+      renderSearchSuggestions(suggestionBox, input, [], "idle", submitCurrentSearch);
+    }
+  };
+
+  nativeSearchState.options.forEach((type) => {
+    const option = createElement("button", "cc98-rebuild-search-type-option", type);
+    option.type = "button";
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", String(type === selectedSearchType));
+    option.addEventListener("mousedown", (event) => event.preventDefault());
+    option.addEventListener("click", () => {
+      typeMenu.querySelectorAll(".cc98-rebuild-search-type-option").forEach((node) => {
+        node.setAttribute("aria-selected", String(node === option));
+      });
+      setSearchType(type);
+      input.focus({ preventScroll: true });
+    });
+    typeMenu.append(option);
+  });
+  typeButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const nextOpen = typeMenu.hidden;
+    typeMenu.hidden = !nextOpen;
+    typeButton.setAttribute("aria-expanded", String(nextOpen));
+  });
+  typeWrap.addEventListener("focusout", () => {
+    window.setTimeout(() => {
+      if (form.dataset.cc98PreserveTypeMenu === "true") {
+        return;
+      }
+      if (!typeWrap.contains(document.activeElement)) {
+        closeTypeMenu();
+      }
+    }, 0);
+  });
+  typeWrap.append(typeButton, typeMenu);
+
+  const submitButton = createElement("button", "cc98-rebuild-search-submit", "\u641c\u7d22");
+  submitButton.type = "submit";
+  form.append(typeWrap, inputWrap, submitButton);
+
+  const scheduleSuggestions = () => {
+    window.clearTimeout(suggestTimer);
+    const keyword = input.value.trim();
+    if (keyword.length < 2 || !canShowSearchSuggestionsForType(selectedSearchType)) {
+      renderSearchSuggestions(suggestionBox, input, [], "idle", submitCurrentSearch);
+      return;
+    }
+    const cached = searchSuggestionCache.get(normalizeSuggestionText(keyword));
+    if (cached && cached.suggestions.length) {
+      renderSearchSuggestions(suggestionBox, input, cached.suggestions, "ready", submitCurrentSearch);
+    }
+    suggestTimer = window.setTimeout(async () => {
+      const sequence = ++searchSuggestionSequence;
+      const typeAtRequest = selectedSearchType;
+      renderSearchSuggestions(suggestionBox, input, cached?.suggestions ?? [], cached ? "ready" : "loading", submitCurrentSearch);
+      try {
+        const suggestions = await fetchSearchSuggestions(keyword);
+        if (sequence === searchSuggestionSequence && input.value.trim() === keyword && selectedSearchType === typeAtRequest) {
+          renderSearchSuggestions(suggestionBox, input, suggestions, "ready", submitCurrentSearch);
+        }
+      } catch {
+        if (sequence === searchSuggestionSequence) {
+          renderSearchSuggestions(suggestionBox, input, cached?.suggestions ?? [], "ready", submitCurrentSearch);
+        }
+      }
+    }, 900);
+  };
+
+  input.addEventListener("input", scheduleSuggestions);
+  input.addEventListener("focus", () => {
+    closeTypeMenu();
+    scheduleSuggestions();
+  });
+  input.addEventListener(SEARCH_HISTORY_CHANGE_EVENT, () => {
+    if (document.activeElement === input || !suggestionBox.hidden) {
+      scheduleSuggestions();
+    }
+  });
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      suggestionBox.hidden = true;
+    }, 140);
+  });
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const keyword = input.value.trim();
+    if (!keyword) {
+      input.focus();
+      return;
+    }
+    submitCurrentSearch(keyword);
+  });
+  return form;
+}
+
+function formatReadLaterTime(timestamp) {
+  if (!Number(timestamp)) {
+    return "";
+  }
+  try {
+    return new Date(Number(timestamp)).toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch {
+    return "";
+  }
+}
+
+function exportReadLaterItems(anchor) {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    items: readReadLaterItems()
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `cc98-reborn-read-later-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1200);
+  showRebuiltTransientToast(anchor, "\u5df2\u5bfc\u51fa\u7a0d\u540e\u518d\u770b");
+}
+
+function importReadLaterItemsFromFile(file, anchor) {
+  if (!(file instanceof File)) {
+    return;
+  }
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const parsed = JSON.parse(String(reader.result || ""));
+      const imported = Array.isArray(parsed) ? parsed : parsed?.items;
+      if (!Array.isArray(imported)) {
+        throw new Error("Invalid read-later payload");
+      }
+      const existing = readReadLaterItems();
+      const merged = [...imported, ...existing].map((item) => ({
+        ...item,
+        key: item?.key || getReadLaterKeyFromHref(item?.href)
+      }));
+      writeReadLaterItems(merged);
+      showRebuiltTransientToast(anchor, "\u5df2\u5bfc\u5165\u7a0d\u540e\u518d\u770b");
+      scheduleRebuild();
+    } catch {
+      showRebuiltTransientToast(anchor, "\u5bfc\u5165\u5931\u8d25");
+    }
+  });
+  reader.readAsText(file, "utf-8");
+}
+
+function readLaterItemMatchesQuery(item, query) {
+  const keyword = normalizeSuggestionText(query).toLowerCase();
+  if (!keyword) {
+    return true;
+  }
+  const haystack = [
+    item.title,
+    item.board,
+    item.user,
+    item.uid,
+    item.meta,
+    item.href
+  ].map((value) => normalizeSuggestionText(value).toLowerCase()).join(" ");
+  return haystack.includes(keyword);
+}
+
+function sortReadLaterItems(items = readReadLaterItems()) {
+  return [...items].sort((a, b) => {
+    if (Boolean(a.readAt) !== Boolean(b.readAt)) {
+      return a.readAt ? 1 : -1;
+    }
+    return (b.addedAt || 0) - (a.addedAt || 0);
+  });
+}
+
+function renderReadLaterSidebarContent(sidebar, options = {}) {
+  if (!(sidebar instanceof HTMLElement)) {
+    return;
+  }
+  const items = sortReadLaterItems(options.items || readReadLaterItems());
+  const filteredItems = items.filter((item) => readLaterItemMatchesQuery(item, readLaterSidebarSearchQuery));
+  const pageSize = 8;
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  readLaterSidebarPage = Math.max(1, Math.min(totalPages, Number(readLaterSidebarPage) || 1));
+  const pageItems = filteredItems.slice(
+    (readLaterSidebarPage - 1) * pageSize,
+    readLaterSidebarPage * pageSize
+  );
+  const unreadCount = items.filter((item) => !item.readAt).length;
+  const count = sidebar.querySelector(".cc98-rebuild-read-later-sidebar-count");
+  const summary = sidebar.querySelector(".cc98-rebuild-read-later-sidebar-summary");
+  const viewport = sidebar.querySelector(".cc98-rebuild-read-later-sidebar-viewport");
+  const pager = sidebar.querySelector(".cc98-rebuild-read-later-sidebar-pager");
+  const clearReadButton = sidebar.querySelector(".cc98-rebuild-read-later-sidebar-clear-read");
+  const resetSearchButton = sidebar.querySelector(".cc98-rebuild-read-later-sidebar-search-reset");
+  if (!(viewport instanceof HTMLElement) || !(pager instanceof HTMLElement)) {
+    return;
+  }
+
+  if (count instanceof HTMLElement) {
+    count.textContent = `${unreadCount} / ${items.length}`;
+    count.title = `未读 ${unreadCount}，全部 ${items.length}`;
+  }
+  if (summary instanceof HTMLElement) {
+    summary.textContent = readLaterSidebarSearchQuery
+      ? `搜索结果 ${filteredItems.length} / ${items.length}`
+      : `未读 ${unreadCount} · 全部 ${items.length}`;
+  }
+  if (clearReadButton instanceof HTMLButtonElement) {
+    clearReadButton.disabled = !items.some((item) => item.readAt);
+  }
+  if (resetSearchButton instanceof HTMLButtonElement) {
+    resetSearchButton.disabled = !readLaterSidebarSearchQuery;
+  }
+
+  const previousScrollTop = viewport.scrollTop;
+  viewport.replaceChildren();
+  if (!items.length) {
+    const empty = createElement("div", "cc98-rebuild-read-later-sidebar-empty");
+    empty.append(createElement("strong", "", "暂无稍后再看"));
+    empty.append(createElement("span", "", "点击新帖右侧的 🕗 即可加入。"));
+    viewport.append(empty);
+  } else if (!filteredItems.length) {
+    const empty = createElement("div", "cc98-rebuild-read-later-sidebar-empty");
+    empty.append(createElement("strong", "", "没有匹配项"));
+    empty.append(createElement("span", "", "换一个关键词再试。"));
+    viewport.append(empty);
+  } else {
+    pageItems.forEach((item) => {
+      const row = createElement("article", `cc98-rebuild-read-later-sidebar-item${item.readAt ? " is-read" : ""}`);
+      row.dataset.readLaterKey = item.key;
+      const top = createElement("div", "cc98-rebuild-read-later-sidebar-item-top");
+      const state = createElement(
+        "span",
+        `cc98-rebuild-read-later-sidebar-state${item.readAt ? " is-read" : ""}`,
+        item.readAt ? "已读" : "未读"
+      );
+      top.append(state);
+      if (item.board) {
+        top.append(createElement("span", "cc98-rebuild-read-later-sidebar-board", item.board));
+      }
+      const controls = createElement("div", "cc98-rebuild-read-later-sidebar-item-controls");
+      const toggleRead = createButton("cc98-rebuild-read-later-sidebar-icon", item.readAt ? "↶" : "✓", () => {
+        markReadLaterItemRead(item.key, !item.readAt);
+      });
+      toggleRead.title = item.readAt ? "标为未读" : "标为已读";
+      toggleRead.setAttribute("aria-label", `${toggleRead.title}: ${item.title}`);
+      const remove = createButton("cc98-rebuild-read-later-sidebar-icon is-delete", "×", () => {
+        removeReadLaterItem(item.key);
+        showRebuiltTransientToast(sidebar, "已从稍后再看删除");
+      });
+      remove.title = "删除";
+      remove.setAttribute("aria-label", `删除: ${item.title}`);
+      controls.append(toggleRead, remove);
+      top.append(controls);
+      row.append(top);
+
+      const title = createLink("cc98-rebuild-read-later-sidebar-title", item.title, item.href);
+      title.addEventListener("click", () => markReadLaterItemRead(item.key, true));
+      row.append(title);
+      const meta = [
+        item.user,
+        item.addedAt ? formatReadLaterTime(item.addedAt) : ""
+      ].filter(Boolean).join(" · ");
+      if (meta) {
+        row.append(createElement("p", "cc98-rebuild-read-later-sidebar-meta", meta));
+      }
+      viewport.append(row);
+    });
+  }
+  viewport.scrollTop = options.preserveScroll ? previousScrollTop : 0;
+
+  pager.replaceChildren();
+  const prev = createButton("cc98-rebuild-read-later-sidebar-page-button", "上一页", () => {
+    readLaterSidebarPage = Math.max(1, readLaterSidebarPage - 1);
+    renderReadLaterSidebarContent(sidebar);
+  });
+  prev.disabled = readLaterSidebarPage <= 1;
+  const pageInfo = createElement(
+    "span",
+    "cc98-rebuild-read-later-sidebar-page-info",
+    `${readLaterSidebarPage} / ${totalPages}`
+  );
+  const next = createButton("cc98-rebuild-read-later-sidebar-page-button", "下一页", () => {
+    readLaterSidebarPage = Math.min(totalPages, readLaterSidebarPage + 1);
+    renderReadLaterSidebarContent(sidebar);
+  });
+  next.disabled = readLaterSidebarPage >= totalPages;
+  pager.append(prev, pageInfo, next);
+}
+
+function createReadLaterSidebar() {
+  const sidebar = createElement("aside", "cc98-rebuild-read-later-sidebar");
+  sidebar.setAttribute("aria-label", "稍后再看");
+  const heading = createElement("div", "cc98-rebuild-read-later-sidebar-heading");
+  const headingTitle = createElement("div", "cc98-rebuild-read-later-sidebar-heading-title");
+  headingTitle.append(createElement("h2", "", "稍后再看"));
+  headingTitle.append(createElement("span", "cc98-rebuild-read-later-sidebar-count", "0 / 0"));
+  const headingActions = createElement("div", "cc98-rebuild-read-later-sidebar-heading-actions");
+  const clearRead = createButton("cc98-rebuild-read-later-sidebar-clear-read", "清已读", () => {
+    writeReadLaterItems(readReadLaterItems().filter((item) => !item.readAt));
+    showRebuiltTransientToast(sidebar, "已清除已读项");
+  });
+  const openAll = createLink("cc98-rebuild-read-later-sidebar-open-all", "全部", getReadLaterPageHref());
+  headingActions.append(clearRead, openAll);
+  heading.append(headingTitle, headingActions);
+
+  const form = createElement("form", "cc98-rebuild-read-later-sidebar-search");
+  const input = createElement("input", "");
+  input.type = "search";
+  input.placeholder = "搜索稍后再看";
+  input.autocomplete = "off";
+  input.value = readLaterSidebarSearchQuery;
+  input.setAttribute("aria-label", "搜索稍后再看");
+  const submit = createElement("button", "cc98-rebuild-read-later-sidebar-search-submit", "搜索");
+  submit.type = "submit";
+  const reset = createButton("cc98-rebuild-read-later-sidebar-search-reset", "×", () => {
+    readLaterSidebarSearchQuery = "";
+    readLaterSidebarPage = 1;
+    input.value = "";
+    renderReadLaterSidebarContent(sidebar);
+    input.focus();
+  });
+  reset.title = "清空搜索";
+  reset.setAttribute("aria-label", "清空搜索");
+  form.append(input, submit, reset);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    readLaterSidebarSearchQuery = input.value.trim();
+    readLaterSidebarPage = 1;
+    renderReadLaterSidebarContent(sidebar);
+  });
+  input.addEventListener("search", () => {
+    if (!input.value) {
+      readLaterSidebarSearchQuery = "";
+      readLaterSidebarPage = 1;
+      renderReadLaterSidebarContent(sidebar);
+    }
+  });
+
+  sidebar.append(
+    heading,
+    form,
+    createElement("p", "cc98-rebuild-read-later-sidebar-summary"),
+    createElement("div", "cc98-rebuild-read-later-sidebar-viewport"),
+    createElement("div", "cc98-rebuild-read-later-sidebar-pager")
+  );
+  renderReadLaterSidebarContent(sidebar);
+  return sidebar;
+}
+
+function createRebuiltBackToTopControl() {
+  const button = createButton("cc98-rebuild-back-to-top", "", () => {
+    seamlessScrollInteractionRevision += 1;
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  });
+  button.title = "回到页面顶部";
+  button.setAttribute("aria-label", "回到页面顶部");
+  const icon = createElement("span", "cc98-rebuild-back-to-top-icon", "▲");
+  icon.setAttribute("aria-hidden", "true");
+  button.append(icon, createElement("span", "cc98-rebuild-back-to-top-label", "回到顶部"));
+  return button;
+}
+
+function syncReadLaterUi() {
+  const items = readReadLaterItems();
+  const savedKeys = new Set(items.map((item) => item.key));
+  document.querySelectorAll(".cc98-rebuild-read-later-button[data-read-later-key]").forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+    const saved = savedKeys.has(button.dataset.readLaterKey || "");
+    const title = saved ? "移出稍后再看" : "加入稍后再看";
+    button.classList.toggle("is-saved", saved);
+    button.title = title;
+    button.setAttribute("aria-label", `${title}: ${button.dataset.readLaterTitle || "帖子"}`);
+  });
+  document.querySelectorAll(".cc98-rebuild-read-later-sidebar").forEach((sidebar) => {
+    renderReadLaterSidebarContent(sidebar, { items, preserveScroll: true });
+  });
+}
+
+function renderReadLaterSearchControls(section, totalCount, filteredCount) {
+  const form = createElement("form", "cc98-rebuild-read-later-search");
+  const input = createElement("input", "");
+  input.type = "search";
+  input.placeholder = "\u641c\u7d22\u7a0d\u540e\u518d\u770b";
+  input.value = readLaterSearchQuery;
+  input.autocomplete = "off";
+  const submit = createElement("button", "cc98-rebuild-search-submit", "\u641c\u7d22");
+  submit.type = "submit";
+  const reset = createButton("cc98-rebuild-action", "\u6e05\u7a7a", () => {
+    readLaterSearchQuery = "";
+    readLaterPage = 1;
+    scheduleRebuild();
+  });
+  reset.type = "button";
+  reset.disabled = !readLaterSearchQuery;
+  form.append(input, submit, reset);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    readLaterSearchQuery = input.value.trim();
+    readLaterPage = 1;
+    scheduleRebuild();
+  });
+  section.append(form);
+  if (readLaterSearchQuery) {
+    section.append(createElement("p", "cc98-rebuild-card-meta", `\u641c\u7d22\u7ed3\u679c ${filteredCount} / ${totalCount}`));
+  }
+}
+
+function renderReadLaterPager(section, totalPages) {
+  if (totalPages <= 1) {
+    return;
+  }
+  const pager = createElement("div", "cc98-rebuild-read-later-pager");
+  const prev = createButton("cc98-rebuild-mini-action", "\u4e0a\u4e00\u9875", () => {
+    readLaterPage = Math.max(1, readLaterPage - 1);
+    scheduleRebuild();
+  });
+  prev.disabled = readLaterPage <= 1;
+  const info = createElement("span", "cc98-rebuild-read-later-page-info", `${readLaterPage} / ${totalPages}`);
+  const next = createButton("cc98-rebuild-mini-action", "\u4e0b\u4e00\u9875", () => {
+    readLaterPage = Math.min(totalPages, readLaterPage + 1);
+    scheduleRebuild();
+  });
+  next.disabled = readLaterPage >= totalPages;
+  pager.append(prev, info, next);
+  section.append(pager);
+}
+
+function renderReadLaterPage(app) {
+  markCurrentTopicReadLaterRead();
+  const section = createElement("section", "cc98-rebuild-section cc98-rebuild-read-later-page");
+  const heading = createElement("div", "cc98-rebuild-section-heading cc98-rebuild-read-later-heading");
+  heading.append(createElement("h2", "", "\u7a0d\u540e\u518d\u770b"));
+  const actions = createElement("div", "cc98-rebuild-read-later-actions");
+  const importInput = createElement("input", "");
+  importInput.type = "file";
+  importInput.accept = "application/json,.json";
+  importInput.hidden = true;
+  const importButton = createButton("cc98-rebuild-action", "\u5bfc\u5165", () => importInput.click());
+  importInput.addEventListener("change", () => {
+    importReadLaterItemsFromFile(importInput.files?.[0], importButton);
+    importInput.value = "";
+  });
+  const exportButton = createButton("cc98-rebuild-action", "\u5bfc\u51fa", () => exportReadLaterItems(exportButton));
+  const clearReadButton = createButton("cc98-rebuild-action cc98-rebuild-read-later-clear", "\u6e05\u9664\u5df2\u8bfb", () => {
+    writeReadLaterItems(readReadLaterItems().filter((item) => !item.readAt));
+    showRebuiltTransientToast(clearReadButton, "\u5df2\u6e05\u9664\u5df2\u8bfb\u9879");
+    scheduleRebuild();
+  });
+  actions.append(importButton, exportButton, clearReadButton, importInput);
+  heading.append(actions);
+  section.append(heading);
+
+  const allItems = readReadLaterItems()
+    .sort((a, b) => {
+      if (Boolean(a.readAt) !== Boolean(b.readAt)) {
+        return a.readAt ? 1 : -1;
+      }
+      return (b.addedAt || 0) - (a.addedAt || 0);
+    });
+  const filteredItems = allItems.filter((item) => readLaterItemMatchesQuery(item, readLaterSearchQuery));
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  readLaterPage = Math.max(1, Math.min(totalPages, Number(readLaterPage) || 1));
+  const items = filteredItems.slice((readLaterPage - 1) * pageSize, readLaterPage * pageSize);
+  renderReadLaterSearchControls(section, allItems.length, filteredItems.length);
+  const summary = createElement("p", "cc98-rebuild-card-meta", `\u672a\u8bfb ${allItems.filter((item) => !item.readAt).length} / \u5168\u90e8 ${allItems.length}`);
+  section.append(summary);
+  if (!allItems.length) {
+    const empty = createElement("div", "cc98-rebuild-empty-state");
+    empty.append(createElement("h2", "", "\u6ca1\u6709\u7a0d\u540e\u518d\u770b"));
+    empty.append(createElement("p", "", "\u5728\u65b0\u5e16\u3001\u5341\u5927\u3001\u641c\u7d22\u3001\u5173\u6ce8\u548c\u7cbe\u9009\u9875\u9762\u7684\u5e16\u5b50\u53f3\u4fa7\u70b9\u51fb\u201c\u7a0d\u540e\u518d\u770b\u201d\u5373\u53ef\u6536\u85cf\u5230\u8fd9\u91cc\u3002"));
+    section.append(empty);
+    app.append(section);
+    return;
+  }
+  if (!filteredItems.length) {
+    const empty = createElement("div", "cc98-rebuild-empty-state");
+    empty.append(createElement("h2", "", "\u6ca1\u6709\u5339\u914d\u9879"));
+    empty.append(createElement("p", "", "\u6362\u4e00\u4e2a\u5173\u952e\u8bcd\u518d\u8bd5\u3002"));
+    section.append(empty);
+    app.append(section);
+    return;
+  }
+
+  const list = createElement("div", "cc98-rebuild-read-later-list");
+  items.forEach((item) => {
+    const card = createElement("article", `cc98-rebuild-card cc98-rebuild-read-later-item${item.readAt ? " is-read" : ""}`);
+    const top = createElement("div", "cc98-rebuild-card-top");
+    top.append(createElement("span", `cc98-rebuild-read-later-status${item.readAt ? " is-read" : ""}`, item.readAt ? "\u5df2\u8bfb" : "\u672a\u8bfb"));
+    if (item.board) {
+      top.append(item.boardHref ? createLink("cc98-rebuild-chip", item.board, item.boardHref) : createElement("span", "cc98-rebuild-chip", item.board));
+    }
+    if (item.user) {
+      top.append(createElement("span", "cc98-rebuild-muted", item.uid ? `${item.user} 路 ${item.uid}` : item.user));
+    }
+    card.append(top);
+    const title = createLink("cc98-rebuild-card-title", item.title, item.href);
+    title.addEventListener("click", () => {
+      markReadLaterItemRead(item.key, true);
+    });
+    card.append(title);
+    const metaParts = [
+      item.meta,
+      item.addedAt ? `\u52a0\u5165 ${formatReadLaterTime(item.addedAt)}` : "",
+      item.readAt ? `\u9605\u8bfb ${formatReadLaterTime(item.readAt)}` : ""
+    ].filter(Boolean);
+    if (metaParts.length) {
+      card.append(createElement("p", "cc98-rebuild-card-meta", metaParts.join("  /  ")));
+    }
+    const itemActions = createElement("div", "cc98-rebuild-read-later-item-actions");
+    itemActions.append(createLink("cc98-rebuild-mini-action", "\u9605\u8bfb", item.href));
+    itemActions.lastElementChild?.addEventListener?.("click", () => markReadLaterItemRead(item.key, true));
+    itemActions.append(createButton("cc98-rebuild-mini-action", item.readAt ? "\u6807\u4e3a\u672a\u8bfb" : "\u6807\u4e3a\u5df2\u8bfb", () => {
+      markReadLaterItemRead(item.key, !item.readAt);
+      scheduleRebuild();
+    }));
+    itemActions.append(createButton("cc98-rebuild-mini-action cc98-rebuild-read-later-delete", "\u5220\u9664", () => {
+      removeReadLaterItem(item.key);
+      showRebuiltTransientToast(card, "\u5df2\u5220\u9664");
+      scheduleRebuild();
+    }));
+    card.append(itemActions);
+    list.append(card);
+  });
+  section.append(list);
+  renderReadLaterPager(section, totalPages);
+  app.append(section);
+}
+
+function getBlacklistGroups() {
+  const rules = getBlacklistRules(lastSettings);
+  return [
+    {
+      key: "users",
+      title: "用户 ID 黑名单",
+      description: "按用户 ID 文本严格匹配；历史纯数字规则会继续按 UID 兼容匹配。",
+      values: rules.userIds,
+      placeholder: "输入用户 ID，例如 Coran"
+    },
+    {
+      key: "keywords",
+      title: "标题关键词",
+      description: "匹配主题标题中的关键词。",
+      values: rules.titleKeywords,
+      placeholder: "输入标题关键词"
+    },
+    {
+      key: "boards",
+      title: "屏蔽版面",
+      description: "匹配版面名称或版面 ID。",
+      values: rules.boards,
+      placeholder: "输入版面名或版面 ID"
+    }
+  ];
+}
+
+function updateBlacklistGroup(key, values) {
+  const rules = getBlacklistRules(lastSettings);
+  const normalizedValues = [...new Set((values || []).map((value) => String(value).trim()).filter(Boolean))];
+  if (key === "users") {
+    rules.userIds = normalizedValues.map(normalizeBlockedUserId).filter(Boolean);
+  } else if (key === "keywords") {
+    rules.titleKeywords = normalizedValues;
+  } else if (key === "boards") {
+    rules.boards = normalizedValues;
+  }
+  writeBlacklistRules(rules);
+}
+
+function addBlacklistValue(key, value, anchor) {
+  const raw = String(value || "").trim();
+  const nextValue = key === "users" ? normalizeBlockedUserId(raw) : raw;
+  if (!nextValue) {
+    showRebuiltTransientToast(anchor, key === "users" ? "请输入有效用户 ID" : "请输入有效规则");
+    return false;
+  }
+  const group = getBlacklistGroups().find((item) => item.key === key);
+  const values = group?.values || [];
+  if (values.includes(nextValue)) {
+    showRebuiltTransientToast(anchor, "规则已存在");
+    return false;
+  }
+  updateBlacklistGroup(key, [nextValue, ...values]);
+  showRebuiltTransientToast(anchor, "已加入黑名单");
+  return true;
+}
+
+function removeBlacklistValue(key, value) {
+  const group = getBlacklistGroups().find((item) => item.key === key);
+  updateBlacklistGroup(key, (group?.values || []).filter((item) => item !== value));
+}
+
+function getBlacklistVisibleGroups() {
+  const groups = getBlacklistGroups();
+  return blacklistFilterType === "all" ? groups : groups.filter((group) => group.key === blacklistFilterType);
+}
+
+function renderBlacklistTabs(section) {
+  const tabs = createElement("div", "cc98-rebuild-blacklist-tabs");
+  [
+    ["all", "全部"],
+    ["users", "UID"],
+    ["keywords", "标题"],
+    ["boards", "版面"]
+  ].forEach(([key, label]) => {
+    const button = createButton("cc98-rebuild-mini-action", label, () => {
+      blacklistFilterType = key;
+      scheduleRebuild();
+    });
+    button.type = "button";
+    button.classList.toggle("is-active", blacklistFilterType === key);
+    tabs.append(button);
+  });
+  section.append(tabs);
+}
+
+function renderBlacklistGroup(group) {
+  const card = createElement("article", "cc98-rebuild-card cc98-rebuild-blacklist-group");
+  const head = createElement("div", "cc98-rebuild-card-top cc98-rebuild-blacklist-group-head");
+  head.append(createElement("strong", "cc98-rebuild-blacklist-group-title", group.title));
+  head.append(createElement("span", "cc98-rebuild-muted", `${group.values.length} 条`));
+  card.append(head);
+  card.append(createElement("p", "cc98-rebuild-card-meta", group.description));
+
+  const form = createElement("form", "cc98-rebuild-blacklist-form");
+  const input = createElement("input", "");
+  input.type = group.key === "users" ? "text" : "search";
+  input.inputMode = "text";
+  input.placeholder = group.placeholder;
+  input.autocomplete = "off";
+  const submit = createElement("button", "cc98-rebuild-search-submit", "加入");
+  submit.type = "submit";
+  form.append(input, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (addBlacklistValue(group.key, input.value, submit)) {
+      input.value = "";
+    }
+  });
+  card.append(form);
+
+  const list = createElement("div", "cc98-rebuild-blacklist-list");
+  if (!group.values.length) {
+    list.append(createElement("p", "cc98-rebuild-card-meta", "暂无规则。"));
+  } else {
+    group.values.forEach((value) => {
+      const row = createElement("div", "cc98-rebuild-blacklist-item");
+      row.append(createElement("span", "cc98-rebuild-blacklist-value", value));
+      row.append(createButton("cc98-rebuild-mini-action cc98-rebuild-blacklist-delete", "删除", () => {
+        removeBlacklistValue(group.key, value);
+      }));
+      list.append(row);
+    });
+  }
+  card.append(list);
+  return card;
+}
+
+function renderBlacklistPlaceholderEditor(section) {
+  const rules = getBlacklistRules(lastSettings);
+  const card = createElement("article", "cc98-rebuild-card cc98-rebuild-blacklist-placeholder");
+  card.append(createElement("strong", "cc98-rebuild-blacklist-group-title", "折叠占位文案"));
+  const form = createElement("form", "cc98-rebuild-blacklist-form");
+  const input = createElement("input", "");
+  input.type = "text";
+  input.value = rules.placeholderText;
+  input.placeholder = DEFAULT_SETTINGS.placeholderText;
+  const submit = createElement("button", "cc98-rebuild-search-submit", "保存");
+  submit.type = "submit";
+  form.append(input, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    writeBlacklistRules({
+      ...getBlacklistRules(lastSettings),
+      placeholderText: input.value
+    });
+    showRebuiltTransientToast(submit, "已保存");
+  });
+  card.append(form);
+  section.append(card);
+}
+
+function renderBlacklistPage(app, options = {}) {
+  const section = createElement("section", "cc98-rebuild-section cc98-rebuild-blacklist-page");
+  const heading = createElement("div", "cc98-rebuild-section-heading cc98-rebuild-read-later-heading");
+  heading.append(createElement("h2", "", "黑名单列表"));
+  if (!options.embedded) {
+    const actions = createElement("div", "cc98-rebuild-read-later-actions");
+    actions.append(createLink("cc98-rebuild-action", "返回个人中心", buildCc98RouteHref("/usercenter")));
+    heading.append(actions);
+  }
+  section.append(heading);
+  section.append(createElement("p", "cc98-rebuild-card-meta", "规则仅存储在本地。用户 ID 黑名单按文本精确匹配；纯数字旧规则会继续按 UID 兼容匹配。"));
+  renderBlacklistTabs(section);
+  renderBlacklistPlaceholderEditor(section);
+  const list = createElement("div", "cc98-rebuild-blacklist-groups");
+  getBlacklistVisibleGroups().forEach((group) => list.append(renderBlacklistGroup(group)));
+  section.append(list);
+  app.append(section);
 }
 
 function getErrorPageData() {
@@ -9272,6 +27636,7 @@ function getErrorPageData() {
 
 function renderErrorPage(app) {
   const data = getErrorPageData();
+  data.action.href = data.tone === "auth" ? buildCc98RouteHref("/logOn") : getCc98HomeHref();
   const shell = createElement("section", `cc98-rebuild-error-page is-${data.tone}`);
   const badge = createElement("div", "cc98-rebuild-error-code", data.code);
   const content = createElement("div", "cc98-rebuild-error-content");
@@ -9286,7 +27651,7 @@ function renderErrorPage(app) {
       history.back();
       return;
     }
-    location.href = "https://www.cc98.org/";
+    location.href = getCc98HomeHref();
   }));
   content.append(actions);
   shell.append(badge, content);
@@ -9306,24 +27671,499 @@ function renderGeneric(app) {
   app.append(section);
 }
 
-function renderRebuiltUi() {
+function getSeamlessNativeContentSelector(kind = getPageKind()) {
+  if (kind === "home") {
+    return ".announcementContent article, .mainPageList";
+  }
+  if (kind === "boardList") {
+    return ".anArea";
+  }
+  if (kind === "topics" || kind === "search") {
+    return ".focus-topic, .card-topic";
+  }
+  if (kind === "boardSearch") {
+    return ".focus-board-area, #noResultBoard";
+  }
+  if (kind === "board") {
+    return ".board-head-body, .board-head-bar, .board-postItem-body";
+  }
+  if (kind === "post") {
+    return ".reply";
+  }
+  return "";
+}
+
+function hashSeamlessNativeContentPart(hash, value) {
+  const text = String(value ?? "");
+  let next = hash >>> 0;
+  for (let index = 0; index < text.length; index += 1) {
+    next ^= text.charCodeAt(index);
+    next = Math.imul(next, 16777619);
+  }
+  return next >>> 0;
+}
+
+function getSeamlessNativeContentSignature(kind = getPageKind()) {
+  const selector = getSeamlessNativeContentSelector(kind);
+  if (!selector || !document.body) {
+    return "";
+  }
+  const app = document.querySelector("#cc98-comfort-app");
+  const roots = [...document.querySelectorAll(selector)]
+    .filter((node) => node instanceof HTMLElement && !app?.contains(node) && !node.closest("#cc98-comfort-app"))
+    .slice(0, 180);
+  let hash = 2166136261;
+  const append = (value) => {
+    hash = hashSeamlessNativeContentPart(hash, value);
+    hash = hashSeamlessNativeContentPart(hash, "\u001f");
+  };
+  append(getRoutePageKey());
+  append(kind);
+  append(roots.length);
+
+  roots.forEach((root, rootIndex) => {
+    append(rootIndex);
+    append(root.id);
+    append(root.childElementCount);
+    const text = cleanupPostText(root.textContent)
+      .replace(/\b\d{1,3}:\d{2}(?::\d{2})?\b/g, "<clock>");
+    append(text.length);
+    append(text.slice(0, 560));
+    append(text.slice(-560));
+
+    const links = [...root.querySelectorAll("a[href]")].slice(0, 96);
+    append(links.length);
+    links.forEach((link) => {
+      append(link.getAttribute("href") || link.href || "");
+      append(cleanupPostText(link.textContent).slice(0, 180));
+    });
+
+    const mediaNodes = [...root.querySelectorAll("img, video, audio, source, [style*='url(']")].slice(0, 180);
+    append(mediaNodes.length);
+    mediaNodes.forEach((node) => {
+      append(node.tagName);
+      [
+        "src",
+        "srcset",
+        "data-src",
+        "data-srcset",
+        "data-original",
+        "data-url",
+        "data-avatar",
+        "data-portrait",
+        "data-original-src",
+        "data-lazy-src",
+        "data-actualsrc",
+        "poster"
+      ].forEach((attribute) => append(node.getAttribute?.(attribute) || ""));
+      append(node.currentSrc || "");
+      const backgroundUrl = node.getAttribute?.("style")?.match(/url\(["']?([^"')]+)["']?\)/i)?.[1] || "";
+      append(backgroundUrl);
+    });
+  });
+  return `${kind}:${roots.length}:${(hash >>> 0).toString(36)}`;
+}
+
+function rememberSeamlessNativeContentSignature() {
+  const kind = getPageKind();
+  if (!SEAMLESS_SCROLL_SYNC_PAGE_KINDS.has(kind)) {
+    seamlessScrollSyncRouteKey = "";
+    seamlessScrollSyncSignature = "";
+    seamlessScrollSyncDirty = false;
+    seamlessScrollSyncDirtyRouteKey = "";
+    return;
+  }
+  const routeKey = getRoutePageKey();
+  seamlessScrollSyncRouteKey = routeKey;
+  seamlessScrollSyncSignature = getSeamlessNativeContentSignature(kind);
+  seamlessScrollSyncDirty = false;
+  seamlessScrollSyncDirtyRouteKey = routeKey;
+}
+
+function markSeamlessNativeContentDirty() {
+  seamlessScrollSyncDirty = true;
+  seamlessScrollSyncDirtyRouteKey = getRoutePageKey();
+}
+
+function captureSeamlessRebuildScrollState() {
+  const app = document.querySelector("#cc98-comfort-app");
+  const topbarBottom = app?.querySelector(".cc98-rebuild-topbar")?.getBoundingClientRect?.().bottom || 0;
+  const anchor = [...(app?.querySelectorAll?.("[data-item-key]") || [])]
+    .find((node) => {
+      const rect = node.getBoundingClientRect();
+      return rect.bottom > Math.max(0, topbarBottom) + 4 && rect.top < window.innerHeight - 4;
+    });
+  return {
+    routeKey: getRoutePageKey(),
+    position: captureImageViewerScrollPosition(),
+    anchorKey: anchor?.getAttribute("data-item-key") || "",
+    anchorTop: anchor?.getBoundingClientRect?.().top || 0,
+    readLaterSidebarTop: app?.querySelector(".cc98-rebuild-read-later-sidebar-viewport")?.scrollTop || 0
+  };
+}
+
+function restoreSeamlessRebuildScrollState(state, interactionRevision, force = false) {
+  if (!state || state.routeKey !== getRoutePageKey()) {
+    return;
+  }
+  if (!force && interactionRevision !== seamlessScrollInteractionRevision) {
+    return;
+  }
+  restoreImageViewerScrollPosition(state.position);
+  const readLaterViewport = document.querySelector("#cc98-comfort-app .cc98-rebuild-read-later-sidebar-viewport");
+  if (readLaterViewport instanceof HTMLElement) {
+    readLaterViewport.scrollTop = Number(state.readLaterSidebarTop) || 0;
+  }
+  if (!state.anchorKey) {
+    return;
+  }
+  const escapedKey = typeof CSS !== "undefined" && typeof CSS.escape === "function"
+    ? CSS.escape(state.anchorKey)
+    : state.anchorKey.replace(/["\\]/g, "\\$&");
+  const anchor = document.querySelector(`#cc98-comfort-app [data-item-key="${escapedKey}"]`);
+  if (!(anchor instanceof HTMLElement)) {
+    return;
+  }
+  const delta = anchor.getBoundingClientRect().top - Number(state.anchorTop || 0);
+  if (Number.isFinite(delta) && Math.abs(delta) >= 0.5) {
+    window.scrollBy({ top: delta, left: 0, behavior: "auto" });
+  }
+}
+
+function hasVisibleNativeDialog() {
+  return [...document.querySelectorAll(".ant-modal-wrap, [role='dialog']")].some((dialog) => {
+    if (!(dialog instanceof HTMLElement)) {
+      return false;
+    }
+    const style = getComputedStyle(dialog);
+    return style.display !== "none"
+      && style.visibility !== "hidden"
+      && dialog.getClientRects().length > 0;
+  });
+}
+
+function isSeamlessNativeContentSyncBlocked() {
+  const app = document.querySelector("#cc98-comfort-app");
+  if (!app
+    || isRebuilding
+    || document.visibilityState === "hidden"
+    || loadingOverlayActive
+    || nativeLazyScrollOverlayDepth > 0
+    || document.documentElement.dataset.cc98ComfortOriginalPrewarming === "true"
+    || document.querySelector("#cc98-comfort-image-viewer")
+    || isEditingRebuiltSearchOnCurrentRoute()
+    || hasActiveTextSelectionWithin(app)
+    || hasVisibleNativeDialog()) {
+    return true;
+  }
+  const active = document.activeElement;
+  if (active instanceof HTMLElement
+    && app.contains(active)
+    && (active.matches("input, textarea, select, [contenteditable='true']")
+      || Boolean(active.closest(".cc98-rebuild-native-editor, .cc98-rebuild-native-message")))) {
+    return true;
+  }
+  if (app.querySelector([
+    ".cc98-rebuild-post-author-popover:hover",
+    ".cc98-rebuild-native-user-entry:hover",
+    ".cc98-rebuild-color-popover:not([hidden])",
+    ".cc98-rebuild-font-size-popover:not([hidden])",
+    ".cc98-rebuild-message-emoji-panel:not([hidden])"
+  ].join(","))) {
+    return true;
+  }
+  return false;
+}
+
+function runSeamlessNativeContentSync() {
+  seamlessScrollSyncTimer = null;
+  const now = Date.now();
+  const kind = getPageKind();
+  if (now > seamlessScrollSyncIntentUntil
+    || !lastSettings?.enabled
+    || !lastSettings.rebuildUi
+    || !SEAMLESS_SCROLL_SYNC_PAGE_KINDS.has(kind)) {
+    return;
+  }
+  if (isSeamlessNativeContentSyncBlocked()) {
+    const remaining = seamlessScrollSyncIntentUntil - now;
+    if (remaining > 180) {
+      seamlessScrollSyncTimer = window.setTimeout(runSeamlessNativeContentSync, Math.min(260, remaining));
+    }
+    return;
+  }
+
+  const routeKey = getRoutePageKey();
+  const hasBaseline = seamlessScrollSyncRouteKey === routeKey && Boolean(seamlessScrollSyncSignature);
+  const isDirty = seamlessScrollSyncDirty && seamlessScrollSyncDirtyRouteKey === routeKey;
+  if (hasBaseline && !isDirty) {
+    return;
+  }
+  const intervalRemaining = SEAMLESS_SCROLL_SYNC_MIN_INTERVAL - (now - seamlessScrollSyncLastRefreshAt);
+  if (hasBaseline && intervalRemaining > 0) {
+    seamlessScrollSyncTimer = window.setTimeout(runSeamlessNativeContentSync, intervalRemaining);
+    return;
+  }
+  const signature = getSeamlessNativeContentSignature(kind);
+  seamlessScrollSyncDirty = false;
+  seamlessScrollSyncDirtyRouteKey = routeKey;
+  if (!signature) {
+    return;
+  }
+  if (!hasBaseline) {
+    seamlessScrollSyncRouteKey = routeKey;
+    seamlessScrollSyncSignature = signature;
+    return;
+  }
+  if (signature === seamlessScrollSyncSignature) {
+    return;
+  }
+
+  seamlessScrollSyncSignature = signature;
+  seamlessScrollSyncLastRefreshAt = now;
+  refreshRebuiltFromLoadedNativeContent(null, { automatic: true });
+}
+
+function scheduleSeamlessNativeContentSync(options = {}) {
+  const kind = options.kind || getPageKind();
+  if (!SEAMLESS_SCROLL_SYNC_PAGE_KINDS.has(kind)
+    || !lastSettings?.enabled
+    || !lastSettings.rebuildUi) {
+    return;
+  }
+  const fromMutation = Boolean(options.fromMutation);
+  const now = Date.now();
+  if (fromMutation) {
+    markSeamlessNativeContentDirty();
+    if (now > seamlessScrollSyncIntentUntil) {
+      return;
+    }
+  }
+  if (!fromMutation) {
+    seamlessScrollSyncIntentUntil = now + SEAMLESS_SCROLL_SYNC_INTENT_TTL;
+  }
+  const routeKey = getRoutePageKey();
+  const shouldCheck = fromMutation
+    || seamlessScrollSyncDirty
+    || seamlessScrollSyncRouteKey !== routeKey
+    || !seamlessScrollSyncSignature;
+  if (shouldCheck) {
+    window.clearTimeout(seamlessScrollSyncTimer);
+    seamlessScrollSyncTimer = window.setTimeout(
+      runSeamlessNativeContentSync,
+      fromMutation ? 90 : SEAMLESS_SCROLL_SYNC_DELAY
+    );
+  }
+  if (!fromMutation && shouldCheck) {
+    window.clearTimeout(seamlessScrollSyncFollowupTimer);
+    seamlessScrollSyncFollowupTimer = window.setTimeout(
+      runSeamlessNativeContentSync,
+      SEAMLESS_SCROLL_SYNC_FOLLOWUP_DELAY
+    );
+  }
+}
+
+function isSeamlessNativeContentMutation(record, app = document.querySelector("#cc98-comfort-app")) {
+  const selector = getSeamlessNativeContentSelector();
+  if (!selector) {
+    return false;
+  }
+  const candidates = [record.target, ...record.addedNodes, ...record.removedNodes];
+  return candidates.some((node) => {
+    const element = node instanceof Element ? node : node?.parentElement;
+    if (!(element instanceof Element) || app?.contains(element) || element.closest("#cc98-comfort-app")) {
+      return false;
+    }
+    return element.matches(selector)
+      || Boolean(element.closest(selector))
+      || Boolean(element.querySelector?.(selector));
+  });
+}
+
+function setRebuiltRefreshButtonBusy(button, busy, idleLabel = "同步") {
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+  button.disabled = busy;
+  button.classList.toggle("is-syncing", busy);
+  if (busy) {
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "同步中…";
+    return;
+  }
+  button.removeAttribute("aria-busy");
+  button.textContent = idleLabel || "同步";
+}
+
+function refreshRebuiltFromLoadedNativeContent(button, options = {}) {
+  const automatic = Boolean(options.automatic);
+  if (isRebuilding) {
+    if (!automatic && button instanceof HTMLButtonElement) {
+      showRebuiltTransientToast(button, "页面正在同步，请稍候");
+    }
+    return;
+  }
+  if (!lastSettings?.enabled || !lastSettings.rebuildUi) {
+    if (!automatic && button instanceof HTMLButtonElement) {
+      showRebuiltTransientToast(button, "当前页面暂时无法同步");
+    }
+    return;
+  }
+
+  const routeKey = getRoutePageKey();
+  const interactionRevision = seamlessScrollInteractionRevision;
+  const scrollState = captureSeamlessRebuildScrollState();
+  const operationToken = String(++rebuiltRefreshSequence);
+  const idleLabel = button instanceof HTMLButtonElement
+    ? (button.textContent?.trim() || "同步")
+    : "同步";
+  let feedbackFinished = false;
+
+  if (button instanceof HTMLButtonElement) {
+    button.dataset.cc98RefreshOperation = operationToken;
+    setRebuiltRefreshButtonBusy(button, true, idleLabel);
+  }
+
+  const finishFeedback = (success) => {
+    if (feedbackFinished || automatic) {
+      return;
+    }
+    feedbackFinished = true;
+    const app = document.querySelector("#cc98-comfort-app");
+    const currentButton = app?.querySelector(".cc98-rebuild-refresh-button");
+    const controls = new Set([button, currentButton]);
+    controls.forEach((control) => {
+      if (!(control instanceof HTMLButtonElement)) {
+        return;
+      }
+      if (control !== button
+        && control.dataset.cc98RefreshOperation
+        && control.dataset.cc98RefreshOperation !== operationToken) {
+        return;
+      }
+      setRebuiltRefreshButtonBusy(control, false, idleLabel);
+      delete control.dataset.cc98RefreshOperation;
+    });
+    if (getRoutePageKey() !== routeKey) {
+      return;
+    }
+    const anchor = currentButton instanceof HTMLButtonElement && currentButton.isConnected
+      ? currentButton
+      : (button instanceof HTMLButtonElement && button.isConnected ? button : null);
+    showRebuiltTransientToast(anchor, success ? "已同步原页面内容" : "同步未完成，请稍后重试");
+  };
+
+  try {
+    renderRebuiltUi({ preserveScroll: automatic });
+  } catch {
+    finishFeedback(false);
+    return;
+  }
+  const restore = () => {
+    const currentHashKey = getRebuiltHashScrollKey();
+    const hashPositionIsStable = Boolean(
+      currentHashKey
+      && rebuiltHashScrollAppliedKey === currentHashKey
+      && rebuiltHashScrollAppliedInteractionRevision === seamlessScrollInteractionRevision
+    );
+    if (!hashPositionIsStable) {
+      restoreSeamlessRebuildScrollState(
+        scrollState,
+        interactionRevision,
+        !automatic
+      );
+    }
+    // An automatic native-content refresh intentionally skips the normal
+    // overlay/hash pass.  If the first rebuilt tree was mounted while the
+    // browser was still restoring a fragment, the scroll-state restore above
+    // can otherwise leave the reader at the page top.  Reconcile the hash
+    // immediately after each restore; a stable applied hash is re-applied,
+    // while an explicitly scrolled-by-user hash is suppressed by its revision.
+    scrollToCurrentRebuiltHash({ forceApplied: hashPositionIsStable });
+  };
+  // Restore once before the next paint as well as on the existing follow-up
+  // frames.  Replacing a hash-targeted post tree can make the browser briefly
+  // honor the fragment again; the synchronous restore prevents that transient
+  // position from becoming visible.
+  restore();
+  requestAnimationFrame(restore);
+  [80, 220].forEach((delay) => {
+    window.setTimeout(() => {
+      if (!automatic && document.querySelector("#cc98-comfort-app [data-feed-kind]")) {
+        syncRebuiltContent();
+      }
+      restore();
+    }, delay);
+  });
+  if (!automatic) {
+    window.setTimeout(() => {
+      const app = document.querySelector("#cc98-comfort-app");
+      const ready = app instanceof HTMLElement
+        && app.dataset.routeKey === routeKey
+        && document.documentElement.dataset.cc98ComfortRebuildReady === "true"
+        && !isRebuilding;
+      finishFeedback(ready);
+    }, 360);
+    window.setTimeout(() => finishFeedback(false), 1800);
+  }
+}
+
+function renderRebuiltUi(options = {}) {
   if (isRebuilding) {
     return;
   }
   isRebuilding = true;
+  clearTopbarStabilizeTimers();
+
+  const existing = document.querySelector("#cc98-comfort-app");
+  const currentKind = getPageKind();
+  // Removing/reinserting the rebuilt shell temporarily exposes the native
+  // topic tree.  On a URL with a fragment that transition can make the
+  // browser restore scroll position to 0 before the rebuilt floor exists.
+  // Keep the pre-rebuild viewport as a bridge until hash reconciliation runs.
+  const preservedHashScrollPosition = currentKind === "post" && getRebuiltHashScrollKey()
+    ? captureImageViewerScrollPosition()
+    : null;
+  if (currentKind === "topics" && shouldDeferNewTopicsRebuild()) {
+    beginRebuildTransitionVeil(location.href);
+    scheduleNewTopicsPendingRecheck();
+    isRebuilding = false;
+    return;
+  }
+  if (newTopicPendingRecheckTimer) {
+    window.clearTimeout(newTopicPendingRecheckTimer);
+    newTopicPendingRecheckTimer = null;
+  }
 
   document.documentElement.classList.remove("cc98-comfort-rebuild-active");
   document.documentElement.dataset.cc98ComfortRebuildReady = "false";
 
-  const existing = document.querySelector("#cc98-comfort-app");
-  if (!lastSettings?.enabled || !lastSettings.rebuildUi || !document.body) {
+  updateNewTopicAutoRefreshVisitState();
+  clearUserCenterStaleLoadingOverlay(currentKind);
+  const preservedMessageScrollState = currentKind === "message"
+    ? captureMessageWindowScrollState(existing || document)
+    : null;
+  const preservedSearchState = captureRebuiltSearchUiState(existing);
+  const preservedSearchForm = existing?.dataset.routeKey === getRoutePageKey()
+    ? existing.querySelector(".cc98-rebuild-topbar > .cc98-rebuild-search")
+    : null;
+  if (preservedSearchForm instanceof HTMLFormElement && preservedSearchState?.typeMenuOpen) {
+    preservedSearchForm.dataset.cc98PreserveTypeMenu = "true";
+  }
+  if (!lastSettings || !document.body) {
+    isRebuilding = false;
+    return;
+  }
+  if (!lastSettings.enabled || !lastSettings.rebuildUi) {
     if (existing) {
       legacyQuoteGuardObserver?.disconnect();
       legacyQuoteGuardObserver = null;
       restoreReparentedNativeNodes(existing);
       existing.remove();
     }
-    hideLoadingOverlay();
+    editorSubmitOverlayAwaitingRebuild = false;
+    hideLoadingOverlay({ force: true });
+    releaseRebuildTransitionVeil({ immediate: true });
     isRebuilding = false;
     return;
   }
@@ -9332,48 +28172,84 @@ function renderRebuiltUi() {
     legacyQuoteGuardObserver?.disconnect();
     legacyQuoteGuardObserver = null;
     restoreReparentedNativeNodes(existing);
+    preservedSearchForm?.remove();
     existing.remove();
   }
 
+  if (currentKind === "userCenter" && isPublicUserProfilePage() && isUserCenterPendingNativeLoad()) {
+    document.documentElement.removeAttribute("data-cc98-comfort-app-root");
+    const { router } = getPublicUserProfileNativeShell();
+    if (router instanceof HTMLElement) {
+      eagerUserCenterImages(router);
+    }
+    scheduleUserCenterPendingRebuild();
+    isRebuilding = false;
+    return;
+  }
+
   try {
+    removeDecorativeFrameImages(document);
     const app = createElement("div", "cc98-rebuild-shell");
     app.id = "cc98-comfort-app";
     app.dataset.cc98ComfortVersion = EXTENSION_VERSION;
+    app.dataset.routeKey = getRoutePageKey();
     bindRebuiltFloorLinks(app);
     bindImageViewer(app);
     bindPostDownloadButtons(app);
 
-    const kind = getPageKind();
+    const kind = currentKind;
+    document.documentElement.removeAttribute("data-cc98-rebuild-openid-login");
     if (kind !== "message") {
-      messageTitleObserver?.disconnect();
-      messageTitleObserver = null;
+      clearMessageTitleSync();
     }
     app.dataset.pageKind = kind;
     app.dataset.homeHotOnly = String(Boolean(lastSettings.homeHotOnly && kind === "home"));
 
-    const nav = createElement("header", "cc98-rebuild-topbar");
-    const brand = createLink("cc98-rebuild-brand", "CC98 Reborn", "https://www.cc98.org/");
-    brand.setAttribute("aria-label", "返回 CC98 首页");
-    nav.append(brand);
-    const navLinks = createElement("nav", "cc98-rebuild-nav");
-    [
-      ["首页", "https://www.cc98.org/"],
-      ["版面", "https://www.cc98.org/boardList"],
-      ["新帖", "https://www.cc98.org/newTopics"],
-      ["关注", "https://www.cc98.org/focus"],
-      ["精选", "https://www.cc98.org/recommendedTopics"]
-    ].forEach(([label, href]) => navLinks.append(createLink("", label, href)));
-    nav.append(navLinks);
-    nav.append(createSearchForm());
-    const actions = createElement("div", "cc98-rebuild-actions");
-    actions.append(createButton("cc98-rebuild-icon-button", "刷新", () => location.reload()));
-    actions.append(renderTopbarUserEntry());
-    nav.append(actions);
-    app.append(nav);
+    const useNativeOpenIdChrome = kind === "login" && isOpenIdLoginCenterPage();
+    if (!useNativeOpenIdChrome) {
+      const nav = createElement("header", "cc98-rebuild-topbar");
+      const brand = createLink("cc98-rebuild-brand", "CC98 Reborn", getCc98HomeHref());
+      brand.setAttribute("aria-label", "返回 CC98 首页");
+      nav.append(brand);
+      const navLinks = createElement("nav", "cc98-rebuild-nav");
+      [
+        ["首页", "https://www.cc98.org/"],
+        ["版面", "https://www.cc98.org/boardList"],
+        ["新帖", "https://www.cc98.org/newTopics"],
+        ["关注", "https://www.cc98.org/focus"],
+        ["精选", "https://www.cc98.org/recommendedTopics"],
+        ["\u7a0d\u540e\u518d\u770b", getReadLaterPageHref()]
+      ].forEach(([label, href]) => navLinks.append(createLink("", label, href)));
+      nav.append(navLinks);
+      const searchForm = preservedSearchForm instanceof HTMLFormElement
+        ? preservedSearchForm
+        : createRebuiltSearchForm(preservedSearchState);
+      let refreshButton = searchForm.querySelector(".cc98-rebuild-refresh-button");
+      if (!(refreshButton instanceof HTMLButtonElement)) {
+        refreshButton = createButton(
+          "cc98-rebuild-search-submit cc98-rebuild-refresh-button",
+          "同步",
+          (event) => refreshRebuiltFromLoadedNativeContent(event.currentTarget)
+        );
+        searchForm.append(refreshButton);
+      }
+      refreshButton.classList.remove("cc98-rebuild-icon-button");
+      refreshButton.classList.add("cc98-rebuild-search-submit", "cc98-rebuild-refresh-button");
+      if (!refreshButton.classList.contains("is-syncing")) {
+        refreshButton.textContent = "同步";
+      }
+      refreshButton.title = "同步原页面已加载内容";
+      refreshButton.setAttribute("aria-label", "同步原页面已加载内容");
+      nav.append(searchForm);
+      const actions = createElement("div", "cc98-rebuild-actions");
+      actions.append(renderTopbarUserEntry());
+      nav.append(actions);
+      app.append(nav);
+    }
 
-    if (!["board", "userCenter", "message", "signin", "login", "error"].includes(kind) && !(kind === "home" && lastSettings.homeHotOnly)) {
+    if (!["board", "userCenter", "message", "signin", "login", "error", "blacklist"].includes(kind) && !(kind === "home" && lastSettings.homeHotOnly)) {
       const hero = createElement("section", "cc98-rebuild-hero");
-      hero.append(createElement("p", "cc98-rebuild-kicker", `Reborn View · v${EXTENSION_VERSION}`));
+      hero.append(createElement("p", "cc98-rebuild-kicker cc98-rebuild-version-kicker", `Reborn View · v${EXTENSION_VERSION}`));
       hero.append(createElement("h1", "", getPageTitle()));
       app.append(hero);
     }
@@ -9394,6 +28270,12 @@ function renderRebuiltUi() {
       renderErrorPage(app);
     } else if (kind === "message") {
       renderMessagePage(app);
+    } else if (kind === "readLater") {
+      renderReadLaterPage(app);
+    } else if (kind === "blacklist") {
+      renderBlacklistPage(app);
+    } else if (kind === "boardSearch") {
+      renderBoardSearch(app);
     } else if (kind === "topics" || kind === "search") {
       renderTopics(app);
     } else if (kind === "post") {
@@ -9404,18 +28286,32 @@ function renderRebuiltUi() {
       renderGeneric(app);
     }
 
-    if (!["login", "error"].includes(kind) && app.children.length <= 2) {
+    if (!["login", "error", "blacklist"].includes(kind) && !app.querySelector(".cc98-rebuild-blocked-page") && app.children.length <= 2) {
       const fallback = createElement("section", "cc98-rebuild-section");
       fallback.append(createElement("h2", "", "正在等待页面内容"));
-      fallback.append(createElement("p", "cc98-rebuild-card-meta", "CC98 原页面还没有加载出可抽取内容。稍后会自动更新，也可以点击刷新。"));
+      fallback.append(createElement("p", "cc98-rebuild-card-meta", "CC98 原页面还没有加载出可抽取内容。稍后会自动更新，也可以点击顶部同步。"));
       app.append(fallback);
     }
 
-    document.body.prepend(app);
+    const rootHost = document.querySelector("#root");
+    const isolateFromWebVpnUserProfileRoot = isWebVpnHost() && isPublicUserProfilePage();
+    if (rootHost instanceof HTMLElement && !isolateFromWebVpnUserProfileRoot) {
+      rootHost.prepend(app);
+      document.documentElement.dataset.cc98ComfortAppRoot = "true";
+    } else {
+      document.body.prepend(app);
+      document.documentElement.removeAttribute("data-cc98-comfort-app-root");
+    }
+    if (kind === "message") {
+      restoreMessageWindowScrollState(preservedMessageScrollState, app);
+    }
+    if (preservedHashScrollPosition) {
+      restoreImageViewerScrollPosition(preservedHashScrollPosition);
+    }
+    restoreRebuiltSearchUiState(app, preservedSearchState);
     stabilizeTopbarUserEntry(app);
-    [120, 480, 1200, 2400, 4200, 6500].forEach((delay) => {
-      setTimeout(() => stabilizeTopbarUserEntry(app), delay);
-    });
+    armPublicProfileTopbarRecovery(app);
+    scheduleTopbarStabilization(app);
     rewriteLegacyQuoteInlineStyles(app);
     stabilizePostQuoteBlocks(app);
     forceLegacyQuotesInRebuiltRoot(app);
@@ -9430,29 +28326,57 @@ function renderRebuiltUi() {
     setupRebuiltImagePlaceholders(app);
     document.documentElement.classList.add("cc98-comfort-rebuild-active");
     document.documentElement.dataset.cc98ComfortRebuildReady = "true";
-    hideLoadingOverlayWhenReady(app);
+    if (preservedHashScrollPosition) {
+      const currentHashKey = getRebuiltHashScrollKey();
+      const hashPositionIsStable = Boolean(
+        currentHashKey
+        && rebuiltHashScrollAppliedKey === currentHashKey
+        && rebuiltHashScrollAppliedInteractionRevision === seamlessScrollInteractionRevision
+      );
+      if (hashPositionIsStable) {
+        scrollToCurrentRebuiltHash({ forceApplied: true });
+      } else {
+        restoreImageViewerScrollPosition(preservedHashScrollPosition);
+      }
+    }
+    releaseRebuildTransitionVeilWhenReady();
+    if (app.dataset.cc98UserCenterPending === "true") {
+      showLoadingOverlay("正在加载个人中心...", { allowUserCenter: true });
+      scheduleUserCenterPendingRebuild();
+    } else {
+      hideLoadingOverlayWhenReady(app, {
+        skipHashScroll: Boolean(options.preserveScroll)
+      });
+    }
     armAutoLoader();
+    rememberSeamlessNativeContentSignature();
     startPostLazyFallbackPrewarm();
   } catch (error) {
     console.error("[CC98 Reborn] rebuild failed", error);
     legacyQuoteGuardObserver?.disconnect();
     legacyQuoteGuardObserver = null;
-    document.querySelector("#cc98-comfort-app")?.remove();
+    const failedApp = document.querySelector("#cc98-comfort-app");
+    if (failedApp instanceof HTMLElement) {
+      restoreReparentedNativeNodes(failedApp);
+      failedApp.remove();
+    }
     document.documentElement.classList.remove("cc98-comfort-rebuild-active");
     document.documentElement.dataset.cc98ComfortRebuildReady = "false";
-    hideLoadingOverlay();
+    document.documentElement.removeAttribute("data-cc98-comfort-app-root");
+    editorSubmitOverlayAwaitingRebuild = false;
+    hideLoadingOverlay({ force: true });
+    releaseRebuildTransitionVeil({ immediate: true });
   } finally {
     isRebuilding = false;
   }
 }
 
 function getBlockReason(item, settings) {
-  const blockedBoards = parseList(settings.blockedBoards);
-  const blockedKeywords = parseList(settings.blockedTitleKeywords);
-  const blockedUserIds = parseList(settings.blockedUserIds).map((uid) => uid.replace(/\D/g, "")).filter(Boolean);
+  const { boards: blockedBoards, titleKeywords: blockedKeywords, userIds: blockedUserIds } = getBlacklistRules(settings);
   const boardInfo = getBoardInfo(item);
   const title = getTitleText(item);
   const userIds = getUserIds(item);
+  const userIdentityTexts = getUserIdentityTexts(item);
 
   const matchedBoard = blockedBoards.find((rule) => {
     const normalizedRule = normalizeText(rule);
@@ -9467,9 +28391,13 @@ function getBlockReason(item, settings) {
     return `关键词：${matchedKeyword}`;
   }
 
-  const matchedUid = blockedUserIds.find((uid) => userIds.includes(uid));
-  if (matchedUid) {
-    return `UID：${matchedUid}`;
+  const matchedUserRule = blockedUserIds.find((rule) => userRuleMatchesIdentity(rule, {
+    ids: userIdentityTexts,
+    users: userIdentityTexts,
+    uids: userIds
+  }));
+  if (matchedUserRule) {
+    return normalizeBlockedUid(matchedUserRule) ? `UID：${matchedUserRule}` : `用户 ID：${matchedUserRule}`;
   }
 
   return "";
@@ -9555,6 +28483,7 @@ function applyNativeSkinPolicy() {
 function createPlaceholder(item, reason, settings) {
   const placeholder = document.createElement("div");
   placeholder.className = "cc98-comfort-placeholder";
+  placeholder.dataset.cc98ComfortBlockedReason = reason;
   placeholder.innerHTML = `
     <div class="cc98-comfort-placeholder-text"></div>
     <button class="cc98-comfort-placeholder-button" type="button">显示</button>
@@ -9570,6 +28499,18 @@ function createPlaceholder(item, reason, settings) {
   });
 
   item.before(placeholder);
+  return placeholder;
+}
+
+function getPlaceholderForBlockedItem(item) {
+  const placeholder = item?.previousElementSibling;
+  return placeholder?.classList?.contains("cc98-comfort-placeholder") ? placeholder : null;
+}
+
+function clearBlockedItem(item) {
+  item.classList.remove("cc98-comfort-is-blocked");
+  item.removeAttribute("data-cc98-comfort-blocked-reason");
+  getPlaceholderForBlockedItem(item)?.remove();
 }
 
 function runFiltering() {
@@ -9578,38 +28519,50 @@ function runFiltering() {
   }
 
   isFiltering = true;
-  clearBlockedState();
-
-  if (!lastSettings?.enabled) {
-    isFiltering = false;
-    return;
-  }
-
-  const hasRules = parseList(lastSettings.blockedBoards).length > 0
-    || parseList(lastSettings.blockedTitleKeywords).length > 0
-    || parseList(lastSettings.blockedUserIds).length > 0;
-
-  if (!hasRules) {
-    isFiltering = false;
-    return;
-  }
-
-  document.querySelectorAll(BLOCKABLE_SELECTORS).forEach((item) => {
-    if (item.dataset.cc98ComfortRevealed === "true") {
+  try {
+    if (!lastSettings?.enabled || !hasBlacklistRules(lastSettings)) {
+      clearBlockedState();
       return;
     }
 
-    const reason = getBlockReason(item, lastSettings);
-    if (!reason) {
-      return;
-    }
+    document.querySelectorAll(BLOCKABLE_SELECTORS).forEach((item) => {
+      const existingPlaceholder = getPlaceholderForBlockedItem(item);
+      if (item.dataset.cc98ComfortRevealed === "true") {
+        clearBlockedItem(item);
+        return;
+      }
 
-    item.classList.add("cc98-comfort-is-blocked");
-    item.dataset.cc98ComfortBlockedReason = reason;
-    createPlaceholder(item, reason, lastSettings);
-  });
+      const reason = getBlockReason(item, lastSettings);
+      if (!reason) {
+        clearBlockedItem(item);
+        return;
+      }
 
-  isFiltering = false;
+      item.classList.add("cc98-comfort-is-blocked");
+      item.dataset.cc98ComfortBlockedReason = reason;
+      if (existingPlaceholder) {
+        existingPlaceholder.dataset.cc98ComfortBlockedReason = reason;
+        const text = existingPlaceholder.querySelector(".cc98-comfort-placeholder-text");
+        const nextText = `${lastSettings.placeholderText} · ${reason}`;
+        if (text && text.textContent !== nextText) {
+          text.textContent = nextText;
+        }
+      } else {
+        createPlaceholder(item, reason, lastSettings);
+      }
+    });
+
+    document.querySelectorAll(".cc98-comfort-placeholder").forEach((placeholder) => {
+      const item = placeholder.nextElementSibling;
+      if (!(item instanceof HTMLElement)
+        || !item.matches(BLOCKABLE_SELECTORS)
+        || !item.classList.contains("cc98-comfort-is-blocked")) {
+        placeholder.remove();
+      }
+    });
+  } finally {
+    isFiltering = false;
+  }
 }
 
 function scheduleFiltering() {
@@ -9624,12 +28577,69 @@ function scheduleFiltering() {
   });
 }
 
+function recoverMissingRebuiltApp() {
+  if (!lastSettings?.enabled || !lastSettings.rebuildUi || !document.body) {
+    return false;
+  }
+  if (document.querySelector("#cc98-comfort-app")) {
+    return false;
+  }
+  const root = document.documentElement;
+  const wasMarkedReady = root.dataset.cc98ComfortRebuildReady === "true"
+    || root.dataset.cc98ComfortAppRoot === "true"
+    || root.classList.contains("cc98-comfort-rebuild-active");
+  if (!wasMarkedReady
+    || root.dataset.cc98ComfortOriginalPrewarming === "true"
+    || root.dataset.cc98ComfortPrewarming === "true") {
+    return false;
+  }
+
+  root.classList.remove("cc98-comfort-rebuild-active");
+  root.dataset.cc98ComfortRebuildReady = "false";
+  root.removeAttribute("data-cc98-comfort-app-root");
+  clearPublicUserProfileLoadingOverlay();
+  scheduleRebuild();
+  return true;
+}
+
+function ensureRebuiltAppPresenceWatchdog() {
+  if (rebuiltAppPresenceWatchdog) {
+    return;
+  }
+  rebuiltAppPresenceWatchdog = window.setInterval(() => {
+    if (document.visibilityState === "hidden") {
+      return;
+    }
+    recoverMissingRebuiltApp();
+  }, 1600);
+}
+
 function scheduleRebuild() {
+  if (!lastSettings || !document.body) {
+    return;
+  }
+  if (deferPublicProfileRebuildForSelection()) {
+    return;
+  }
+  publicProfileRebuildDeferredForSelection = false;
+  if (forceReloadEditorSubmitErrorPage()) {
+    return;
+  }
+  if (clearUserCenterStaleLoadingOverlay()) {
+    // Continue rebuilding the user center after clearing stale transition overlays.
+  }
   if (handleTopicFirstPagePrevisitNavigation()) {
+    return;
+  }
+  if (shouldPrewarmHomeAvatarBeforeRebuild()) {
+    startHomeAvatarPrewarm();
     return;
   }
   if (shouldPrewarmOriginalBeforeRebuild()) {
     startOriginalPagePrewarm();
+    return;
+  }
+  if (isEditingRebuiltSearchOnCurrentRoute()) {
     return;
   }
   if (rebuildQueued) {
@@ -9639,11 +28649,25 @@ function scheduleRebuild() {
   rebuildQueued = true;
   requestAnimationFrame(() => {
     rebuildQueued = false;
+    if (deferPublicProfileRebuildForSelection()) {
+      return;
+    }
+    publicProfileRebuildDeferredForSelection = false;
+    if (clearUserCenterStaleLoadingOverlay()) {
+      // Continue rebuilding the user center after clearing stale transition overlays.
+    }
     if (handleTopicFirstPagePrevisitNavigation()) {
+      return;
+    }
+    if (shouldPrewarmHomeAvatarBeforeRebuild()) {
+      startHomeAvatarPrewarm();
       return;
     }
     if (shouldPrewarmOriginalBeforeRebuild()) {
       startOriginalPagePrewarm();
+      return;
+    }
+    if (isEditingRebuiltSearchOnCurrentRoute()) {
       return;
     }
     renderRebuiltUi();
@@ -9687,11 +28711,43 @@ function upsertCard(feed, key, card) {
   card.dataset.itemKey = key;
   const existing = feed.querySelector(`[data-item-key="${escapedKey}"]`);
   if (existing) {
+    if (existing.isEqualNode(card)) {
+      return false;
+    }
     existing.replaceWith(card);
     return true;
   }
   feed.append(card);
   return true;
+}
+
+function reconcileCardFeed(feed, entries) {
+  if (!(feed instanceof HTMLElement)) {
+    return;
+  }
+  const expectedKeys = new Set();
+  entries.forEach(({ key, card }) => {
+    expectedKeys.add(key);
+    upsertCard(feed, key, card);
+  });
+
+  [...feed.children].forEach((child) => {
+    const key = child.getAttribute("data-item-key") || "";
+    if (!key || !expectedKeys.has(key)) {
+      child.remove();
+    }
+  });
+
+  entries.forEach(({ key }, index) => {
+    const escapedKey = typeof CSS !== "undefined" && typeof CSS.escape === "function"
+      ? CSS.escape(key)
+      : key.replace(/["\\]/g, "\\$&");
+    const card = feed.querySelector(`[data-item-key="${escapedKey}"]`);
+    const current = feed.children[index] || null;
+    if (card && current !== card) {
+      feed.insertBefore(card, current);
+    }
+  });
 }
 
 function syncRebuiltContent() {
@@ -9700,10 +28756,38 @@ function syncRebuiltContent() {
   }
 
   const app = document.querySelector("#cc98-comfort-app");
+  if (
+    getPageKind() === "userCenter"
+    && isPublicUserProfilePage()
+    && isPublicProfileSelectionProtected()
+  ) {
+    return;
+  }
+  removeDecorativeFrameImages(document);
   stabilizeTopbarUserEntry(app);
   const feed = app?.querySelector("[data-feed-kind]");
   if (getPageKind() === "userCenter") {
+    clearUserCenterStaleLoadingOverlay("userCenter");
+    if (isPublicUserProfilePage()) {
+      const router = app?.querySelector(".cc98-rebuild-native-user-router");
+      if (router instanceof HTMLElement) {
+        eagerUserCenterImages(router);
+        stabilizeNativeUserCenter(router);
+      } else if (isPublicUserProfileNativeShellReady()) {
+        scheduleRebuild();
+      }
+    } else if (isUserCenterNativeShellReady()) {
+      const { navSource, router } = getUserCenterNativeShell();
+      if (navSource !== app?.querySelector(".user-center-navigation.cc98-rebuild-native-user-nav")
+        || router !== app?.querySelector(".user-center-router.cc98-rebuild-native-user-router")) {
+        scheduleRebuild();
+        return;
+      }
+    }
     updateUserCenterHero(app);
+    return;
+  }
+  if (getPageKind() === "readLater" || getPageKind() === "blacklist") {
     return;
   }
   if (!feed) {
@@ -9718,7 +28802,35 @@ function syncRebuiltContent() {
     return;
   }
 
+  if (feed.dataset.feedKind === "search") {
+    const keyword = getCurrentSearchKeyword();
+    const topics = sortSearchTopicItems(getTopicItems(), keyword);
+    reconcileCardFeed(feed, topics.map((item) => ({
+      key: `topic:${item.href}`,
+      card: renderTopicCard(item)
+    })));
+    const controls = app?.querySelector(".cc98-rebuild-search-sort");
+    if (controls instanceof HTMLElement) {
+      const nextControls = createSearchSortControls(topics.length, keyword);
+      if (!controls.isEqualNode(nextControls)) {
+        controls.replaceWith(nextControls);
+      }
+    }
+    return;
+  }
+
+  if (feed.dataset.feedKind === "boardSearch") {
+    getBoardSearchItems().forEach((item) => {
+      upsertCard(feed, `board-search:${item.href}`, renderTopicCard(item));
+    });
+    return;
+  }
+
   if (feed.dataset.feedKind === "boardTopics") {
+    const boardName = getFirstText(document, ".board-body .board-head-name");
+    if (boardName) {
+      document.title = `${boardName} - CC98论坛`;
+    }
     getBoardTopicItems().forEach((item) => {
       upsertCard(feed, `board-topic:${item.href}`, renderBoardTopicCard(item));
     });
@@ -9729,6 +28841,11 @@ function syncRebuiltContent() {
     getPostItems().forEach((item) => {
       appendUniqueCard(feed, `post:${item.id}`, renderPostCard(item));
     });
+    setupRebuiltImagePlaceholders(app);
+    // The target floor may only have appeared in the native tree during this
+    // sync.  Retry the pending first-load fragment now that its rebuilt card
+    // can be present.
+    scrollToCurrentRebuiltHash();
     return;
   }
 
@@ -9759,7 +28876,12 @@ function pokeNativeInfiniteLoad() {
   if (!lastSettings?.enabled || !lastSettings.rebuildUi) {
     return;
   }
-  if (!["topics", "search", "post", "board"].includes(getPageKind())) {
+  const kind = getPageKind();
+  const isPublicProfileFeed = kind === "userCenter" && isPublicUserProfilePage();
+  if (isPublicProfileFeed && isPublicProfileSelectionProtected()) {
+    return;
+  }
+  if (!["topics", "search", "post", "board"].includes(kind) && !isPublicProfileFeed) {
     return;
   }
   const now = Date.now();
@@ -9772,6 +28894,7 @@ function pokeNativeInfiniteLoad() {
   const scrollEvent = new Event("scroll", { bubbles: true });
   window.dispatchEvent(scrollEvent);
   document.dispatchEvent(scrollEvent);
+  document.querySelector("#root")?.dispatchEvent(scrollEvent);
 
   const loadMore = document.querySelector(
     "#focus-topic-getMore, [class*='getMore'], [class*='loadMore'], [id*='getMore'], [id*='loadMore']"
@@ -9790,17 +28913,63 @@ function armAutoLoader() {
   }
 
   autoLoadArmed = true;
+  const markScrollInteraction = () => {
+    seamlessScrollInteractionRevision += 1;
+  };
+  window.addEventListener("wheel", markScrollInteraction, { passive: true, capture: true });
+  window.addEventListener("touchmove", markScrollInteraction, { passive: true, capture: true });
+  document.addEventListener("pointerdown", markScrollInteraction, { passive: true, capture: true });
+  document.addEventListener("pointermove", (event) => {
+    if (event.buttons) {
+      markScrollInteraction();
+    }
+  }, { passive: true, capture: true });
+  document.addEventListener("keydown", (event) => {
+    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) {
+      markScrollInteraction();
+    }
+  }, true);
   window.addEventListener("scroll", () => {
-    if (!lastSettings?.enabled || !lastSettings.rebuildUi) {
+    if (autoLoadScrollFrame) {
       return;
     }
-    const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 900;
-    if (!nearBottom) {
-      return;
-    }
-    pokeNativeInfiniteLoad();
-    scheduleSync();
+    autoLoadScrollFrame = window.requestAnimationFrame(() => {
+      autoLoadScrollFrame = 0;
+      if (!lastSettings?.enabled || !lastSettings.rebuildUi) {
+        return;
+      }
+      const kind = getPageKind();
+      if (SEAMLESS_SCROLL_SYNC_PAGE_KINDS.has(kind)) {
+        scheduleSeamlessNativeContentSync({ kind });
+      }
+      const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 900;
+      if (!nearBottom) {
+        return;
+      }
+      pokeNativeInfiniteLoad();
+      if (kind === "userCenter") {
+        scheduleSync();
+      }
+    });
   }, { passive: true });
+}
+
+function isRebuiltInternalMutationTarget(record, app) {
+  const target = record.target instanceof Element ? record.target : record.target?.parentElement;
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  if (app?.contains(target)) {
+    return true;
+  }
+  return Boolean(target.closest([
+    "#cc98-comfort-loading",
+    "#cc98-comfort-image-viewer",
+    ".cc98-rebuild-color-popover",
+    ".cc98-rebuild-font-size-popover",
+    ".cc98-rebuild-message-emoji-panel",
+    ".cc98-rebuild-transient-toast"
+  ].join(",")));
 }
 
 function ensureObserver() {
@@ -9809,9 +28978,38 @@ function ensureObserver() {
   }
 
   observer = new MutationObserver((records) => {
+    if (redirectCurrentWebVpnExternalPage() || isCurrentWebVpnExternalProxyPage()) {
+      return;
+    }
+    if (forceReloadEditorSubmitErrorPage()) {
+      return;
+    }
+    recoverMissingRebuiltApp();
+    const app = document.querySelector("#cc98-comfort-app");
+    const hasTopbarAvatarMutation = records.some((record) => {
+      const target = record.target instanceof Element ? record.target : record.target?.parentElement;
+      if (record.type === "attributes") {
+        return target instanceof HTMLImageElement
+          && Boolean(target.closest(".topBarUserImg, .topBarUserInfo"));
+      }
+      return [...record.addedNodes].some((node) => {
+        return node instanceof Element
+          && (
+            node.matches?.(".topBarUserImg img, .topBarUserInfo img")
+            || Boolean(node.querySelector?.(".topBarUserImg img, .topBarUserInfo img"))
+          );
+      });
+    });
+    if (hasTopbarAvatarMutation) {
+      window.setTimeout(() => {
+        syncRebuiltTopbarAvatar();
+      }, 0);
+    }
+    if (records.every((record) => isRebuiltInternalMutationTarget(record, app))) {
+      return;
+    }
     const hasSourceMutation = records.some((record) => {
       const target = record.target;
-      const app = document.querySelector("#cc98-comfort-app");
       const changedNodes = [...record.addedNodes, ...record.removedNodes];
       const onlyRebuildNodes = changedNodes.length > 0 && changedNodes.every((node) => {
         return node instanceof Element && (node.id === "cc98-comfort-app" || Boolean(node.closest?.("#cc98-comfort-app")));
@@ -9826,23 +29024,62 @@ function ensureObserver() {
         return node instanceof Element
           && !node.closest?.("#cc98-comfort-app")
           && (
-            node.matches?.(".topBarRight, .topBarUserInfo, .topBarUserCenter, .topBarUserCenter-mainPage, .topBarMessageDetails, .topBarMessageDetails-mainPage, .focus-topic, .card-topic, .board-postItem-body, article, [class*='floor'], [class*='post'], [class*='reply']")
-            || Boolean(node.querySelector?.(".topBarRight, .topBarUserInfo, .topBarUserCenter, .topBarUserCenter-mainPage, .topBarMessageDetails, .topBarMessageDetails-mainPage, .focus-topic, .card-topic, .board-postItem-body, article, [class*='floor'], [class*='post'], [class*='reply']"))
+            node.matches?.(".topBarRight, .topBarUserInfo, .topBarUserCenter, .topBarUserCenter-mainPage, .topBarMessageDetails, .topBarMessageDetails-mainPage, .focus-topic, .card-topic, .board-postItem-body, .createTopic, #sendTopicInfo, .container.body-content, .user-center, .user-center-router, .user-center-exact, .user-profile, .user-activities, .user-posts, .user-post, form[action*='/Account/LogOn'], form[action*='/PassKey/LogOn'], article, [class*='floor'], [class*='post'], [class*='reply']")
+            || Boolean(node.querySelector?.(".topBarRight, .topBarUserInfo, .topBarUserCenter, .topBarUserCenter-mainPage, .topBarMessageDetails, .topBarMessageDetails-mainPage, .focus-topic, .card-topic, .board-postItem-body, .createTopic, #sendTopicInfo, .container.body-content, .user-center, .user-center-router, .user-center-exact, .user-profile, .user-activities, .user-posts, .user-post, form[action*='/Account/LogOn'], form[action*='/PassKey/LogOn'], article, [class*='floor'], [class*='post'], [class*='reply']"))
           );
       });
     });
+    const hasSeamlessNativeContentMutation = records.some((record) => {
+      return isSeamlessNativeContentMutation(record);
+    });
+    if (hasSeamlessNativeContentMutation) {
+      scheduleSeamlessNativeContentSync({ fromMutation: true });
+    }
     if (!hasSourceMutation) {
       return;
+    }
+
+    if (getPageKind() === "userCenter" && !isPublicUserProfilePage()
+      && isUserCenterNativeShellReady()) {
+      const { navSource, router } = getUserCenterNativeShell();
+      if (navSource !== app?.querySelector(".user-center-navigation.cc98-rebuild-native-user-nav")
+        || router !== app?.querySelector(".user-center-router.cc98-rebuild-native-user-router")) {
+        scheduleRebuild();
+        return;
+      }
     }
 
     if (!isFiltering) {
       scheduleFiltering();
     }
     if (!isRebuilding) {
-      scheduleSync();
+      if (SEAMLESS_SCROLL_SYNC_PAGE_KINDS.has(getPageKind())
+        && Date.now() <= seamlessScrollSyncIntentUntil) {
+        scheduleSeamlessNativeContentSync({ fromMutation: true });
+      } else {
+        scheduleSync();
+      }
     }
   });
-  observer.observe(document.querySelector("#root") ?? document.body, { childList: true, subtree: true });
+  observer.observe(document.body || document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: [
+      "src",
+      "srcset",
+      "data-src",
+      "data-srcset",
+      "data-original",
+      "data-url",
+      "data-avatar",
+      "data-portrait",
+      "data-original-src",
+      "data-lazy-src",
+      "data-actualsrc",
+      "poster"
+    ]
+  });
 }
 
 function patchHistoryNavigation() {
@@ -9856,12 +29093,65 @@ function patchHistoryNavigation() {
     const original = history[method];
     history[method] = function patchedHistoryMethod(...args) {
       const beforeRouteKey = getRoutePageKey();
+      const beforeRoutePath = getCurrentCc98RoutePath();
+      const beforeHash = location.hash;
+      const isImageViewerHistoryState = Boolean(args[0]?.cc98ComfortImageViewer);
+      if (isWebVpnHost() && args.length >= 3 && typeof args[2] !== "undefined" && args[2] !== null) {
+        const fixedUrl = repairWebVpnNakedCc98Href(String(args[2]));
+        try {
+          const originalUrl = new URL(String(args[2]), location.href).href;
+          if (fixedUrl && stripUrlHash(fixedUrl) !== stripUrlHash(originalUrl)) {
+            args[2] = fixedUrl;
+          }
+        } catch {
+          if (fixedUrl) {
+            args[2] = fixedUrl;
+          }
+        }
+      }
+      if (args.length >= 3 && typeof args[2] !== "undefined" && args[2] !== null) {
+        try {
+          const targetHref = new URL(String(args[2]), location.href).href;
+          if (targetHref !== location.href && isRebuildTransitionVeilTarget(targetHref)) {
+            beginRebuildTransitionVeil(targetHref);
+          }
+        } catch {
+          // Native history handling remains authoritative for malformed URLs.
+        }
+      }
       const result = original.apply(this, args);
+      if (location.hash !== beforeHash) {
+        clearRebuiltHashScrollIntent();
+      }
+      if (isImageViewerHistoryState) {
+        return result;
+      }
+      const nextRoutePath = getCurrentCc98RoutePath();
+      if (nextRoutePath !== beforeRoutePath) {
+        embeddedBlacklistOpenPath = "";
+      }
+      const movedToAnotherPath = method === "pushState"
+        && beforeRoutePath !== nextRoutePath
+        && !location.hash;
+      if (redirectNullPageToHome()) {
+        return result;
+      }
       setTimeout(() => {
+        if (redirectCurrentWebVpnExternalPage() || isCurrentWebVpnExternalProxyPage()) {
+          return;
+        }
+        if (enforceCurrentWebVpnNakedRouteRedirect()) {
+          return;
+        }
         const nextRouteKey = getRoutePageKey();
         previousRouteKey = nextRouteKey;
+        markCurrentTopicReadLaterRead();
         scheduleFiltering();
         if (nextRouteKey !== beforeRouteKey) {
+          clearRebuiltHashScrollIntent();
+          if (movedToAnotherPath) {
+            window.scrollTo(0, 0);
+          }
           scheduleDelayedRebuilds();
         } else {
           scrollToCurrentRebuiltHash();
@@ -9872,20 +29162,35 @@ function patchHistoryNavigation() {
     };
   });
   window.addEventListener("popstate", () => {
+    if (embeddedBlacklistOpenPath && embeddedBlacklistOpenPath !== getCurrentCc98RoutePath()) {
+      embeddedBlacklistOpenPath = "";
+    }
     if (document.querySelector("#cc98-comfort-image-viewer")) {
       closeImageViewer(true);
       return;
     }
     const nextRouteKey = getRoutePageKey();
     if (nextRouteKey !== previousRouteKey) {
+      clearRebuiltHashScrollIntent();
+      beginRebuildTransitionVeil(location.href);
       previousRouteKey = nextRouteKey;
+      markCurrentTopicReadLaterRead();
       scheduleDelayedRebuilds();
       return;
     }
+    clearRebuiltHashScrollIntent();
     scrollToCurrentRebuiltHash();
     scheduleSync();
   });
   window.addEventListener("hashchange", () => {
+    if (Date.now() < imageViewerSuppressHashScrollUntil) {
+      return;
+    }
+    clearRebuiltHashScrollIntent();
+    if (isReadLaterRoute() || isBlacklistRoute() || ["readLater", "blacklist"].includes(document.querySelector("#cc98-comfort-app")?.dataset.pageKind)) {
+      scheduleDelayedRebuilds();
+      return;
+    }
     scrollToCurrentRebuiltHash();
   });
 }
@@ -9903,11 +29208,33 @@ function ensureHeadObserver() {
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "local" || !changes[STORAGE_KEY]) {
+  if (areaName !== "local") {
     return;
   }
 
-  applySettings(changes[STORAGE_KEY].newValue);
+  if (changes[OPENID_BINDING_STORAGE_KEY]) {
+    clearCachedSecurityWatermarkCode();
+    ensureSecurityWatermark({ force: true });
+    syncOpenIdBindingWithWebAccount();
+    scheduleOpenIdBindPromptAfterLogin();
+  }
+
+  if (changes[STORAGE_KEY]) {
+    applySettings(changes[STORAGE_KEY].newValue);
+  }
+
+  const readLaterStorageKey = getReadLaterStorageKey();
+  if (changes[readLaterStorageKey]) {
+    const items = normalizeReadLaterItemsForStorage(changes[readLaterStorageKey].newValue || []);
+    readLaterItemsCache = { storageKey: readLaterStorageKey, items };
+    writeLegacyReadLaterItemsForCurrentUser(items, readLaterStorageKey);
+    readLaterStorageHydratedKey = readLaterStorageKey;
+    syncReadLaterUi();
+    scheduleSync();
+    if (isReadLaterRoute()) {
+      scheduleRebuild();
+    }
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -9916,43 +29243,124 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "CC98_REBORN_GET_CURRENT_WEB_ACCOUNT") {
+    sendResponse({ ok: true, account: getCurrentCc98WebAccount() });
+    return true;
+  }
+
+  if (message?.type === "CC98_REBORN_GET_BLACKLIST_PAGE_HREF") {
+    if (!shouldBootCc98Reborn()) {
+      sendResponse({ ok: false, href: "" });
+      return true;
+    }
+    sendResponse({ ok: true, href: getBlacklistPageHref() });
+    return true;
+  }
+
+  if (message?.type === "CC98_REBORN_EXIT_CURRENT_ACCOUNT") {
+    exitCurrentCc98AccountFromOpenIdPrompt(null)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || "exit-account-failed" }));
+    return true;
+  }
+
   return false;
 });
 
-function bootNormalPage() {
+function runNormalPageStartupFollowup() {
+  const app = document.querySelector("#cc98-comfort-app");
+  const needsRebuild = !(app instanceof HTMLElement)
+    || app.dataset.routeKey !== getRoutePageKey()
+    || app.dataset.cc98UserCenterPending === "true"
+    || Boolean(app.querySelector(".cc98-rebuild-empty-state"));
+  if (needsRebuild) {
+    scheduleRebuild();
+  } else {
+    scheduleSync();
+  }
+}
+
+function initializeNormalPageDom() {
+  if (normalPageDomBooted || !normalPageBooted || !document.body) {
+    return;
+  }
+  normalPageDomBooted = true;
+  clearPublicUserProfileLoadingOverlay();
   injectSecurityWatermarkPageBridge();
   ensureSecurityWatermark();
   enforceRecentLogoutRedirectIntent();
   bindGlobalTopbarAuthRedirects();
-  document.addEventListener("DOMContentLoaded", () => {
-    injectSecurityWatermarkPageBridge();
-    ensureSecurityWatermark();
-    enforceRecentLogoutRedirectIntent();
-    bindGlobalTopbarAuthRedirects();
-    ensureLegacyColorPickerSuppressor();
-    bindGlobalEditorColorInterceptor();
-    ensureHeadObserver();
-    ensureObserver();
-    ensureNativeAntUiStabilizer();
-    patchHistoryNavigation();
-    scheduleFiltering();
-    scheduleRebuild();
-    setTimeout(scheduleRebuild, 600);
-    setTimeout(scheduleSync, 1400);
-  });
-
+  bindWebVpnNakedRouteGuard();
+  ensureRebornReplyTailSubmitGuard();
+  scheduleOpenIdBindPromptAfterLogin();
+  syncOpenIdBindingWithWebAccount();
   ensureLegacyColorPickerSuppressor();
   bindGlobalEditorColorInterceptor();
   ensureHeadObserver();
   ensureObserver();
   ensureNativeAntUiStabilizer();
   patchHistoryNavigation();
+  if (recoverEditorSubmitAfterNavigation()) {
+    return;
+  }
   scheduleFiltering();
   scheduleRebuild();
-  setTimeout(scheduleRebuild, 600);
-  setTimeout(scheduleSync, 1400);
-
-  loadSettings();
+  ensureStartupUpdateNotice();
+  normalPageStartupTimers.forEach((timer) => window.clearTimeout(timer));
+  normalPageStartupTimers = [
+    window.setTimeout(recoverEditorSubmitAfterNavigation, 350),
+    window.setTimeout(runNormalPageStartupFollowup, 600),
+    window.setTimeout(() => {
+      scheduleSync();
+      normalPageStartupTimers = [];
+    }, 1400)
+  ];
 }
 
-bootNormalPage();
+function bootNormalPage() {
+  if (isOpenIdAuthorizationPage()) {
+    return;
+  }
+  if (redirectNullPageToHome()) {
+    return;
+  }
+  if (normalPageBooted) {
+    return;
+  }
+  if (redirectCurrentWebVpnExternalPage()) {
+    return;
+  }
+  if (enforceCurrentWebVpnNakedRouteRedirect()) {
+    return;
+  }
+  if (!shouldBootCc98Reborn()) {
+    scheduleWebVpnBootProbe();
+    return;
+  }
+  confirmCurrentWebVpnCc98Prefix();
+  normalPageBooted = true;
+  bindRebuildTransitionVeilNavigationGuard();
+  clearPublicUserProfileLoadingOverlay();
+  bindPageEditorSubmitResultMonitor();
+  ensureRebornReplyTailSubmitGuard();
+  restoreEditorSubmitOverlayAfterReload();
+  injectSecurityWatermarkPageBridge();
+  ensureSecurityWatermark();
+  enforceRecentLogoutRedirectIntent();
+  bindGlobalTopbarAuthRedirects();
+  bindWebVpnNakedRouteGuard();
+  patchHistoryNavigation();
+  scheduleOpenIdBindPromptAfterLogin();
+  syncOpenIdBindingWithWebAccount();
+  loadSettings();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeNormalPageDom, { once: true });
+  } else {
+    initializeNormalPageDom();
+  }
+}
+
+armInitialRebuildTransitionVeil();
+if (!recoverPendingWebVpnOpenIdCallback() && !isOpenIdAuthorizationPage()) {
+  bootNormalPage();
+}

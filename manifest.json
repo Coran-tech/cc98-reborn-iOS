@@ -2,28 +2,107 @@
   "manifest_version": 3,
   "name": "CC98 Reborn",
   "description": "A refreshed reading and browsing interface for CC98.",
-  "version": "0.1.2",
+  "version": "0.3.5.2",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsx4AY7VBQLt9+vyQu66ygsM332JqZkzTbXoGodjciunuxrkJ5PmN7qmlyhJQz3hd6rqxIQq7DRwEimcH3SaEYB6ypOh0fSSSWEWhjIbENVOJuVd0j+9ad8Ww9QE+AA/rfGEci0hHx02IvLarBCUBlROqVJjvofOFNg/8rhozdu/3lpcYqPqq+CKzYZWH7J26TC5Tcau0sXodmM27sI/4q5avmL0cFSruuCuqep69delrU/qSBLkJZar53AIpKPwwz48Jj75XQD5PFEpJ/8mTxiSRQ6cgQH2xypLwIiUbbtDMUmkLzVGEo364hUN1/GavubO6h78T5K8ealXNWUqgHQIDAQAB",
   "permissions": [
     "storage",
-    "downloads"
+    "downloads",
+    "alarms",
+    "browsingData",
+    "identity",
+    "activeTab",
+    "webNavigation"
   ],
   "host_permissions": [
     "*://*.cc98.org/*",
     "*://cc98.org/*",
-    "*://www-cc98-org-s.webvpn.zju.edu.cn/*"
+    "*://www-cc98-org-s.webvpn.zju.edu.cn/*",
+    "*://*.webvpn.zju.edu.cn/*",
+    "https://openid.cc98.org/*",
+    "https://api.cc98.org/*",
+    "https://question.coranqwq.xyz/*",
+    "https://api.github.com/repos/Coran-tech/cc98-reborn/releases*",
+    "https://github.com/Coran-tech/cc98-reborn/releases/*",
+    "https://gh-proxy.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "images/CC98/*",
+        "images/ac/*",
+        "images/ac1/*",
+        "images/tb/*",
+        "images/ms/*",
+        "images/em/*",
+        "images/mahjong/animal2017/*",
+        "images/mahjong/carton2017/*",
+        "images/mahjong/face2017/*",
+        "src/vendor/katex/fonts/*"
+      ],
+      "matches": [
+        "*://*.cc98.org/*",
+        "*://cc98.org/*",
+        "*://www-cc98-org-s.webvpn.zju.edu.cn/*",
+        "*://*.webvpn.zju.edu.cn/*"
+      ]
+    }
   ],
   "content_scripts": [
     {
       "matches": [
-        "*://*.cc98.org/*",
-        "*://cc98.org/*",
-        "*://www-cc98-org-s.webvpn.zju.edu.cn/*"
+        "*://*.webvpn.zju.edu.cn/*"
       ],
       "js": [
-        "src/content.js"
+        "src/openid-webvpn-bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "*://*.cc98.org/*",
+        "*://cc98.org/*",
+        "*://www-cc98-org-s.webvpn.zju.edu.cn/*",
+        "*://*.webvpn.zju.edu.cn/*"
+      ],
+      "exclude_matches": [
+        "https://openid.cc98.org/*",
+        "*://*.webvpn.zju.edu.cn/*/connect/authorize*",
+        "*://*.webvpn.zju.edu.cn/*/Account/LogOn*",
+        "*://*.webvpn.zju.edu.cn/*/PassKey/LogOn*"
+      ],
+      "js": [
+        "src/page-submit-monitor.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://*.cc98.org/*",
+        "*://cc98.org/*",
+        "*://www-cc98-org-s.webvpn.zju.edu.cn/*",
+        "*://*.webvpn.zju.edu.cn/*"
+      ],
+      "exclude_matches": [
+        "https://openid.cc98.org/*",
+        "*://*.webvpn.zju.edu.cn/*/connect/authorize*",
+        "*://*.webvpn.zju.edu.cn/*/Account/LogOn*",
+        "*://*.webvpn.zju.edu.cn/*/PassKey/LogOn*"
+      ],
+      "js": [
+        "src/vendor/showdown/showdown.min.js",
+        "src/vendor/katex/katex.min.js",
+        "src/extended-ubb-core.js",
+        "src/extended-ubb.js",
+        "src/markup-converter.js",
+        "src/content.js",
+        "experiments/question-mark/content.js"
       ],
       "css": [
-        "src/styles.css"
+        "src/vendor/katex/katex.min.css",
+        "src/styles.css",
+        "src/extended-ubb.css",
+        "experiments/question-mark/content.css"
       ],
       "run_at": "document_start"
     }
