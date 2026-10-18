@@ -22,6 +22,14 @@ BUILD_NUMBER="${GITHUB_RUN_NUMBER:-${BUILD_NUMBER:-1}}"
 
 finish() {
   local status=$?
+  # Installation can fail after compilation. Preserve only the built app's plist,
+  # not a simulator data container or any website/session data.
+  local simulator_plist="$RUN_DIR/simulator-derived-data/Build/Products/Debug-iphonesimulator/CC98RebornShell.app/Info.plist"
+  if [[ -f "$simulator_plist" ]]; then
+    if ! cp "$simulator_plist" "$ARTIFACTS/simulator-app-Info.plist"; then
+      echo "Could not retain the compiled simulator app Info.plist." >&2
+    fi
+  fi
   # Preserve attachments from a failed test run as well as its xcresult/log.
   if [[ -d "$TEST_RESULTS" && ! -d "$ARTIFACTS/screenshots" ]]; then
     xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
@@ -66,6 +74,20 @@ node scripts/package-ios-resources.cjs
 "$XCODEGEN" generate --spec ios/project.yml --project ios
 test -d "$PROJECT"
 
+# Narrow identity evidence for the observed simulator 'Missing bundle ID' failure.
+python3 - <<'PY' | tee "$ARTIFACTS/source-plist-identity.json"
+import json, plistlib
+with open("ios/CC98RebornShell/Info.plist", "rb") as source:
+    info = plistlib.load(source)
+keys = ("CFBundleIdentifier", "CFBundleExecutable", "CFBundleName", "CFBundlePackageType", "CFBundleShortVersionString", "CFBundleVersion")
+print(json.dumps({key: info.get(key) for key in keys}, indent=2))
+PY
+xcodebuild -showBuildSettings -json \
+  -project "$PROJECT" -target "$SCHEME" -configuration Debug -sdk iphonesimulator \
+  CURRENT_PROJECT_VERSION="$BUILD_NUMBER" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+  | python3 -c 'import json,sys; keys=("PRODUCT_BUNDLE_IDENTIFIER","INFOPLIST_FILE","INFOPLIST_PATH","GENERATE_INFOPLIST_FILE","INFOPLIST_KEY_CFBundleIdentifier","PRODUCT_NAME","EXECUTABLE_NAME","WRAPPER_NAME","CURRENT_PROJECT_VERSION"); print(json.dumps([{ "target": item.get("target"), "identity": {key: item.get("buildSettings",{}).get(key) for key in keys}} for item in json.load(sys.stdin)], indent=2))' \
+  | tee "$ARTIFACTS/generated-build-identity.json"
+
 # Simulator tests are evidence only, never the source of the device IPA.
 # GitHub run 39146315001 lists this exact OS version; Xcode remains 26.0.1.
 # A provider may explicitly override this only after checking its destinations.
@@ -101,7 +123,8 @@ APP="$RUN_DIR/device-derived-data/Build/Products/Release-iphoneos/CC98RebornShel
 test -d "$APP"
 test -f "$APP/Info.plist"
 test -f "$APP/CC98RebornShell"
-test -d "$APP/Resources/Reborn"
+test -d "$APP/Reborn"
+test ! -e "$APP/Resources"
 mkdir -p "$RUN_DIR/staging/Payload"
 ditto "$APP" "$RUN_DIR/staging/Payload/CC98RebornShell.app"
 # Package only Payload, not DerivedData, simulator products, sources or secrets.
@@ -128,6 +151,7 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
         assert not name.startswith("/") and "\\" not in name, "Invalid ZIP path"
         assert ".." not in parts and "." not in name.split("/"), "ZIP traversal"
         assert name in ("Payload/", prefix) or name.startswith(prefix), "Unexpected ZIP member"
+        assert name != prefix + "Resources" and not name.startswith(prefix + "Resources/"), "iOS app must not contain a top-level Resources directory"
         assert not stat.S_ISLNK(entry.external_attr >> 16), "Unexpected symlink"
     assert archive.testzip() is None, "Corrupt ZIP member"
     info = plistlib.loads(archive.read(prefix + "Info.plist"))
@@ -155,7 +179,7 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
             platforms.append(struct.unpack_from("<I", binary, offset + 8)[0])
         offset += size
     assert platforms == [2], "Mach-O is not built for iOS devices"
-    resource_prefix = prefix + "Resources/Reborn/"
+    resource_prefix = prefix + "Reborn/"
     index = json.loads(archive.read(resource_prefix + "manifest-index.json"))
     assert index.get("schemaVersion") == 1, "Unexpected resource index version"
     resources = []

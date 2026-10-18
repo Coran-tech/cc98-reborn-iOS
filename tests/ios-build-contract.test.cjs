@@ -45,7 +45,8 @@ test('resources are packaged before generating the exact Xcode project', () => {
   assert(packageIndex > 0 && packageIndex < generateIndex);
   assert.match(script, /PROJECT="\$ROOT\/ios\/CC98RebornShell\.xcodeproj"/);
   assert.match(script, /SCHEME=CC98RebornShell/);
-  assert.match(script, /test -d "\$APP\/Resources\/Reborn"/);
+  assert.match(script, /test -d "\$APP\/Reborn"/);
+  assert.match(script, /test ! -e "\$APP\/Resources"/);
 });
 
 test('simulator tests run before the separate arm64 iPhoneOS device build', () => {
@@ -91,6 +92,12 @@ test('failures retain diagnostics without uploading the checkout', () => {
   assert.match(script, /simulator-tests\.xcresult/);
   assert.match(script, /device-build\.xcresult/);
   assert.match(script, /build-status\.txt/);
+  assert.match(script, /local simulator_plist="\$RUN_DIR\/simulator-derived-data\/Build\/Products\/Debug-iphonesimulator\/CC98RebornShell\.app\/Info\.plist"/);
+  assert.match(script, /if \[\[ -f "\$simulator_plist" \]\]; then/);
+  assert.match(script, /cp "\$simulator_plist" "\$ARTIFACTS\/simulator-app-Info\.plist"/);
+  assert.match(script, /source-plist-identity\.json/);
+  assert.match(script, /generated-build-identity\.json/);
+  assert(script.indexOf('generated-build-identity.json') < script.indexOf('\nxcodebuild test '));
 });
 
 test('actual IPA validator rejects simulator, malformed ZIPs, and signed or empty candidates', () => {
@@ -118,11 +125,12 @@ with tempfile.TemporaryDirectory(prefix="cc98-ipa-contract-") as folder:
                 index["assets"].append("../outside.txt")
             if case.get("background"):
                 index["assets"].append("src/background.js")
-            members.append((prefix + "Resources/Reborn/manifest-index.json", json.dumps(index).encode(), 0o100644))
+            resource_prefix = prefix + ("Resources/Reborn/" if case.get("legacyLayout") else "Reborn/")
+            members.append((resource_prefix + "manifest-index.json", json.dumps(index).encode(), 0o100644))
             for group in ("pageScripts", "contentScripts", "styles", "assets"):
                 for resource in index[group]:
                     if resource != case.get("missingResource"):
-                        members.append((prefix + "Resources/Reborn/" + resource, b"synthetic", 0o100644))
+                        members.append((resource_prefix + resource, b"synthetic", 0o100644))
         for name in case.get("extra", []):
             members.append((name, b"synthetic", 0o100644))
         if case.get("duplicate"):
@@ -159,7 +167,9 @@ print(json.dumps(results))
     { name: 'missing-indexed-resource', missingResource: 'src/content.js' },
     { name: 'unsafe-index', unsafeIndex: true },
     { name: 'extension-background', background: true },
-    { name: 'unindexed-resource', extra: [prefix + 'Resources/Reborn/private.txt'] },
+    { name: 'unindexed-resource', extra: [prefix + 'Reborn/private.txt'] },
+    { name: 'legacy-resources-layout', legacyLayout: true },
+    { name: 'forbidden-top-level-resources', extra: [prefix + 'Resources/unexpected.txt'] },
     { name: 'outside-payload', extra: ['source/secret.txt'] },
     { name: 'traversal', extra: [prefix + '../../outside.txt'] },
     { name: 'absolute', extra: ['/Payload/CC98RebornShell.app/outside'] },

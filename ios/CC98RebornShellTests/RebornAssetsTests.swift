@@ -30,7 +30,9 @@ final class RebornAssetsTests: XCTestCase {
 
     @MainActor
     func testPackagedAssetsAndScriptOrder() throws {
-        let root = try XCTUnwrap(Bundle.main.resourceURL).appendingPathComponent("Resources/Reborn", isDirectory: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: Bundle.main.bundleURL.appendingPathComponent("Resources").path), "A top-level Resources directory invalidates the iOS bundle layout")
+        XCTAssertEqual(Bundle.main.bundleIdentifier, "org.cc98.reborn.shell")
+        let root = try XCTUnwrap(Bundle.main.resourceURL).appendingPathComponent("Reborn", isDirectory: true)
         let assets = try RebornAssets(root: root)
         XCTAssertEqual(assets.index.pageScripts, ["src/page-submit-monitor.js"])
         XCTAssertEqual(assets.index.contentScripts.first, "runtime/ios-adapter.js")

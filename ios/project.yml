@@ -20,7 +20,8 @@ targets:
         excludes:
           - Resources
           - Info.plist
-      - path: CC98RebornShell/Resources
+      # iOS reserves a top-level Resources folder; copy only Reborn into the app root.
+      - path: CC98RebornShell/Resources/Reborn
         type: folder
         buildPhase: resources
     settings:

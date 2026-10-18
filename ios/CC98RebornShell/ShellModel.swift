@@ -72,7 +72,7 @@ final class ShellModel: ObservableObject {
         #endif
         do {
             guard let resourceURL = bundle.resourceURL else { throw BridgeFailure.unsupported }
-            assets = try RebornAssets(root: resourceURL.appendingPathComponent("Resources/Reborn", isDirectory: true))
+            assets = try RebornAssets(root: resourceURL.appendingPathComponent("Reborn", isDirectory: true))
             assetIssue = nil
         } catch { assets = nil; assetIssue = "增强资源未能完整读取，请重新运行资源打包与构建。原站模式仍可使用。" }
         do {

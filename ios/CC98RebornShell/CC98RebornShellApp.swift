@@ -141,15 +141,27 @@ private struct PopupView: View {
     let browser: WKWebView
     @State private var canGoBack = false
     @State private var confirmClose = false
+    @State private var currentURL: URL?
     var body: some View {
         NavigationStack {
-            BrowserSurface(browser: browser)
-                .navigationTitle("新窗口 · 原站模式").navigationBarTitleDisplayMode(.inline)
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: currentURL?.scheme == "https" ? "lock" : "globe")
+                    Text(ShellPolicy.isForum(currentURL) ? "CC98 原站" : "网页地址").font(.caption)
+                    Text(currentURL?.host ?? "等待网页地址").font(.subheadline.weight(.medium)).lineLimit(1)
+                        .accessibilityIdentifier("popupHost")
+                    Spacer(minLength: 0)
+                }.padding(.horizontal, 16).padding(.vertical, 9).background(.bar)
+                BrowserSurface(browser: browser)
+            }
+                .navigationTitle("网页窗口").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("返回论坛") { confirmClose = true } }
                     ToolbarItem(placement: .primaryAction) { Button("后退") { browser.goBack() }.disabled(!canGoBack) }
                 }
-        }.interactiveDismissDisabled(true).onReceive(browser.publisher(for: \.canGoBack)) { canGoBack = $0 }
+        }.interactiveDismissDisabled(true)
+            .onReceive(browser.publisher(for: \.canGoBack)) { canGoBack = $0 }
+            .onReceive(browser.publisher(for: \.url)) { currentURL = $0 }
             .alert("关闭新窗口？", isPresented: $confirmClose) {
                 Button("取消", role: .cancel) {}
                 Button("关闭", role: .destructive) { model.closePopup() }

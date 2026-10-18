@@ -5,7 +5,7 @@ import WebKit
 final class ContentFilterWebKitTests: XCTestCase {
     @MainActor
     func testBundledFilterFrameHandshakeAndRealWorker() throws {
-        let root = try XCTUnwrap(Bundle.main.resourceURL).appendingPathComponent("Resources/Reborn", isDirectory: true)
+        let root = try XCTUnwrap(Bundle.main.resourceURL).appendingPathComponent("Reborn", isDirectory: true)
         let assets = try RebornAssets(root: root)
         let finished = expectation(description: "bundled frame + MessageChannel + Worker")
         let config = WKWebViewConfiguration()
