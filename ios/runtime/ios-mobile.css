@@ -1,0 +1,15 @@
+/* iOS shell adjustments only; do not hide or weaken the OpenID binding gate. */
+.cc98-ios-unsupported { flex-basis: 100%; margin: 8px; padding: 10px 12px; font: 15px/1.5 -apple-system, sans-serif; color: #624000; background: #fff2ce; border-radius: 8px; }
+.cc98-topic-drawer-header:has(.cc98-ios-unsupported) { flex-wrap: wrap; }
+@supports (padding: env(safe-area-inset-bottom)) {
+  :root.cc98-comfort { scroll-padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  :root.cc98-comfort .cc98-rebuild-openid-bind-overlay {
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+}
+@media (max-width: 600px) {
+  :root.cc98-comfort .cc98-rebuild-openid-bind-dialog { box-sizing: border-box; width: 100%; max-height: 90dvh; overflow-y: auto; }
+  :root.cc98-comfort .cc98-rebuild-openid-bind-actions { flex-wrap: wrap; }
+  :root.cc98-comfort .cc98-rebuild-openid-bind-actions button { min-height: 44px; }
+  :root.cc98-comfort input, :root.cc98-comfort textarea, :root.cc98-comfort select { font-size: max(16px, 1em); }
+}

@@ -1,0 +1,10 @@
+build/
+tmp/
+node_modules/
+*.ipa
+*.p12
+*.mobileprovision
+*.key
+.env
+.env.*
+.DS_Store

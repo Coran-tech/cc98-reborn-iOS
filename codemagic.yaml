@@ -1,0 +1,16 @@
+# Manual fallback: select ios-verification-shell in Codemagic; no webhook triggers.
+# Stable image verified 2026-10-19:
+# https://docs.codemagic.io/specs-macos/xcode-26-0/
+workflows:
+  ios-verification-shell:
+    name: iOS shell - unsigned device candidate
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      xcode: 26.0.1
+      node: 22
+    scripts:
+      - name: Test simulator and build unsigned iPhone app
+        script: bash scripts/build-ios-shell.sh
+    artifacts:
+      - build/ios-shell/run.*/artifacts/**

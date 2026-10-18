@@ -1,0 +1,51 @@
+name: iOS verification shell
+
+on:
+  workflow_dispatch:
+  # Bootstrap without modifying main. Only this dedicated branch can auto-run.
+  push:
+    branches: [codex/ios-verification-shell]
+    paths:
+      - .github/workflows/ios-shell.yml
+      - ios/**
+      - scripts/build-ios-shell.sh
+      - scripts/package-ios-resources.cjs
+      - tests/ios-*.test.cjs
+      - manifest.json
+      - src/**
+      - popup/**
+      - images/**
+      - assets/**
+      - experiments/question-mark/**
+      - LICENSE
+
+permissions:
+  contents: read
+
+jobs:
+  unsigned-device-candidate:
+    # Stable image/Xcode pair verified 2026-10-19:
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test simulator and build unsigned iPhone app
+        run: bash scripts/build-ios-shell.sh
+      - name: Retain build evidence and successful candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-shell-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/ios-shell/run.*/artifacts/
+          if-no-files-found: warn
+          retention-days: 14

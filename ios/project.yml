@@ -1,0 +1,70 @@
+name: CC98RebornShell
+options:
+  bundleIdPrefix: org.cc98.reborn
+  deploymentTarget:
+    iOS: '17.0'
+  xcodeVersion: '16.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    IPHONEOS_DEPLOYMENT_TARGET: '17.0'
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ''
+targets:
+  CC98RebornShell:
+    type: application
+    platform: iOS
+    sources:
+      - path: CC98RebornShell
+        excludes:
+          - Resources
+          - Info.plist
+      - path: CC98RebornShell/Resources
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.cc98.reborn.shell
+        INFOPLIST_FILE: CC98RebornShell/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: '0.1.0'
+        CURRENT_PROJECT_VERSION: '1'
+  CC98RebornShellTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [CC98RebornShellTests]
+    dependencies:
+      - target: CC98RebornShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.cc98.reborn.shell.tests
+        GENERATE_INFOPLIST_FILE: YES
+  CC98RebornShellUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [CC98RebornShellUITests]
+    dependencies:
+      - target: CC98RebornShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.cc98.reborn.shell.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: CC98RebornShell
+schemes:
+  CC98RebornShell:
+    build:
+      targets:
+        CC98RebornShell: all
+        CC98RebornShellTests: [test]
+        CC98RebornShellUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - CC98RebornShellTests
+        - CC98RebornShellUITests
+    archive:
+      config: Release
