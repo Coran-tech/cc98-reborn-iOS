@@ -12,6 +12,7 @@ final class NativeOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
     private var monitor: Task<Void, Never>?
     private var deadline: Task<Void, Never>?
     private var reply: (([String: Any]) -> Void)?
+    private var retryPolicy = OAuthRetryPolicy()
     var isBusy: Bool { operationID != nil }
     init(model: ShellModel?) { self.model = model }
 
@@ -56,7 +57,7 @@ final class NativeOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
 
     private func beginSession(operation: UUID, browser: WKWebView, pageURL: URL?) {
         guard let attempt, operationID == operation else { return }
-        let authentication = ASWebAuthenticationSession(url: OAuthProtocol.authorizationURL(state: attempt.state, verifier: attempt.verifier), callbackURLScheme: OAuthProtocol.callbackScheme) { [weak self, weak browser] callback, error in
+        let authentication = ASWebAuthenticationSession(url: OAuthProtocol.authorizationURL(state: attempt.state, verifier: attempt.verifier, forceLogin: retryPolicy.forceLogin), callbackURLScheme: OAuthProtocol.callbackScheme) { [weak self, weak browser] callback, error in
             Task { @MainActor in
                 guard let self, let browser, self.operationID == operation else { return }
                 guard let callback else {
@@ -70,7 +71,7 @@ final class NativeOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
         authentication.presentationContextProvider = self
         authentication.prefersEphemeralWebBrowserSession = false
         session = authentication // Strong retention until callback/cancellation.
-        model?.authStatus = "请在系统授权窗口使用与网页相同的 CC98 账号"
+        model?.authStatus = retryPolicy.forceLogin ? "请在系统授权窗口重新登录，选择与网页相同的 CC98 账号" : "请在系统授权窗口使用与网页相同的 CC98 账号"
         if !authentication.start() { cancel(.unavailable) }
     }
 
@@ -93,6 +94,7 @@ final class NativeOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
                     guard let store = self.model?.settings else { throw OAuthFailure.storage }
                     let changes: [String: Any]
                     do { changes = try store.setNativeBinding(binding) } catch { throw OAuthFailure.storage }
+                    self.retryPolicy.didBind()
                     self.attempt = live
                     self.model?.notifyBindingChanges(changes)
                     self.model?.authStatus = "已核对同一 UID，可信水印摘要已保存在本机"
@@ -130,14 +132,14 @@ final class NativeOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
                 continuation.resume(throwing: OAuthFailure.noWebAccount)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: timeout)
-            browser.callAsyncJavaScript("return await globalThis.__CC98IOS__.dispatchMessage({type:'CC98_REBORN_GET_CURRENT_WEB_ACCOUNT'});", arguments: [:], in: nil, contentWorld: .world(name: ShellPolicy.worldName)) { result in
+            browser.callAsyncJavaScript("return await globalThis.__CC98IOS__.dispatchMessage({type:'CC98_REBORN_GET_CURRENT_WEB_ACCOUNT'});", arguments: [:], in: nil, in: .world(name: ShellPolicy.worldName), completionHandler: { result in
                 guard !answered else { return }; answered = true; timeout.cancel()
                 guard case .success(let raw) = result, let response = raw as? [String: Any], response["ok"] as? Bool == true,
                       let account = response["account"] as? [String: Any], let id = OAuthProtocol.userID(account["userId"]) else {
                     continuation.resume(throwing: OAuthFailure.noWebAccount); return
                 }
                 continuation.resume(returning: id)
-            }
+            })
         }
     }
 
@@ -154,6 +156,7 @@ final class NativeOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
 
     func cancel(_ error: OAuthFailure = .stale) {
         guard isBusy else { return }
+        retryPolicy.failed(error)
         attempt?.cancel()
         model?.authStatus = error.message
         finish(error.response)

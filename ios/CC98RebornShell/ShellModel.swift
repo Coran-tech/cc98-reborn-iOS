@@ -257,9 +257,9 @@ final class ShellModel: ObservableObject {
     func notifyBindingChanges(_ changes: [String: Any]) {
         authBound = settings?.binding != nil
         guard !changes.isEmpty, mode == .enhanced, let browser = webView, ShellPolicy.isForum(browser.url) else { return }
-        browser.callAsyncJavaScript("globalThis.__CC98IOS__?.receiveStorageChanges(changes, 'local');", arguments: ["changes": changes], in: nil, contentWorld: .world(name: ShellPolicy.worldName)) { [weak self] result in
+        browser.callAsyncJavaScript("globalThis.__CC98IOS__?.receiveStorageChanges(changes, 'local');", arguments: ["changes": changes], in: nil, in: .world(name: ShellPolicy.worldName), completionHandler: { [weak self] result in
             if case .failure = result { self?.record("auth.notification.failed") }
-        }
+        })
     }
 
     func retryBinding() { oauth.login(expectedAccount: nil) { [weak self] result in

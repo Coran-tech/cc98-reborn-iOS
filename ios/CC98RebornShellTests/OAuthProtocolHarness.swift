@@ -30,6 +30,22 @@ enum OAuthContractChecks {
         try check("fixed callback and client", parameters["redirect_uri"] == "org.cc98.reborn.shell:/oauth/callback" && parameters["client_id"] == OAuthProtocol.clientID)
         try check("code S256 exact scopes", parameters["response_type"] == "code" && parameters["code_challenge_method"] == "S256" && parameters["scope"] == OAuthProtocol.scopes)
         try check("no secret or ID-token request", parameters["client_secret"] == nil && parameters["nonce"] == nil)
+        try check("first attempt keeps normal SSO", parameters["prompt"] == nil && parameters["max_age"] == nil)
+        var retryPolicy = OAuthRetryPolicy()
+        retryPolicy.failed(.cancelled)
+        retryPolicy.failed(.expired)
+        try check("cancel and timeout alone do not force login", !retryPolicy.forceLogin)
+        retryPolicy.failed(.accountMismatch)
+        try check("account mismatch requires fresh login", retryPolicy.forceLogin)
+        let retryURL = URLComponents(url: OAuthProtocol.authorizationURL(state: "new-state", verifier: verifier, forceLogin: retryPolicy.forceLogin), resolvingAgainstBaseURL: false)!
+        let retryParameters = Dictionary(uniqueKeysWithValues: retryURL.queryItems!.map { ($0.name, $0.value!) })
+        try check("retry requests explicit login and consent", retryParameters["prompt"] == "login consent" && retryParameters["max_age"] == "0")
+        try check("retry retains PKCE and exact callback", retryParameters["code_challenge_method"] == "S256" && retryParameters["redirect_uri"] == OAuthProtocol.callback && retryParameters["state"] == "new-state")
+        retryPolicy.failed(.cancelled)
+        retryPolicy.failed(.expired)
+        try check("cancelled retry retains account recovery", retryPolicy.forceLogin)
+        retryPolicy.didBind()
+        try check("only successful binding restores normal SSO", !retryPolicy.forceLogin)
         let valid = URL(string: OAuthProtocol.callback + "?state=test-state&code=synthetic-code")!
         try check("valid exact callback", try OAuthProtocol.callbackCode(valid, expectedState: "test-state") == "synthetic-code")
         for address in [

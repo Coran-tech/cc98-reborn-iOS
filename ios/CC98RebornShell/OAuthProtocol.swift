@@ -16,7 +16,7 @@ enum OAuthFailure: String, Error {
         case .invalidToken: return "授权码兑换失败，请确认客户端回调与 PKCE 配置后重新授权。"
         case .invalidProfile: return "未取得有效的 CC98 /me 身份，请确认读取用户信息权限后重试。"
         case .missingWatermark: return "CC98 /me 未返回有效水印，本次没有绑定；请检查用户信息权限后重试。"
-        case .accountMismatch: return "授权账号与当前网页 UID 不一致，本次没有绑定；请使用同一账号重新授权。"
+        case .accountMismatch: return "授权账号与当前网页 UID 不一致，本次没有绑定；再次点击绑定将要求重新登录，请选择与网页相同的账号。"
         case .noWebAccount: return "未能读取当前网页 UID；请先在原站登录，再切回增强模式绑定。"
         case .unavailable: return "授权窗口无法打开；请关闭其他窗口后重试。"
         case .network: return "授权网络请求失败，请确认手机可访问 CC98 校网服务后重试。"
@@ -71,12 +71,15 @@ enum OAuthProtocol {
         else { return nil }
         return text.range(of: "^[1-9][0-9]{0,18}$", options: .regularExpression) == nil ? nil : text
     }
-    static func authorizationURL(state: String, verifier: String) -> URL {
+    static func authorizationURL(state: String, verifier: String, forceLogin: Bool = false) -> URL {
         var url = URLComponents(url: authorize, resolvingAgainstBaseURL: false)!
         url.queryItems = [URLQueryItem(name: "client_id", value: clientID), URLQueryItem(name: "redirect_uri", value: callback),
                          URLQueryItem(name: "response_type", value: "code"), URLQueryItem(name: "scope", value: scopes),
                          URLQueryItem(name: "state", value: state), URLQueryItem(name: "code_challenge", value: challenge(verifier)),
                          URLQueryItem(name: "code_challenge_method", value: "S256")]
+        if forceLogin {
+            url.queryItems! += [URLQueryItem(name: "prompt", value: "login consent"), URLQueryItem(name: "max_age", value: "0")]
+        }
         return url.url!
     }
     static func callbackCode(_ url: URL, expectedState: String) throws -> String {
@@ -121,6 +124,16 @@ enum OAuthProtocol {
         guard prefix.range(of: "^[A-Za-z0-9]{8}$", options: .regularExpression) != nil else { throw OAuthFailure.missingWatermark }
         return try OAuthBinding(userID: id, watermarkPrefix: prefix)
     }
+}
+
+// Keep normal first-attempt SSO. A mismatched authorization must offer a real
+// account-selection recovery on the next user-initiated attempt, not loop in SSO.
+struct OAuthRetryPolicy {
+    private(set) var forceLogin = false
+    mutating func failed(_ error: OAuthFailure) {
+        if error == .accountMismatch { forceLogin = true }
+    }
+    mutating func didBind() { forceLogin = false }
 }
 
 // One attempt consumes at most one callback. Cancellation/navigation invalidates it
