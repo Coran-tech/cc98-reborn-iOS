@@ -140,15 +140,20 @@ private struct PopupView: View {
     @ObservedObject var model: ShellModel
     let browser: WKWebView
     @State private var canGoBack = false
+    @State private var confirmClose = false
     var body: some View {
         NavigationStack {
             BrowserSurface(browser: browser)
                 .navigationTitle("新窗口 · 原站模式").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("返回论坛") { model.closePopup() } }
+                    ToolbarItem(placement: .cancellationAction) { Button("返回论坛") { confirmClose = true } }
                     ToolbarItem(placement: .primaryAction) { Button("后退") { browser.goBack() }.disabled(!canGoBack) }
                 }
-        }.interactiveDismissDisabled(false).onReceive(browser.publisher(for: \.canGoBack)) { canGoBack = $0 }
+        }.interactiveDismissDisabled(true).onReceive(browser.publisher(for: \.canGoBack)) { canGoBack = $0 }
+            .alert("关闭新窗口？", isPresented: $confirmClose) {
+                Button("取消", role: .cancel) {}
+                Button("关闭", role: .destructive) { model.closePopup() }
+            } message: { Text("新窗口中未保存的编辑内容可能丢失；主页面会保留。") }
     }
 }
 

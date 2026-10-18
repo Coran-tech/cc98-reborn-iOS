@@ -46,6 +46,7 @@ final class RebornAssetsTests: XCTestCase {
     }
 }
 
+@MainActor
 private final class LocalNavigationProbe: NSObject, WKNavigationDelegate {
     let finish: () -> Void
     init(finish: @escaping () -> Void) { self.finish = finish }

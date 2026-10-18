@@ -105,7 +105,7 @@ final class BrowserCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
         }
         guard let body = message.body as? [String: Any], let command = body["command"] as? String,
               let args = body["args"] as? [String: Any], JSONSerialization.isValidJSONObject(body),
-              let size = try? JSONSerialization.data(withJSONObject: body).count, size <= 512 * 1024 else {
+              let size = try? JSONSerialization.data(withJSONObject: body).count, size <= LocalSettingsStore.byteLimit + 16 * 1024 else {
             replyHandler(BridgeFailure(code: "INVALID_MESSAGE", message: "桥消息格式无效或超过大小限制。").envelope, nil); return
         }
         do {

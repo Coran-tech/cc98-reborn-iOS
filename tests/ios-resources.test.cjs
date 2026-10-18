@@ -7,6 +7,9 @@ const path = require("node:path");
 const vm = require("node:vm");
 const pack = require("../scripts/package-ios-resources.cjs");
 const root = path.resolve(__dirname, "..");
+// macOS may expose /var through /private/var; pass the actual temp root to
+// the packager instead of weakening its symlink/ancestor safety checks.
+const temporaryRoot = fs.realpathSync(os.tmpdir());
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 const plan = pack.collectPlan(root);
 test("ordered manifest extraction preserves the complete applicable scripts and global scope", () => {
@@ -45,7 +48,7 @@ test("CSS relative URLs become scheme URLs while data and external URLs remain u
   assert.match(value, /https:\/\/example.invalid\/x/);
 });
 test("written package inventory exists and all actual JavaScript parses", () => {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "cc98-ios-resources-"));
+  const temporary = fs.mkdtempSync(path.join(temporaryRoot, "cc98-ios-resources-"));
   try {
     const result = pack.packageResources({ root, output: temporary });
     const index = JSON.parse(fs.readFileSync(path.join(temporary, "manifest-index.json"), "utf8"));
@@ -72,7 +75,7 @@ test("written package inventory exists and all actual JavaScript parses", () => 
 });
 test("packager refuses repository roots and unrelated nonempty output directories", () => {
   assert.throws(() => pack.packageResources({ root, output: root }), /Output/);
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "cc98-ios-unmanaged-"));
+  const temporary = fs.mkdtempSync(path.join(temporaryRoot, "cc98-ios-unmanaged-"));
   try { fs.writeFileSync(path.join(temporary, "keep.txt"), "user data"); assert.throws(() => pack.packageResources({ root, output: temporary }), /managed/); assert.equal(fs.readFileSync(path.join(temporary, "keep.txt"), "utf8"), "user data"); }
   finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 });
