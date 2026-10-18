@@ -55,7 +55,9 @@ test('simulator tests run before the separate arm64 iPhoneOS device build', () =
   const tests = script.slice(testIndex, buildIndex);
   const device = script.slice(buildIndex, script.indexOf('# BEGIN IPA_VALIDATOR'));
   assert.match(tests, /-sdk iphonesimulator/);
-  assert.match(tests, /platform=iOS Simulator,name=iPhone 16,OS=26\.0/);
+  assert.match(script, /SIMULATOR_DESTINATION="\$\{SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=26\.0\.1\}"/);
+  assert.match(script, /printf '%s\\n' "\$SIMULATOR_DESTINATION" \| tee "\$ARTIFACTS\/simulator-destination\.txt"/);
+  assert.match(tests, /-destination "\$SIMULATOR_DESTINATION"/);
   assert.match(tests, /simulator-derived-data/);
   assert.match(tests, /-resultBundlePath "\$TEST_RESULTS"/);
   assert.match(tests, /xcresulttool export attachments/);

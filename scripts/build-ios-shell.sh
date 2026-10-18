@@ -67,11 +67,14 @@ node scripts/package-ios-resources.cjs
 test -d "$PROJECT"
 
 # Simulator tests are evidence only, never the source of the device IPA.
-# This runtime/device pair is installed in both pinned cloud images.
+# GitHub run 39146315001 lists this exact OS version; Xcode remains 26.0.1.
+# A provider may explicitly override this only after checking its destinations.
+SIMULATOR_DESTINATION="${SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=26.0.1}"
+printf '%s\n' "$SIMULATOR_DESTINATION" | tee "$ARTIFACTS/simulator-destination.txt"
 xcodebuild test \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
   -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.0' \
+  -destination "$SIMULATOR_DESTINATION" \
   -destination-timeout 120 \
   -derivedDataPath "$RUN_DIR/simulator-derived-data" \
   -resultBundlePath "$TEST_RESULTS" \

@@ -37,6 +37,11 @@ enum ShellPolicy {
         return validAssetPath(path) ? path : nil
     }
 
+    static func allowsFilterFrame(url: URL, isMainFrame: Bool?, topURL: URL?, enhanced: Bool, isPopup: Bool) -> Bool {
+        enhanced && !isPopup && isMainFrame == false && isForum(topURL)
+            && assetPath(from: url) == "src/content-filter-frame.html"
+    }
+
     static func safeFilename(_ name: String) -> String {
         let leaf = (name as NSString).lastPathComponent
         let cleaned = leaf.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) && !"/\\:".unicodeScalars.contains($0) }

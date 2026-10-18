@@ -24,6 +24,16 @@ final class ShellPolicyTests: XCTestCase {
         XCTAssertFalse(StoragePolicy.canWrite("cc98RebornReadLater:v1:uid:42:other"))
         XCTAssertFalse(StoragePolicy.canWrite("access_token"))
     }
+    func testOnlyNecessaryUnprivilegedFilterSubframeIsAllowed() {
+        let frame = URL(string: "reborn-asset://bundle/src/content-filter-frame.html")!
+        XCTAssertTrue(ShellPolicy.allowsFilterFrame(url: frame, isMainFrame: false, topURL: ShellPolicy.home, enhanced: true, isPopup: false))
+        XCTAssertFalse(ShellPolicy.allowsFilterFrame(url: frame, isMainFrame: true, topURL: ShellPolicy.home, enhanced: true, isPopup: false))
+        XCTAssertFalse(ShellPolicy.allowsFilterFrame(url: frame, isMainFrame: nil, topURL: ShellPolicy.home, enhanced: true, isPopup: false))
+        XCTAssertFalse(ShellPolicy.allowsFilterFrame(url: frame, isMainFrame: false, topURL: URL(string: "https://evil.test/"), enhanced: true, isPopup: false))
+        XCTAssertFalse(ShellPolicy.allowsFilterFrame(url: frame, isMainFrame: false, topURL: ShellPolicy.home, enhanced: false, isPopup: false))
+        XCTAssertFalse(ShellPolicy.allowsFilterFrame(url: frame, isMainFrame: false, topURL: ShellPolicy.home, enhanced: true, isPopup: true))
+        XCTAssertFalse(ShellPolicy.allowsFilterFrame(url: URL(string: "reborn-asset://bundle/popup/popup.html")!, isMainFrame: false, topURL: ShellPolicy.home, enhanced: true, isPopup: false))
+    }
     func testSettingsRejectCredentialsAndPrototypeKeys() {
         XCTAssertTrue(StoragePolicy.containsSecret(["nested": ["apiKey": "private"]]))
         XCTAssertTrue(StoragePolicy.containsSecret(["accessToken": "private"]))

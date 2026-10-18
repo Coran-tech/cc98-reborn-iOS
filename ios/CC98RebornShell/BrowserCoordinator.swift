@@ -11,8 +11,11 @@ final class BrowserCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         if navigationAction.targetFrame?.isMainFrame == true, !isPopup { model?.configureScripts(for: url, browser: webView) }
         if url.scheme == "reborn-asset" {
-            let allowed = model?.isUITesting == true && ShellPolicy.assetPath(from: url) == "fixtures/runtime-smoke.html"
-            decisionHandler(allowed ? .allow : .cancel); return
+            let fixture = model?.isUITesting == true && ShellPolicy.assetPath(from: url) == "fixtures/runtime-smoke.html"
+            let filter = ShellPolicy.allowsFilterFrame(url: url, isMainFrame: navigationAction.targetFrame?.isMainFrame, topURL: webView.url, enhanced: model?.mode == .enhanced, isPopup: isPopup)
+                && model?.assets?.allowed.contains("src/content-filter-frame.html") == true
+            if filter { model?.record("filter.frame.allowed") }
+            decisionHandler(fixture || filter ? .allow : .cancel); return
         }
         if url.absoluteString == "about:blank" { decisionHandler(.allow); return }
         if url.scheme == "blob", ShellPolicy.isAllowedOrigin(scheme: navigationAction.sourceFrame.securityOrigin.protocol, host: navigationAction.sourceFrame.securityOrigin.host, port: navigationAction.sourceFrame.securityOrigin.port) {
