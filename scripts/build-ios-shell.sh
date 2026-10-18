@@ -10,6 +10,7 @@ elif [[ $# -ne 0 ]]; then
   exit 2
 fi
 BUILD_MODE=full
+OAUTH_PROTOCOL_VALIDATION=not_run
 SIMULATOR_VALIDATION=not_run
 DEVICE_PACKAGE=not_produced
 CANDIDATE_NAME=CC98RebornShell-unsigned-device.ipa
@@ -67,6 +68,7 @@ PY
 
 finish() {
   local status=$?
+  if [[ "$OAUTH_PROTOCOL_VALIDATION" == running ]]; then OAUTH_PROTOCOL_VALIDATION=failed_or_incomplete; fi
   if [[ "$SIMULATOR_VALIDATION" == running ]]; then SIMULATOR_VALIDATION=failed_or_incomplete; fi
   # Installation can fail after compilation. Preserve only the built app's plist,
   # not a simulator data container or any website/session data.
@@ -86,8 +88,8 @@ finish() {
     run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
       --output-path "$ARTIFACTS/screenshots" > "$ARTIFACTS/attachment-export.log" 2>&1 || true
   fi
-  printf 'exit_code=%s\nbuild_mode=%s\nsimulator_validation=%s\ndevice_package=%s\n' \
-    "$status" "$BUILD_MODE" "$SIMULATOR_VALIDATION" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
+  printf 'exit_code=%s\nbuild_mode=%s\noauth_protocol_validation=%s\nsimulator_validation=%s\ndevice_package=%s\n' \
+    "$status" "$BUILD_MODE" "$OAUTH_PROTOCOL_VALIDATION" "$SIMULATOR_VALIDATION" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
   echo "Build evidence: $ARTIFACTS"
   exit "$status"
 }
@@ -120,6 +122,24 @@ else
 fi
 bash -n scripts/build-ios-shell.sh
 node --test tests/ios-*.test.cjs 2>&1 | tee "$ARTIFACTS/node-tests.log"
+
+# BEGIN OAUTH_PROTOCOL_VALIDATION
+# Compile the production protocol/storage sources, not a test-side reimplementation.
+# This host-side check is mandatory in both modes and never starts a Simulator.
+echo '=== Production OAuth protocol tests (macOS, no Simulator) ==='
+OAUTH_PROTOCOL_VALIDATION=running
+run_with_timeout 120 xcrun --sdk macosx swiftc -D OAUTH_PROTOCOL_HARNESS \
+  ios/CC98RebornShell/OAuthProtocol.swift \
+  ios/CC98RebornShell/OAuthHTTPClient.swift \
+  ios/CC98RebornShell/ShellPolicy.swift \
+  ios/CC98RebornShell/LocalSettingsStore.swift \
+  ios/CC98RebornShellTests/OAuthProtocolHarness.swift \
+  -o "$RUN_DIR/reborn-oauth-tests" \
+  2>&1 | tee "$ARTIFACTS/oauth-protocol-compile.log"
+run_with_timeout 30 "$RUN_DIR/reborn-oauth-tests" \
+  2>&1 | tee "$ARTIFACTS/oauth-protocol-tests.log"
+OAUTH_PROTOCOL_VALIDATION=passed
+# END OAUTH_PROTOCOL_VALIDATION
 
 # Resources must exist before XcodeGen resolves the folder reference.
 node scripts/package-ios-resources.cjs
@@ -314,7 +334,7 @@ Self-sign it locally with your chosen signing tool before installing on your iPh
 No Apple account, provisioning profile, forum session or credentials were used by this build.
 Passing cloud tests does not establish school/VPN connectivity, real login or physical-device acceptance.
 TXT
-# Both modes require Node checks, device build and ZIP/platform validation.
+# Both modes require Node and production OAuth checks, device build and ZIP/platform validation.
 # The default mode additionally requires the full Simulator validation above.
 mv "$RUN_DIR/candidate.zip" "$ARTIFACTS/$CANDIDATE_NAME"
 DEVICE_PACKAGE=validated_unsigned

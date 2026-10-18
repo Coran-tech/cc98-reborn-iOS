@@ -48,7 +48,7 @@ struct ShellView: View {
                 }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Color.orange.opacity(0.12))
             }
             if model.mode == .enhanced {
-                Text("增强验证保留同账号绑定门槛；本壳尚未配置 OpenID。登录、编辑请先用原站模式验证。")
+                Text("增强需同账号 OpenID 绑定与可信水印。授权在系统窗口完成；随时可切回原站。")
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading).background(accent.opacity(0.04))
                     .accessibilityIdentifier("enhancedNotice")
@@ -97,6 +97,7 @@ struct ShellView: View {
 private struct DiagnosticsView: View {
     @ObservedObject var model: ShellModel
     @Environment(\.dismiss) private var dismiss
+    @State private var confirmUnbind = false
     var body: some View {
         NavigationStack {
             List {
@@ -110,8 +111,21 @@ private struct DiagnosticsView: View {
                 }
                 Section("验证边界") {
                     Text("这是非官方开发验证壳。页面已加载、脚本已安排或收到报告，都不代表登录、绑定、编辑或上传通过。")
-                    Text("本轮不提供 App OpenID 授权、问号服务、完整侧窗或嵌入式插件设置。不会清除论坛登录来切换模式。")
+                    Text("App OpenID 仅保存经 /me 验证的同账号与水印摘要，不保存授权令牌。问号服务、完整侧窗和嵌入式插件设置仍未接入。")
                     Text("iOS 使用系统文件选择器。请在原站模式手动测试编辑、照片与文件上传；取消选择不能触发提交。")
+                }
+                Section("同账号 OpenID 绑定") {
+                    Text(model.authStatus).accessibilityIdentifier("authStatus")
+                    Text("请先在论坛登录，再进入增强模式授权。解除本机绑定不会退出论坛，也不会撤销 CC98 授权。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if model.authBusy {
+                        Button("取消当前授权", role: .cancel) { model.oauth.cancel(.cancelled) }
+                    } else {
+                        Button(model.authBound ? "重新验证绑定" : "绑定当前网页账号") { model.retryBinding() }
+                            .disabled(model.mode != .enhanced || model.isUITesting)
+                    }
+                    Button("解除本机绑定", role: .destructive) { confirmUnbind = true }
+                        .disabled(!model.authBound)
                 }
                 if !model.completedDownloads.isEmpty {
                     Section("本次下载（临时文件）") {
@@ -132,6 +146,13 @@ private struct DiagnosticsView: View {
                 }
             }.navigationTitle("状态与诊断").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+                .alert("解除本机绑定？", isPresented: $confirmUnbind) {
+                    Button("取消", role: .cancel) {}
+                    Button("解除", role: .destructive) {
+                        let result = model.oauth.logout()
+                        if result["ok"] as? Bool != true { model.authStatus = result["error"] as? String ?? OAuthFailure.storage.message }
+                    }
+                } message: { Text("保留论坛登录和当前草稿；增强页面会重新要求同账号绑定。") }
         }
     }
 }

@@ -47,6 +47,9 @@ final class ShellModel: ObservableObject {
     @Published var diagnostics: [DiagnosticEntry] = []
     @Published var completedDownloads: [URL] = []
     @Published var runtimeState = "未启用增强"
+    @Published var authStatus = "尚未绑定；请使用网页遮罩中的同账号绑定按钮"
+    @Published var authBusy = false
+    @Published var authBound = false
     let dataStore: WKWebsiteDataStore
     let assets: RebornAssets?
     let settings: LocalSettingsStore?
@@ -59,6 +62,7 @@ final class ShellModel: ObservableObject {
     private var lastRequestedURL = ShellPolicy.home
     private var observations: [NSKeyValueObservation] = []
     lazy var downloads = NativeDownloads(model: self)
+    lazy var oauth = NativeOAuth(model: self)
 
     init(bundle: Bundle = .main, defaults: UserDefaults = .standard) {
         let key = "cc98.shell.websiteDataStoreID"
@@ -80,6 +84,8 @@ final class ShellModel: ObservableObject {
             settings = try LocalSettingsStore(file: support.appendingPathComponent("Reborn/settings.json"))
             settingsIssue = nil
         } catch { settings = nil; settingsIssue = "本地增强设置无法读取；保留原文件，原站模式仍可使用。" }
+        authBound = settings?.binding != nil
+        if authBound { authStatus = "已读取本机可信绑定摘要；网页仍会核对当前 UID" }
         replaceWebView(url: ShellPolicy.home)
     }
 
@@ -87,6 +93,7 @@ final class ShellModel: ObservableObject {
 
     func request(_ action: ShellAction) { pendingAction = action }
     func perform(_ action: ShellAction) {
+        oauth.cancel()
         switch action {
         case .reload:
             if isUITesting { loadInitial(webView); return }
@@ -116,7 +123,7 @@ final class ShellModel: ObservableObject {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = dataStore
         config.allowsInlineMediaPlayback = true
-        config.applicationNameForUserAgent = "CC98RebornShell/0.1"
+        config.applicationNameForUserAgent = "CC98RebornShell/0.2"
         if let assets { config.setURLSchemeHandler(RebornAssetHandler(assets: assets), forURLScheme: "reborn-asset") }
         let delegate = BrowserCoordinator(model: self, isPopup: false)
         coordinator = delegate
@@ -137,6 +144,7 @@ final class ShellModel: ObservableObject {
         errorMessage = nil
         runtimeState = mode == .original ? "未启用增强" : "等待官方页面；尚未验证注入"
         observations = [
+            browser.observe(\.url, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.oauth.cancel() } },
             browser.observe(\.estimatedProgress, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.progress = browser.estimatedProgress } },
             browser.observe(\.canGoBack, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.canGoBack = browser.canGoBack } },
             browser.observe(\.canGoForward, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.canGoForward = browser.canGoForward } },
@@ -161,6 +169,7 @@ final class ShellModel: ObservableObject {
 
     func configureScripts(for url: URL?, browser: WKWebView) {
         guard browser === webView else { return }
+        oauth.cancel()
         if let url, ShellPolicy.isWebURL(url) { lastRequestedURL = url }
         browser.configuration.userContentController.removeAllUserScripts()
         guard mode == .enhanced, ShellPolicy.isForum(url) else { return }
@@ -244,6 +253,18 @@ final class ShellModel: ObservableObject {
     }
 
     func sheetDismissed() { closePopup() }
+
+    func notifyBindingChanges(_ changes: [String: Any]) {
+        authBound = settings?.binding != nil
+        guard !changes.isEmpty, mode == .enhanced, let browser = webView, ShellPolicy.isForum(browser.url) else { return }
+        browser.callAsyncJavaScript("globalThis.__CC98IOS__?.receiveStorageChanges(changes, 'local');", arguments: ["changes": changes], in: nil, contentWorld: .world(name: ShellPolicy.worldName)) { [weak self] result in
+            if case .failure = result { self?.record("auth.notification.failed") }
+        }
+    }
+
+    func retryBinding() { oauth.login(expectedAccount: nil) { [weak self] result in
+        if result["ok"] as? Bool != true { self?.authStatus = result["error"] as? String ?? OAuthFailure.unavailable.message }
+    } }
 
     func confirmDownload(url: URL, browser: WKWebView, completion: @escaping (Bool) -> Void) {
         NativePrompt.confirm(on: browser, title: "下载文件", message: "将从 \(url.host ?? "网页") 下载到临时目录，完成后可分享或存储到“文件”。", completion: completion)

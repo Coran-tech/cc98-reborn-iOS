@@ -75,6 +75,7 @@ final class BrowserCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
         model?.record("navigation.failed", details: ["code": String((error as NSError).code)])
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if !isPopup { model?.oauth.cancel() }
         model?.record("webprocess.terminated")
         if isPopup { model?.closePopup() }
         model?.errorMessage = "网页进程已终止。未自动重发任何请求；请确认草稿和提交结果后重载或切回原站。"
@@ -148,11 +149,13 @@ final class BrowserCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
             case "runtime.message":
                 guard let payload = args["message"] as? [String: Any], let type = payload["type"] as? String else { throw BridgeFailure.unsupported }
                 switch type {
-                case "CC98_REBORN_OPENID_GET_STATE": value = ["ok": true, "binding": NSNull(), "configured": false]
-                case "CC98_REBORN_OPENID_LOGIN": throw BridgeFailure(code: "NOT_CONFIGURED", message: "本验证壳尚未配置经站方允许的 App OpenID 授权。不能绕过同账号绑定；请切回原站模式登录和编辑。")
+                case "CC98_REBORN_OPENID_GET_STATE": value = model.oauth.state()
+                case "CC98_REBORN_OPENID_LOGIN":
+                    guard payload["expectedAccount"] != nil else { value = OAuthFailure.noWebAccount.response; break }
+                    model.oauth.login(expectedAccount: payload["expectedAccount"]) { result in replyHandler(["ok": true, "value": result], nil) }
+                    return
                 case "CC98_REBORN_OPENID_LOGOUT":
-                    // This build never creates/imports a binding. No claim is made about server session revocation.
-                    value = ["ok": true, "binding": NSNull(), "localOnly": true]
+                    value = model.oauth.logout()
                 case "CC98_REBORN_DOWNLOAD_FILE":
                     guard let raw = payload["url"] as? String, let url = URL(string: raw), url.scheme == "https", ShellPolicy.isWebURL(url), let browser = model.webView else { throw BridgeFailure(code: "URL_DENIED", message: "下载只允许有效 HTTPS 地址。") }
                     model.confirmDownload(url: url, browser: browser) { [weak model, weak browser] accepted in

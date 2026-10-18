@@ -14,7 +14,22 @@ final class LocalSettingsStore {
                 throw BridgeFailure(code: "STORAGE_CORRUPT", message: "本地设置无法读取；已保留原文件，未覆盖。")
             }
             values = object.filter { StoragePolicy.canWrite($0.key) && !StoragePolicy.containsSecret($0.value) }
+            if let raw = object[ShellPolicy.bindingKey], let binding = try? OAuthBinding(stored: raw) {
+                values[ShellPolicy.bindingKey] = binding.dictionary
+            }
         } else { values = [:] }
+    }
+
+    var binding: OAuthBinding? { values[ShellPolicy.bindingKey].flatMap { try? OAuthBinding(stored: $0) } }
+
+    // Only native OAuth / local-unbind code calls this. Generic JS set/remove stay denied.
+    func setNativeBinding(_ binding: OAuthBinding?) throws -> [String: Any] {
+        var next = values
+        var change: [String: Any] = [:]
+        if let previous = next.removeValue(forKey: ShellPolicy.bindingKey) { change["oldValue"] = previous }
+        if let binding { next[ShellPolicy.bindingKey] = binding.dictionary; change["newValue"] = binding.dictionary }
+        try persist(next)
+        return change.isEmpty ? [:] : [ShellPolicy.bindingKey: change]
     }
 
     func get(_ keys: Any?) throws -> [String: Any] {
@@ -76,7 +91,11 @@ final class LocalSettingsStore {
         let data = try JSONSerialization.data(withJSONObject: next, options: [.sortedKeys])
         guard data.count <= Self.byteLimit else { throw BridgeFailure(code: "STORAGE_QUOTA", message: "本地增强设置超过 2 MiB 限额。") }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        #if os(iOS)
         try data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        #else
+        try data.write(to: file, options: [.atomic])
+        #endif
         values = next
     }
 }

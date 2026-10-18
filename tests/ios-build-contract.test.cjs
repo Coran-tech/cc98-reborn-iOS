@@ -57,6 +57,34 @@ test('resources are packaged before generating the exact Xcode project', () => {
   assert.match(script, /test ! -e "\$APP\/Resources"/);
 });
 
+test('both build modes must execute the real production Swift OAuth harness without a Simulator', () => {
+  const start = script.indexOf('# BEGIN OAUTH_PROTOCOL_VALIDATION');
+  const end = script.indexOf('# END OAUTH_PROTOCOL_VALIDATION');
+  assert(start > script.indexOf('node --test tests/ios-*.test.cjs'));
+  assert(end > start && end < script.indexOf('\nnode scripts/package-ios-resources.cjs'));
+  assert(end < script.indexOf('# BEGIN FULL_SIMULATOR_VALIDATION'));
+  const protocol = script.slice(start, end);
+  assert.match(protocol, /run_with_timeout 120 xcrun --sdk macosx swiftc -D OAUTH_PROTOCOL_HARNESS/);
+  const sources = [
+    'ios/CC98RebornShell/OAuthProtocol.swift',
+    'ios/CC98RebornShell/OAuthHTTPClient.swift',
+    'ios/CC98RebornShell/ShellPolicy.swift',
+    'ios/CC98RebornShell/LocalSettingsStore.swift',
+    'ios/CC98RebornShellTests/OAuthProtocolHarness.swift',
+  ];
+  assert.deepEqual(protocol.match(/ios\/[^\s]+\.swift/g), sources);
+  assert.match(protocol, /-o "\$RUN_DIR\/reborn-oauth-tests"/);
+  assert.match(protocol, /run_with_timeout 30 "\$RUN_DIR\/reborn-oauth-tests"/);
+  assert.match(protocol, /tee "\$ARTIFACTS\/oauth-protocol-compile\.log"/);
+  assert.match(protocol, /tee "\$ARTIFACTS\/oauth-protocol-tests\.log"/);
+  assert.doesNotMatch(protocol, /DEVICE_ONLY|simctl|xcodebuild|\|\| true|if \[\[/);
+  assert(protocol.indexOf('OAUTH_PROTOCOL_VALIDATION=running') < protocol.indexOf('swiftc'));
+  assert(protocol.indexOf('OAUTH_PROTOCOL_VALIDATION=passed') > protocol.indexOf('run_with_timeout 30'));
+  assert.match(script, /OAUTH_PROTOCOL_VALIDATION=not_run/);
+  assert.match(script, /OAUTH_PROTOCOL_VALIDATION=failed_or_incomplete/);
+  assert.match(script, /oauth_protocol_validation=%s/);
+});
+
 test('device-only is explicit, keeps device validation and cannot claim Simulator success', () => {
   assert.match(script, /DEVICE_ONLY=false/);
   assert.match(script, /\[\[ \$# -eq 1 && "\$1" == --device-only \]\]/);

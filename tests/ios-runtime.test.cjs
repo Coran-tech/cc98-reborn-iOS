@@ -64,13 +64,25 @@ test("callback lastError is scoped to callback while Promise errors reject", asy
   assert.equal(chrome.runtime.lastError, undefined);
   await assert.rejects(chrome.storage.local.get("cc98ComfortSettings"), { code: "DENIED" });
 });
-test("unconfigured OAuth returns a readable failure, never a fake binding or identity", async () => {
-  const { chrome } = boot(({ args }) => args.message.type === "CC98_REBORN_OPENID_GET_STATE"
-    ? { ok: true, value: { ok: true, configured: false, binding: null } }
-    : { ok: false, error: { code: "NOT_CONFIGURED", message: "iOS OpenID 尚未配置" } });
+test("configured OAuth preserves native cancellation and does not manufacture identity", async () => {
+  const { chrome, api, calls } = boot(({ args }) => args.message.type === "CC98_REBORN_OPENID_GET_STATE"
+    ? { ok: true, value: { ok: true, configured: true, binding: null } }
+    : { ok: true, value: { ok: false, code: "OAUTH_CANCELLED", error: "授权已取消" } });
+  assert.equal(api.capabilities.oauth, true);
   const state = await chrome.runtime.sendMessage({ type: "CC98_REBORN_OPENID_GET_STATE" });
-  assert.equal(state.binding, null); assert.equal(state.configured, false);
-  await new Promise(resolve => chrome.runtime.sendMessage({ type: "CC98_REBORN_OPENID_LOGIN" }, result => { assert.equal(result.ok, false); assert.equal(result.code, "NOT_CONFIGURED"); assert.match(result.error, /尚未配置/); assert.equal(chrome.runtime.lastError, undefined); resolve(); }));
+  assert.equal(state.binding, null); assert.equal(state.configured, true);
+  await new Promise(resolve => chrome.runtime.sendMessage({ type: "CC98_REBORN_OPENID_LOGIN", expectedAccount: { userId: "42" } }, result => { assert.equal(result.ok, false); assert.equal(result.code, "OAUTH_CANCELLED"); assert.match(result.error, /已取消/); assert.equal(chrome.runtime.lastError, undefined); resolve(); }));
+  assert.equal(calls.find(call => call.args.message?.type === "CC98_REBORN_OPENID_LOGIN").args.message.expectedAccount.userId, "42");
+});
+test("native binding notifications reach existing listeners while binding writes remain protected", async () => {
+  const { chrome, api, calls } = boot();
+  const seen = [];
+  chrome.storage.onChanged.addListener((changes, area) => seen.push(json({ changes, area })));
+  api.receiveStorageChanges({ "cc98RebornOpenIdBinding:v1": { newValue: { bound: true, userId: "42", watermarkIdPrefix: "abcdefgh" } } }, "local");
+  assert.equal(seen[0].changes["cc98RebornOpenIdBinding:v1"].newValue.userId, "42");
+  assert.equal(seen[0].area, "local");
+  await assert.rejects(chrome.storage.local.set({ "cc98RebornOpenIdBinding:v1": { bound: true } }), { code: "STORAGE_KEY_DENIED" });
+  assert.equal(calls.some(call => call.command === "storage.set"), false);
 });
 test("unsupported background APIs and messages do not pretend success", async () => {
   const { chrome } = boot(() => ({ ok: false, error: { code: "UNSUPPORTED", message: "未接入" } }));

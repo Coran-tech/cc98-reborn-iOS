@@ -156,7 +156,7 @@
   Object.defineProperty(globalThis, "chrome", { value: chrome, configurable: false });
   Object.defineProperty(globalThis, "__CC98IOS__", { value: Object.freeze({ version: 1, receiveStorageChanges, dispatchMessage,
     open: (url, target = "_blank") => call("host.open", { url, target }), share: args => call("host.share", args),
-    report, capabilities: Object.freeze({ oauth: false, question: false, semantic: false, subframes: false, chromeDownloads: false }) }) });
+    report, capabilities: Object.freeze({ oauth: true, question: false, semantic: false, subframes: false, chromeDownloads: false }) }) });
   globalThis.addEventListener?.("securitypolicyviolation", event => report("csp.violation", { directive: event.effectiveDirective || "unknown", code: "CSP_BLOCKED" }));
   globalThis.addEventListener?.("error", event => {
     const resource = event.target?.getAttribute?.("src") || event.target?.getAttribute?.("href");
