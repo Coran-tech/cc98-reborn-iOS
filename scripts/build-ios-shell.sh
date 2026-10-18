@@ -20,6 +20,34 @@ TEST_RESULTS="$ARTIFACTS/simulator-tests.xcresult"
 BUILD_NUMBER="${GITHUB_RUN_NUMBER:-${BUILD_NUMBER:-1}}"
 [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "Build number must be a positive integer." >&2; exit 1; }
 
+run_with_timeout() {
+  # Bound only this command's process group, never global Simulator services.
+  python3 - "$@" <<'PY'
+import os, signal, subprocess, sys
+seconds = int(sys.argv[1])
+process = subprocess.Popen(sys.argv[2:], start_new_session=True)
+try:
+    sys.exit(process.wait(timeout=seconds))
+except subprocess.TimeoutExpired:
+    print("[watchdog] timeout after %ss: %s" % (seconds, sys.argv[2]), flush=True)
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+    # Also close any owned child that outlived the xcodebuild/simctl process.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait()
+    sys.exit(124)
+PY
+}
+
 finish() {
   local status=$?
   # Installation can fail after compilation. Preserve only the built app's plist,
@@ -30,9 +58,14 @@ finish() {
       echo "Could not retain the compiled simulator app Info.plist." >&2
     fi
   fi
+  if [[ -n "${SIMULATOR_UDID:-}" ]]; then
+    if ! run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulator-state-on-exit.json" 2> "$ARTIFACTS/simulator-state-on-exit.log"; then
+      echo "Could not collect Simulator state within 30 seconds." >&2
+    fi
+  fi
   # Preserve attachments from a failed test run as well as its xcresult/log.
   if [[ -d "$TEST_RESULTS" && ! -d "$ARTIFACTS/screenshots" ]]; then
-    xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
+    run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
       --output-path "$ARTIFACTS/screenshots" > "$ARTIFACTS/attachment-export.log" 2>&1 || true
   fi
   printf 'exit_code=%s\n' "$status" > "$ARTIFACTS/build-status.txt"
@@ -93,18 +126,56 @@ xcodebuild -showBuildSettings -json \
 # A provider may explicitly override this only after checking its destinations.
 SIMULATOR_DESTINATION="${SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=26.0.1}"
 printf '%s\n' "$SIMULATOR_DESTINATION" | tee "$ARTIFACTS/simulator-destination.txt"
-xcodebuild test \
+echo '=== Simulator inventory and exact device selection ==='
+run_with_timeout 30 xcrun simctl list runtimes --json > "$ARTIFACTS/simulator-runtimes.json"
+run_with_timeout 30 xcrun simctl list devices available --json > "$ARTIFACTS/simulator-devices-before-boot.json"
+# BEGIN SIMULATOR_SELECTOR
+python3 - "$SIMULATOR_DESTINATION" "$ARTIFACTS/simulator-runtimes.json" "$ARTIFACTS/simulator-devices-before-boot.json" <<'PY' | tee "$ARTIFACTS/selected-simulator.json"
+import json, sys, uuid
+destination = dict(part.split("=", 1) for part in sys.argv[1].split(","))
+assert destination.get("platform") == "iOS Simulator" and destination.get("name") and destination.get("OS"), "Use an exact iOS Simulator name and OS version"
+with open(sys.argv[2]) as source:
+    runtimes = json.load(source)["runtimes"]
+with open(sys.argv[3]) as source:
+    devices = json.load(source)["devices"]
+matches = []
+for runtime in runtimes:
+    if not runtime.get("isAvailable") or runtime.get("version") != destination["OS"] or not runtime.get("identifier", "").startswith("com.apple.CoreSimulator.SimRuntime.iOS-"):
+        continue
+    for device in devices.get(runtime["identifier"], []):
+        if device.get("isAvailable") and device.get("name") == destination["name"]:
+            uuid.UUID(device["udid"])
+            matches.append({"name": device["name"], "udid": device["udid"], "state": device["state"], "runtime": runtime["identifier"], "os": runtime["version"]})
+assert len(matches) == 1, "Expected one available Simulator for %s; found %s" % (sys.argv[1], len(matches))
+print(json.dumps(matches[0], indent=2))
+PY
+# END SIMULATOR_SELECTOR
+SIMULATOR_UDID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["udid"])' "$ARTIFACTS/selected-simulator.json")"
+SIMULATOR_STATE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state"])' "$ARTIFACTS/selected-simulator.json")"
+echo "=== Simulator boot: $SIMULATOR_UDID (initial state: $SIMULATOR_STATE) ==="
+if [[ "$SIMULATOR_STATE" != Booted ]]; then
+  run_with_timeout 60 xcrun simctl boot "$SIMULATOR_UDID" 2>&1 | tee "$ARTIFACTS/simulator-boot.log"
+else
+  echo 'Selected Simulator is already booted.' | tee "$ARTIFACTS/simulator-boot.log"
+fi
+run_with_timeout 180 xcrun simctl bootstatus "$SIMULATOR_UDID" -b 2>&1 | tee "$ARTIFACTS/simulator-bootstatus.log"
+run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulator-devices-after-boot.json"
+echo "=== Simulator tests: $SIMULATOR_UDID (600s process watchdog, 120s maximum per test) ==="
+run_with_timeout 600 xcodebuild test \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
   -sdk iphonesimulator \
-  -destination "$SIMULATOR_DESTINATION" \
+  -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
   -destination-timeout 120 \
   -derivedDataPath "$RUN_DIR/simulator-derived-data" \
   -resultBundlePath "$TEST_RESULTS" \
   -parallel-testing-enabled NO \
+  -test-timeouts-enabled YES \
+  -default-test-execution-time-allowance 60 \
+  -maximum-test-execution-time-allowance 120 \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   2>&1 | tee "$ARTIFACTS/simulator-tests.log"
-xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
+run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
   --output-path "$ARTIFACTS/screenshots" \
   2>&1 | tee "$ARTIFACTS/attachment-export.log"
 

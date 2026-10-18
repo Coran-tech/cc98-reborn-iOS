@@ -8,6 +8,11 @@ final class ShellSmokeTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+    private func waitForVisibleFixture(in app: XCUIApplication) {
+        let title = app.webViews.staticTexts["本地编辑探针"].firstMatch
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: title)
+        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 15), .completed, "The anonymous editor must be visibly rendered, not just the native mode label")
+    }
     func testOfflineToolbarConfirmationAndOriginalRecovery() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing-offline"]
@@ -16,13 +21,21 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertEqual(app.staticTexts["modeLabel"].label, "原站模式")
         XCTAssertTrue(app.otherElements["networkError"].exists || app.staticTexts["networkError"].exists)
         XCTAssertTrue(app.buttons["modeToggleButton"].exists)
+        waitForVisibleFixture(in: app)
         screenshot("01-original-offline-shell")
 
+        let draft = "Anonymous draft 42"
+        let body = app.webViews.textViews.firstMatch
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        body.tap()
+        body.typeText(draft)
+        XCTAssertEqual(body.value as? String, draft)
         app.buttons["modeToggleButton"].tap()
         XCTAssertTrue(app.alerts["先确认未提交内容"].waitForExistence(timeout: 3))
         screenshot("02-draft-risk-confirmation")
         app.alerts.buttons["取消"].tap()
         XCTAssertEqual(app.staticTexts["modeLabel"].label, "原站模式")
+        XCTAssertEqual(body.value as? String, draft, "Cancelling a mode switch must preserve the unsubmitted draft")
 
         app.buttons["modeToggleButton"].tap()
         app.alerts.buttons["继续"].tap()
@@ -33,6 +46,7 @@ final class ShellSmokeTests: XCTestCase {
         app.alerts.buttons["继续"].tap()
         XCTAssertEqual(app.staticTexts["modeLabel"].label, "原站模式")
         XCTAssertFalse(app.staticTexts["enhancedNotice"].exists)
+        waitForVisibleFixture(in: app)
         screenshot("04-restored-original")
 
         app.buttons["retryButton"].tap()
