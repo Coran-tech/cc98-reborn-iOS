@@ -2,6 +2,23 @@
 # One build path for GitHub Actions and Codemagic. No signing or distribution.
 set -euo pipefail
 
+DEVICE_ONLY=false
+if [[ $# -eq 1 && "$1" == --device-only ]]; then
+  DEVICE_ONLY=true
+elif [[ $# -ne 0 ]]; then
+  echo 'Usage: bash scripts/build-ios-shell.sh [--device-only]' >&2
+  exit 2
+fi
+BUILD_MODE=full
+SIMULATOR_VALIDATION=not_run
+DEVICE_PACKAGE=not_produced
+CANDIDATE_NAME=CC98RebornShell-unsigned-device.ipa
+if [[ "$DEVICE_ONLY" == true ]]; then
+  BUILD_MODE=device-only
+  SIMULATOR_VALIDATION=skipped_device_only
+  CANDIDATE_NAME=CC98RebornShell-unsigned-unverified-device.ipa
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -50,6 +67,7 @@ PY
 
 finish() {
   local status=$?
+  if [[ "$SIMULATOR_VALIDATION" == running ]]; then SIMULATOR_VALIDATION=failed_or_incomplete; fi
   # Installation can fail after compilation. Preserve only the built app's plist,
   # not a simulator data container or any website/session data.
   local simulator_plist="$RUN_DIR/simulator-derived-data/Build/Products/Debug-iphonesimulator/CC98RebornShell.app/Info.plist"
@@ -68,7 +86,8 @@ finish() {
     run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
       --output-path "$ARTIFACTS/screenshots" > "$ARTIFACTS/attachment-export.log" 2>&1 || true
   fi
-  printf 'exit_code=%s\n' "$status" > "$ARTIFACTS/build-status.txt"
+  printf 'exit_code=%s\nbuild_mode=%s\nsimulator_validation=%s\ndevice_package=%s\n' \
+    "$status" "$BUILD_MODE" "$SIMULATOR_VALIDATION" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
   echo "Build evidence: $ARTIFACTS"
   exit "$status"
 }
@@ -107,6 +126,8 @@ node scripts/package-ios-resources.cjs
 "$XCODEGEN" generate --spec ios/project.yml --project ios
 test -d "$PROJECT"
 
+# BEGIN FULL_SIMULATOR_VALIDATION
+if [[ "$DEVICE_ONLY" == false ]]; then
 # Narrow identity evidence for the observed simulator 'Missing bundle ID' failure.
 python3 - <<'PY' | tee "$ARTIFACTS/source-plist-identity.json"
 import json, plistlib
@@ -161,6 +182,7 @@ fi
 run_with_timeout 180 xcrun simctl bootstatus "$SIMULATOR_UDID" -b 2>&1 | tee "$ARTIFACTS/simulator-bootstatus.log"
 run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulator-devices-after-boot.json"
 echo "=== Simulator tests: $SIMULATOR_UDID (600s process watchdog, 120s maximum per test) ==="
+SIMULATOR_VALIDATION=running
 run_with_timeout 600 xcodebuild test \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
   -sdk iphonesimulator \
@@ -175,9 +197,14 @@ run_with_timeout 600 xcodebuild test \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   2>&1 | tee "$ARTIFACTS/simulator-tests.log"
+SIMULATOR_VALIDATION=passed
 run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
   --output-path "$ARTIFACTS/screenshots" \
   2>&1 | tee "$ARTIFACTS/attachment-export.log"
+else
+  echo '=== DEVICE-ONLY: Simulator selection, boot and tests explicitly skipped; candidate remains unverified ==='
+fi
+# END FULL_SIMULATOR_VALIDATION
 
 # Build an arm64 iPhoneOS app without a development team or signing identity.
 xcodebuild build \
@@ -275,14 +302,20 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
 PY
 # END IPA_VALIDATOR
 
-cat > "$ARTIFACTS/README.txt" <<'TXT'
-CC98RebornShell-unsigned-device.ipa is a device candidate, NOT an install-ready signed app.
+printf '%s is a device candidate, NOT an install-ready signed app.\n' "$CANDIDATE_NAME" > "$ARTIFACTS/README.txt"
+if [[ "$DEVICE_ONLY" == true ]]; then
+  echo 'UNVERIFIED DEVICE-ONLY BUILD: Simulator selection, boot, unit tests and UI tests were NOT run. Successful packaging does not establish app launch or functionality.' >> "$ARTIFACTS/README.txt"
+else
+  echo 'Simulator tests passed. simulator-tests.xcresult and screenshots contain synthetic/offline evidence only.' >> "$ARTIFACTS/README.txt"
+fi
+cat >> "$ARTIFACTS/README.txt" <<'TXT'
 It contains Payload/CC98RebornShell.app built for iPhoneOS arm64, minimum iOS 17.0.
 Self-sign it locally with your chosen signing tool before installing on your iPhone.
 No Apple account, provisioning profile, forum session or credentials were used by this build.
-simulator-tests.xcresult and screenshots contain synthetic/offline test evidence only.
 Passing cloud tests does not establish school/VPN connectivity, real login or physical-device acceptance.
 TXT
-# Expose the IPA only after tests, device build and ZIP/platform checks all pass.
-mv "$RUN_DIR/candidate.zip" "$ARTIFACTS/CC98RebornShell-unsigned-device.ipa"
-echo "Unsigned device candidate: $ARTIFACTS/CC98RebornShell-unsigned-device.ipa"
+# Both modes require Node checks, device build and ZIP/platform validation.
+# The default mode additionally requires the full Simulator validation above.
+mv "$RUN_DIR/candidate.zip" "$ARTIFACTS/$CANDIDATE_NAME"
+DEVICE_PACKAGE=validated_unsigned
+echo "Unsigned device candidate: $ARTIFACTS/$CANDIDATE_NAME"

@@ -57,6 +57,28 @@ test('resources are packaged before generating the exact Xcode project', () => {
   assert.match(script, /test ! -e "\$APP\/Resources"/);
 });
 
+test('device-only is explicit, keeps device validation and cannot claim Simulator success', () => {
+  assert.match(script, /DEVICE_ONLY=false/);
+  assert.match(script, /\[\[ \$# -eq 1 && "\$1" == --device-only \]\]/);
+  assert.match(script, /elif \[\[ \$# -ne 0 \]\]; then[\s\S]*?exit 2/);
+  const start = script.indexOf('# BEGIN FULL_SIMULATOR_VALIDATION');
+  const end = script.indexOf('# END FULL_SIMULATOR_VALIDATION');
+  assert(start > script.indexOf('node --test tests/ios-*.test.cjs'));
+  assert(start > script.indexOf('"$XCODEGEN" generate'));
+  const conditional = script.slice(start, end);
+  assert.match(conditional, /if \[\[ "\$DEVICE_ONLY" == false \]\]; then/);
+  assert(conditional.includes('simctl bootstatus') && conditional.includes('xcodebuild test'));
+  assert(script.indexOf('\nxcodebuild build ') > end);
+  assert(script.indexOf('# BEGIN IPA_VALIDATOR') > end);
+  assert.match(script, /SIMULATOR_VALIDATION=skipped_device_only/);
+  assert.match(script, /CANDIDATE_NAME=CC98RebornShell-unsigned-unverified-device\.ipa/);
+  assert.match(script, /UNVERIFIED DEVICE-ONLY BUILD/);
+  assert.match(script, /simulator_validation=%s/);
+  assert.match(github, /device_only:\s*\n\s+description:[^\n]+\n\s+type: boolean\n\s+required: false\n\s+default: false/);
+  assert.match(github, /DEVICE_ONLY_REQUEST: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.device_only && 'true' \|\| 'false' \}\}/);
+  assert.match(github, /if \[\[ "\$DEVICE_ONLY_REQUEST" == "true" \]\]; then\n\s+bash scripts\/build-ios-shell\.sh --device-only\n\s+else\n\s+bash scripts\/build-ios-shell\.sh\n\s+fi/);
+});
+
 test('simulator tests run before the separate arm64 iPhoneOS device build', () => {
   const testIndex = script.indexOf('\nrun_with_timeout 600 xcodebuild test \\\n');
   const buildIndex = script.indexOf('\nxcodebuild build \\\n');
@@ -91,7 +113,8 @@ test('only a successful validated Payload becomes a candidate artifact', () => {
   assert.match(script, /mktemp -d "\$ROOT\/build\/ios-shell\/run\.XXXXXX"/);
   assert.match(script, /ditto "\$APP" "\$RUN_DIR\/staging\/Payload\/CC98RebornShell\.app"/);
   assert.match(script, /ditto -c -k --norsrc --keepParent "\$RUN_DIR\/staging\/Payload" "\$RUN_DIR\/candidate\.zip"/);
-  assert.match(script, /mv "\$RUN_DIR\/candidate\.zip" "\$ARTIFACTS\/CC98RebornShell-unsigned-device\.ipa"/);
+  assert.match(script, /CANDIDATE_NAME=CC98RebornShell-unsigned-device\.ipa/);
+  assert.match(script, /mv "\$RUN_DIR\/candidate\.zip" "\$ARTIFACTS\/\$CANDIDATE_NAME"/);
   assert(script.indexOf('# END IPA_VALIDATOR') < script.indexOf('\nmv '));
   assert.equal((script.match(/\|\| true/g) || []).length, 1, 'Only failed-test attachment recovery may be best effort');
   assert.doesNotMatch(script, /security\s+import|notarytool|altool|app-store-connect|git\s+(?:push|commit)/);

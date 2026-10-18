@@ -7,8 +7,8 @@
 ## 从 Windows 取得 iPhone 候选包
 
 1. 在 [GitHub Actions](https://github.com/Coran-tech/cc98-reborn-iOS/actions/workflows/ios-shell.yml) 打开 `iOS verification shell`。
-2. 选择验证分支运行工作流。工作流先跑本轮 Node 测试，再在 macOS 上执行 iOS Simulator 测试，并编译 **iPhoneOS arm64** 应用。
-3. 仅在构建成功后下载 `ios-shell-运行编号-尝试次数` artifact，解压取得 `CC98RebornShell-unsigned-device.ipa`。
+2. 选择验证分支运行工作流。默认先跑本轮 Node 测试和 iOS Simulator 测试，再编译 **iPhoneOS arm64** 应用。若要先取得真机候选包，可勾选 `device_only`：保留 Node 测试、设备编译和包校验，明确跳过模拟器启动与测试。
+3. 构建成功后下载 `ios-shell-运行编号-尝试次数` artifact。默认产物为 `CC98RebornShell-unsigned-device.ipa`；`device_only` 产物为 `CC98RebornShell-unsigned-unverified-device.ipa`，**尚未完成模拟器验证，不能据此认定 App 能启动或功能可用**。同包的 `README.txt`、`build-status.txt` 记录实际验证状态。
 4. 按 [AltStore Windows 官方指南](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows) 在本机配置签名工具，把候选 IPA 用自己的 Apple Account 签名安装。Apple Account 密码、验证码不交给本项目或云构建。
 5. iPhone 开启开发者模式，并连接校网或能覆盖本 App 的系统 VPN，然后按 [真机检查表](https://github.com/Coran-tech/cc98-reborn-iOS/blob/codex/ios-verification-shell/ios/DEVICE_TEST_CHECKLIST.md) 验证。
 
@@ -29,7 +29,9 @@ node scripts/package-ios-resources.cjs
 bash scripts/build-ios-shell.sh
 ```
 
-该脚本需要匹配配置的 macOS/Xcode 环境，不能在 Windows 上生成 iPhone 可执行程序。构建证据包括日志、Simulator 的 xcresult 和截图、设备包的结构与架构校验。只有模拟器测试、设备编译及包校验都通过，才产出候选 IPA。
+该脚本需要匹配配置的 macOS/Xcode 环境，不能在 Windows 上生成 iPhone 可执行程序。默认流程要求模拟器测试、设备编译及包校验都通过，并保留日志、xcresult 和截图。
+
+需先取得未经模拟器验证的设备候选时，显式运行 `bash scripts/build-ios-shell.sh --device-only`。该路径不生成模拟器测试结果；设备编译或包校验失败仍不会产出 IPA。它不改变后续完整验证要求，也不改变原站登录及同账号绑定边界。
 
 GitHub 工作流只在 `codex/ios-verification-shell` 的相关文件变动或手动触发时运行，使用标准 macOS runner。没有自动 TestFlight 上传、App Store 发布或 Release 创建。Codemagic 只保留手动备用配置，不需要同时启用两套 CI。
 

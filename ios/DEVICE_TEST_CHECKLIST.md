@@ -4,7 +4,7 @@
 
 ## 安装候选包
 
-1. 从本次成功的 GitHub Actions 构建下载 artifact，解压取得 `CC98RebornShell-unsigned-device.ipa`。只使用成功构建的包，不使用 Simulator `.app` 或其他来源的重新打包文件。
+1. 从本次成功的 GitHub Actions 构建下载 artifact。完整云端验证包为 `CC98RebornShell-unsigned-device.ipa`；优先真机试装包为 `CC98RebornShell-unsigned-unverified-device.ipa`，后者只完成设备编译、资源与包结构检查，未完成模拟器验证。两者都需要自行签名；不使用 Simulator `.app` 或其他来源的重新打包文件。
 2. 按 [AltStore Windows 官方步骤](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows) 配置 AltServer、所需 Apple 组件和 iPhone 信任关系。Apple Account 与双重认证由你自行输入，不发到聊天或云构建。
 3. 在 iPhone 开启“设置 → 隐私与安全性 → 开发者模式”，按系统要求重启和确认。通过 AltStore 导入候选 IPA 并签名安装。
 4. 免费个人签名通常 7 天到期，安排续签；不依赖自动后台续签一定成功。首次验证同时确认你的 iOS 版本与当前签名工具兼容。升级重签尽量保留同一 App 身份，不先卸载含有草稿的版本。
@@ -29,5 +29,7 @@
 ## 回传结果
 
 每项记录：构建编号、模式、网络类型、操作、预期与实际结果。可以提供裁去账号资料和正文的截图，以及壳内脱敏诊断。不要提供密码、验证码、Cookie、Authorization、OAuth 回调 query 或真实私信。
+
+如果使用 `unverified` 试装包，先验证启动、原站可达和原站模式恢复，再进行登录与编辑上传。试装成功不自动补齐模拟器测试或 OpenID 接入的缺项。
 
 如果重载可能丢失未提交内容，先取消操作并手动复制保存草稿。不要为排错先清空网站数据或卸载 App。

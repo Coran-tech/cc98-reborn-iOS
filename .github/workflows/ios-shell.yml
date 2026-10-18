@@ -2,6 +2,12 @@ name: iOS verification shell
 
 on:
   workflow_dispatch:
+    inputs:
+      device_only:
+        description: Build an unsigned device IPA without Simulator validation
+        type: boolean
+        required: false
+        default: false
   # Bootstrap without modifying main. Only this dedicated branch can auto-run.
   push:
     branches: [codex/ios-verification-shell]
@@ -39,8 +45,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Test simulator and build unsigned iPhone app
-        run: bash scripts/build-ios-shell.sh
+      - name: Build selected unsigned iPhone candidate
+        env:
+          DEVICE_ONLY_REQUEST: ${{ github.event_name == 'workflow_dispatch' && inputs.device_only && 'true' || 'false' }}
+        run: |
+          if [[ "$DEVICE_ONLY_REQUEST" == "true" ]]; then
+            bash scripts/build-ios-shell.sh --device-only
+          else
+            bash scripts/build-ios-shell.sh
+          fi
       - name: Retain build evidence and successful candidate
         if: always()
         uses: actions/upload-artifact@v4
