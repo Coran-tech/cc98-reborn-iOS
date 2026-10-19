@@ -10,6 +10,7 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
     private var auth: NativeAuth?
     private var pollTask: Task<Void, Never>?
     private var lastCounts: NativeMessageCounts?
+    private var lastAccountID: Int?
 
     override init() {
         super.init()
@@ -46,7 +47,11 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
     }
 
     private func poll() async {
-        guard let api, auth?.profile != nil else { return }
+        guard let api, let accountID = auth?.profile?.id else { return }
+        if lastAccountID != accountID {
+            lastAccountID = accountID
+            lastCounts = nil
+        }
         guard let counts = try? await api.messageCounts() else { return }
 
         if let lastCounts {

@@ -12,6 +12,8 @@ struct ProfileView: View {
     @EnvironmentObject private var auth: NativeAuth
     @State private var confirmSignOut = false
     @State private var destination: ProfileDestination?
+    @State private var switchingAccountID: Int?
+    @State private var accountError: String?
 
     var body: some View {
         NavigationStack {
@@ -45,11 +47,21 @@ struct ProfileView: View {
                 }
             }
         }
-        .alert("退出登录？", isPresented: $confirmSignOut) {
+        .alert("退出当前账号？", isPresented: $confirmSignOut) {
             Button("取消", role: .cancel) {}
-            Button("退出", role: .destructive) { auth.signOut() }
+            Button("退出", role: .destructive) {
+                Task { await auth.signOutCurrent() }
+            }
         } message: {
-            Text("退出后将从本机钥匙串删除登录令牌；不会影响 CC98 账号本身。")
+            Text("退出当前账号？其他已保存账号会保留。")
+        }
+        .alert("账号切换失败", isPresented: Binding(
+            get: { accountError != nil },
+            set: { if !$0 { accountError = nil } }
+        )) {
+            Button("好", role: .cancel) { accountError = nil }
+        } message: {
+            Text(accountError ?? "")
         }
     }
 
@@ -92,6 +104,53 @@ struct ProfileView: View {
                 }
             }
 
+            Section("账号切换") {
+                ForEach(auth.accounts) { account in
+                    Button {
+                        guard account.id != auth.activeAccountID else { return }
+                        switchingAccountID = account.id
+                        Task {
+                            do {
+                                try await auth.switchAccount(to: account.id)
+                            } catch {
+                                accountError = error.localizedDescription
+                            }
+                            switchingAccountID = nil
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            NativeAvatar(
+                                url: URL(string: account.avatarURL ?? ""),
+                                name: account.name,
+                                size: 30
+                            )
+                            Text(account.name)
+                                .foregroundStyle(ShellTheme.primaryText)
+                            Spacer(minLength: 0)
+                            if switchingAccountID == account.id {
+                                ProgressView()
+                            } else if account.id == auth.activeAccountID {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(ShellTheme.accent)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button {
+                    Task {
+                        do {
+                            try await auth.addAccount()
+                        } catch {
+                            accountError = error.localizedDescription
+                        }
+                    }
+                } label: {
+                    Label("添加账号", systemImage: "person.badge.plus")
+                }
+            }
+
             Section("我的内容") {
                 NavigationLink("我的收藏") { FavoritesView() }
                 NavigationLink("稍后再看") { ReadLaterView() }
@@ -101,7 +160,7 @@ struct ProfileView: View {
                 NavigationLink("设置") { SettingsView() }
             }
 
-            Section("账号") {
+            Section("资料") {
                 LabeledContent("用户 ID", value: String(user.id))
                 if let register = user.registerTime {
                     LabeledContent("注册时间", value: NativeFormat.date(register))
@@ -112,7 +171,7 @@ struct ProfileView: View {
             }
 
             Section {
-                Button("退出登录", role: .destructive) { confirmSignOut = true }
+                Button("退出当前账号", role: .destructive) { confirmSignOut = true }
             }
 
             Section("关于") {
