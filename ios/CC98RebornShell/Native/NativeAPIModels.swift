@@ -292,6 +292,15 @@ struct NativeFavoriteGroupEnvelope: Decodable {
     let data: [NativeFavoriteGroup]?
 }
 
+struct NativeAward: Decodable {
+    let id: Int?
+    let content: String?
+    let operatorName: String?
+    let reason: String?
+    let time: String?
+    let type: Int?
+}
+
 extension NativeBoard {
     static func placeholder(id: Int) -> NativeBoard {
         NativeBoard(

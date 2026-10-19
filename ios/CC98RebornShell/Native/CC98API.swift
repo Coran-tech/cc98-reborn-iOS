@@ -129,6 +129,10 @@ final class CC98API {
         throw CC98APIError.decoding
     }
 
+    func board(id: Int) async throws -> NativeBoard {
+        try await get("/board/\(id)", authenticated: false)
+    }
+
     func topics(boardID: Int, from: Int, size: Int = 20) async throws -> [NativeTopicSummary] {
         try await get("/board/\(boardID)/topic", query: [
             URLQueryItem(name: "from", value: String(from)),
@@ -313,6 +317,17 @@ final class CC98API {
             contentType: "application/json",
             authenticated: true
         )
+    }
+
+    func postAwards(postID: Int) async throws -> [NativeAward] {
+        let data = try await self.data(path: "/post/\(postID)/awards", authenticated: false)
+        if let awards = try? decoder.decode([NativeAward].self, from: data) {
+            return awards
+        }
+        if let envelope = try? decoder.decode(DataEnvelope<[NativeAward]>.self, from: data) {
+            return envelope.data
+        }
+        throw CC98APIError.decoding
     }
 
     func voteInfo(topicID: Int) async throws -> NativeVoteInfo {
