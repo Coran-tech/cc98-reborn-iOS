@@ -85,6 +85,7 @@ struct TopicDetailView: View {
     let boardID: Int?
 
     @State private var topic: NativeTopic? = nil
+    @State private var board: NativeBoard? = nil
     @State private var posts: [NativePost] = []
     @State private var page: Int
     @State private var loading = false
@@ -92,6 +93,7 @@ struct TopicDetailView: View {
     @State private var isFavorite = false
     @State private var favoriteBusy = false
     @State private var showReply = false
+    @State private var quotedPost: NativePost? = nil
     @State private var alertMessage = ""
     @State private var showAlert = false
     @State private var hotPosts: [NativePost] = []
@@ -174,6 +176,9 @@ struct TopicDetailView: View {
                         },
                         onTrace: {
                             traceRequest = NativeTraceRequest(postID: opPost.id, floor: opPost.floor)
+                        },
+                        onQuote: {
+                            openReply(quoted: opPost)
                         }
                     )
                     .id(floorAnchor(opPost.id))
@@ -210,6 +215,9 @@ struct TopicDetailView: View {
                             },
                             onTrace: {
                                 traceRequest = NativeTraceRequest(postID: post.id, floor: post.floor)
+                            },
+                            onQuote: {
+                                openReply(quoted: post)
                             }
                         )
                         .id(floorAnchor(post.id))
@@ -312,8 +320,8 @@ struct TopicDetailView: View {
         .navigationDestination(item: $linkedUser) { link in
             UserProfileView(userID: link.userID, userName: link.userName)
         }
-        .sheet(isPresented: $showReply) {
-            ReplyComposer(topicID: topicID) {
+        .sheet(isPresented: $showReply, onDismiss: { quotedPost = nil }) {
+            ReplyComposer(topicID: topicID, quotedPost: quotedPost) {
                 Task {
                     let nextPage = max(1, ((topic?.replyCount ?? 0) + 11) / pageSize)
                     page = nextPage
@@ -350,6 +358,10 @@ struct TopicDetailView: View {
         return max(1, (total + pageSize - 1) / pageSize)
     }
 
+    private var resolvedBoardID: Int? {
+        boardID ?? topic?.boardId ?? board?.id
+    }
+
     private var displayPosts: [NativePost] {
         guard let opPost else { return posts }
         return posts.filter { $0.id != opPost.id }
@@ -380,6 +392,9 @@ struct TopicDetailView: View {
                     gender: post.userId.flatMap { genders[$0] },
                     onTrace: {
                         traceRequest = NativeTraceRequest(postID: post.id, floor: post.floor)
+                    },
+                    onQuote: {
+                        openReply(quoted: post)
                     }
                 )
                 .id(hotAnchor(post.id))
@@ -403,10 +418,18 @@ struct TopicDetailView: View {
             }
             .font(ShellTheme.Fonts.caption)
             .foregroundStyle(ShellTheme.secondaryText)
-            if let boardID {
-                Text("版面 #\(boardID)")
+            if let resolvedBoardID {
+                NavigationLink {
+                    BoardTopicsView(board: board ?? NativeBoard.placeholder(id: resolvedBoardID))
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.grid.2x2")
+                        Text(board?.name ?? "版面 #\(resolvedBoardID)")
+                    }
                     .font(ShellTheme.Fonts.caption)
-                    .foregroundStyle(ShellTheme.secondaryText)
+                    .foregroundStyle(ShellTheme.link)
+                }
+                .buttonStyle(.plain)
             }
             if !library.note(for: topic.id).isEmpty {
                 Text("备注：\(library.note(for: topic.id))")
@@ -445,7 +468,7 @@ struct TopicDetailView: View {
         .padding(.vertical, 8)
     }
 
-    private func openReply() {
+    private func openReply(quoted: NativePost? = nil) {
         guard auth.profile != nil else {
             alertMessage = "请先在「我的」登录，再参与回复。"
             showAlert = true
@@ -456,6 +479,7 @@ struct TopicDetailView: View {
             showAlert = true
             return
         }
+        quotedPost = quoted
         showReply = true
     }
 
@@ -582,6 +606,13 @@ struct TopicDetailView: View {
             if page == 1 {
                 opPost = loadedPosts.first
             }
+            if board == nil, let boardID = loadedTopic.boardId ?? self.boardID {
+                Task {
+                    if let loaded = try? await app.api.board(id: boardID) {
+                        board = loaded
+                    }
+                }
+            }
             library.recordHistory(loadedTopic)
             if page > 1 {
                 library.recordPosition(topicID: topicID, page: page, floor: loadedPosts.first?.floor)
@@ -604,14 +635,35 @@ struct ReplyComposer: View {
     @Environment(\.dismiss) private var dismiss
 
     let topicID: Int
+    let quotedPost: NativePost?
     var onSent: () -> Void
 
-    @State private var text = ""
+    @State private var text: String
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
 
-    private var draftKey: String { "reply:\(topicID)" }
+    private var draftKey: String {
+        if let quotedPost {
+            return "reply.quote:\(topicID):\(quotedPost.id)"
+        }
+        return "reply:\(topicID)"
+    }
+
+    init(topicID: Int, quotedPost: NativePost? = nil, onSent: @escaping () -> Void) {
+        self.topicID = topicID
+        self.quotedPost = quotedPost
+        self.onSent = onSent
+        _text = State(initialValue: quotedPost.map { ReplyComposer.quoteText(topicID: topicID, post: $0) } ?? "")
+    }
+
+    private static func quoteText(topicID: Int, post: NativePost) -> String {
+        let floor = post.floor ?? 0
+        let page = max(1, (max(1, floor) + 9) / 10)
+        let name = post.isAnonymous == true ? "匿名" : (post.userName ?? "用户")
+        let time = NativeFormat.date(post.time)
+        return "[quote][b]以下是引用\(floor)楼：用户\(name)在\(time)的发言：\n[color=blue][url=/topic/\(topicID)/\(page)#\(floor)]>>查看原帖<<[/url][/color][/b]\(post.content ?? "")[/quote]\n"
+    }
 
     var body: some View {
         NavigationStack {
@@ -701,7 +753,7 @@ struct ReplyComposer: View {
         sending = true
         errorMessage = nil
         do {
-            try await app.api.reply(topicID: topicID, content: value)
+            try await app.api.reply(topicID: topicID, content: value, parentID: quotedPost?.id)
             library.clearDraft(for: draftKey)
             onSent()
             dismiss()
@@ -726,6 +778,7 @@ struct PostCard: View {
     let gender: Int?
     let onChanged: (() -> Void)?
     let onTrace: (() -> Void)?
+    let onQuote: (() -> Void)?
 
     @State private var likeState: Int
     @State private var likeCount: Int
@@ -736,6 +789,7 @@ struct PostCard: View {
     @State private var revealBlocked = false
     @State private var showEdit = false
     @State private var showRating = false
+    @State private var showRatingStats = false
 
     init(
         post: NativePost,
@@ -746,7 +800,8 @@ struct PostCard: View {
         avatarURL: URL? = nil,
         gender: Int? = nil,
         onChanged: (() -> Void)? = nil,
-        onTrace: (() -> Void)? = nil
+        onTrace: (() -> Void)? = nil,
+        onQuote: (() -> Void)? = nil
     ) {
         self.post = post
         self.isHot = isHot
@@ -757,6 +812,7 @@ struct PostCard: View {
         self.gender = gender
         self.onChanged = onChanged
         self.onTrace = onTrace
+        self.onQuote = onQuote
         _likeState = State(initialValue: post.likeState ?? 0)
         _likeCount = State(initialValue: post.likeCount ?? 0)
         _dislikeCount = State(initialValue: post.dislikeCount ?? 0)
@@ -859,11 +915,23 @@ struct PostCard: View {
                     } label: {
                         Label("风评", systemImage: "star")
                     }
+                    Button {
+                        showRatingStats = true
+                    } label: {
+                        Label("风评统计", systemImage: "chart.bar")
+                    }
+                    if let onQuote {
+                        Button {
+                            onQuote()
+                        } label: {
+                            Label("引用回复", systemImage: "quote.bubble")
+                        }
+                    }
                     if let onTrace {
                         Button {
                             onTrace()
                         } label: {
-                            Label("查看对话", systemImage: "bubble.left.and.bubble.right")
+                            Label("追踪对话", systemImage: "bubble.left.and.bubble.right")
                         }
                     }
                 } label: {
@@ -898,6 +966,9 @@ struct PostCard: View {
         }
         .sheet(isPresented: $showRating) {
             RatingComposer(post: post)
+        }
+        .sheet(isPresented: $showRatingStats) {
+            RatingStatsView(postID: post.id)
         }
     }
 
