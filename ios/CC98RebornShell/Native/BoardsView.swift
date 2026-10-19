@@ -1,0 +1,236 @@
+import SwiftUI
+
+struct BoardsView: View {
+    @EnvironmentObject private var app: NativeAppModel
+    @State private var groups: [NativeBoardGroup] = []
+    @State private var loading = false
+    @State private var error: String?
+    @State private var search = ""
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if groups.isEmpty && loading {
+                    ProgressView("正在加载版面…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(ShellTheme.pageBackground)
+                } else if groups.isEmpty, let error {
+                    NativeStateView(icon: "square.grid.2x2", title: "版面无法加载", message: error, action: {
+                        Task { await load() }
+                    })
+                } else {
+                    List {
+                        ForEach(filteredGroups) { group in
+                            Section {
+                                ForEach(group.boards ?? []) { board in
+                                    NavigationLink {
+                                        BoardTopicsView(board: board)
+                                    } label: {
+                                        BoardRow(board: board)
+                                    }
+                                }
+                            } header: {
+                                HStack {
+                                    Text(group.name)
+                                    if let masters = group.masters, !masters.isEmpty {
+                                        Spacer()
+                                        Text(masters.joined(separator: " · "))
+                                            .font(ShellTheme.Fonts.caption)
+                                            .foregroundStyle(ShellTheme.secondaryText)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                    .scrollContentBackground(.hidden)
+                    .background(ShellTheme.pageBackground)
+                    .searchable(text: $search, prompt: "搜索版面")
+                    .refreshable { await load() }
+                }
+            }
+            .navigationTitle("版面")
+        }
+        .task { await load() }
+    }
+
+    private var filteredGroups: [NativeBoardGroup] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return groups }
+        return groups.compactMap { group in
+            let boards = (group.boards ?? []).filter {
+                $0.name.localizedCaseInsensitiveContains(query)
+                    || ($0.description ?? "").localizedCaseInsensitiveContains(query)
+            }
+            guard !boards.isEmpty else { return nil }
+            return NativeBoardGroup(id: group.id, name: group.name, masters: group.masters, order: group.order, boards: boards)
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        guard !loading else { return }
+        loading = true
+        error = nil
+        do {
+            groups = try await app.api.boardGroups()
+        } catch {
+            self.error = error.localizedDescription
+        }
+        loading = false
+    }
+}
+
+private struct BoardRow: View {
+    let board: NativeBoard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(board.name)
+                    .font(ShellTheme.Fonts.body.weight(.medium))
+                    .foregroundStyle(ShellTheme.primaryText)
+                if board.isLock == true {
+                    Image(systemName: "lock.fill")
+                        .font(.caption2)
+                        .foregroundStyle(ShellTheme.warning)
+                }
+            }
+            if let description = board.description, !description.isEmpty {
+                Text(description)
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.secondaryText)
+                    .lineLimit(2)
+            }
+            HStack(spacing: 10) {
+                Text("今日 \(NativeFormat.count(board.todayCount))")
+                Text("主题 \(NativeFormat.count(board.topicCount))")
+            }
+            .font(ShellTheme.Fonts.caption)
+            .foregroundStyle(ShellTheme.secondaryText)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct BoardTopicsView: View {
+    @EnvironmentObject private var app: NativeAppModel
+    let board: NativeBoard
+
+    @State private var topics: [NativeTopicSummary] = []
+    @State private var page = 0
+    @State private var loading = false
+    @State private var hasMore = true
+    @State private var error: String?
+
+    private let pageSize = 20
+
+    var body: some View {
+        Group {
+            if topics.isEmpty && loading {
+                ProgressView("正在加载主题…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(ShellTheme.pageBackground)
+            } else if topics.isEmpty, let error {
+                NativeStateView(icon: "list.bullet.rectangle", title: "主题无法加载", message: error, action: {
+                    Task { await load(reset: true) }
+                })
+            } else if topics.isEmpty {
+                NativeStateView(icon: "tray", title: "本版暂无主题", message: nil)
+            } else {
+                List {
+                    ForEach(topics) { topic in
+                        NavigationLink {
+                            TopicDetailView(topicID: topic.id, boardID: topic.boardId ?? board.id)
+                        } label: {
+                            TopicSummaryRow(topic: topic)
+                        }
+                    }
+                    if hasMore {
+                        Button {
+                            Task { await load(reset: false) }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if loading { ProgressView() }
+                                Text(loading ? "正在加载…" : "加载更多")
+                                Spacer()
+                            }
+                        }
+                        .disabled(loading)
+                    }
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(ShellTheme.pageBackground)
+                .refreshable { await load(reset: true) }
+            }
+        }
+        .navigationTitle(board.name)
+        .task { await load(reset: true) }
+    }
+
+    @MainActor
+    private func load(reset: Bool) async {
+        guard !loading else { return }
+        loading = true
+        if reset {
+            page = 0
+            hasMore = true
+            error = nil
+        }
+        do {
+            let fetched = try await app.api.topics(boardID: board.id, from: page * pageSize, size: pageSize)
+            if reset {
+                topics = fetched
+            } else {
+                topics.append(contentsOf: fetched)
+            }
+            page += 1
+            hasMore = fetched.count == pageSize
+        } catch {
+            self.error = error.localizedDescription
+        }
+        loading = false
+    }
+}
+
+private struct TopicSummaryRow: View {
+    let topic: NativeTopicSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                if (topic.topState ?? 0) > 0 {
+                    Text("置顶")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(ShellTheme.accentSoft, in: Capsule())
+                        .foregroundStyle(ShellTheme.accent)
+                }
+                if (topic.bestState ?? 0) > 0 {
+                    Text("精华")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(ShellTheme.warning.opacity(0.15), in: Capsule())
+                        .foregroundStyle(ShellTheme.warning)
+                }
+                Text(topic.title ?? "主题 #\(topic.id)")
+                    .font(ShellTheme.Fonts.body.weight(.medium))
+                    .foregroundStyle(ShellTheme.primaryText)
+                    .lineLimit(2)
+            }
+            HStack(spacing: 8) {
+                Text(topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"))
+                Text("回复 \(NativeFormat.count(topic.replyCount))")
+                Text("点击 \(NativeFormat.count(topic.hitCount))")
+                Spacer(minLength: 0)
+                Text(NativeFormat.date(topic.lastPostTime ?? topic.time))
+            }
+            .font(ShellTheme.Fonts.caption)
+            .foregroundStyle(ShellTheme.secondaryText)
+            .lineLimit(1)
+        }
+        .padding(.vertical, 2)
+    }
+}
