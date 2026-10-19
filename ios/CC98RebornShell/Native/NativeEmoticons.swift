@@ -57,6 +57,7 @@ enum EmoticonCatalog {
 struct EmoticonPicker: View {
     @Binding var text: String
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var categoryID = EmoticonCatalog.categories.first?.id ?? "ac"
 
@@ -83,7 +84,7 @@ struct EmoticonPicker: View {
                                 text += "[\(category.tagPrefix)\(id)]"
                             } label: {
                                 Group {
-                                    if let image = UBBEmotion.image(category.tagPrefix + id) {
+                                    if let image = UBBEmotion.image(category.tagPrefix + id, light: colorScheme == .dark, maxSide: 36) {
                                         Image(uiImage: image)
                                             .resizable()
                                             .scaledToFit()
