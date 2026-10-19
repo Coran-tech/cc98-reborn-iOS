@@ -28,8 +28,18 @@ struct NativeHotTopic: Identifiable, Decodable {
     let type: Int?
 }
 
-struct NativeBoardGroup: Identifiable, Decodable {
+struct NativeTag: Identifiable, Decodable, Hashable {
     let id: Int
+    let name: String
+    let subTags: [NativeTag]?
+}
+
+struct NativeTagV2: Decodable {
+    let layers: Int
+    let tags: [NativeTag]
+}
+
+struct NativeBoardGroup: Identifiable, Decodable {    let id: Int
     let name: String
     let masters: [String]?
     let order: Int?
