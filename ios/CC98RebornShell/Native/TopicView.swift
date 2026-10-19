@@ -130,6 +130,18 @@ struct TopicDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                 if let topic { header(topic) }
 
+                if let topic, topic.isPosterOnly == true {
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.crop.circle.badge.exclamationmark")
+                        Text("该主题仅楼主可见")
+                            .font(ShellTheme.Fonts.footnote)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(ShellTheme.warning)
+                    .padding(10)
+                    .background(ShellTheme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                }
+
                 if page == 1, let savedPosition, savedPosition.page > 1 {
                     HStack(spacing: 8) {
                         Image(systemName: "bookmark")
@@ -440,6 +452,11 @@ struct TopicDetailView: View {
             showAlert = true
             return
         }
+        if topic?.isPosterOnly == true, auth.profile?.id != topic?.userId {
+            alertMessage = "该主题仅楼主可见，无法回复。"
+            showAlert = true
+            return
+        }
         showReply = true
     }
 
@@ -609,6 +626,7 @@ struct ReplyComposer: View {
                         .font(ShellTheme.Fonts.footnote)
                         .foregroundStyle(ShellTheme.danger)
                 }
+                UBBFormatBar(text: $text)
                 TextEditor(text: $text)
                     .focused($focused)
                     .scrollContentBackground(.hidden)

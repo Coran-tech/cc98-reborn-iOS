@@ -149,12 +149,67 @@ final class CC98API {
         ], authenticated: false)
     }
 
-    func favoriteTopics(from: Int, size: Int = 20) async throws -> [NativeTopicSummary] {
-        try await get("/topic/me/favorite", query: [
+    func favoriteTopics(from: Int, size: Int = 20, groupID: Int? = nil) async throws -> [NativeTopicSummary] {
+        var query = [
             URLQueryItem(name: "from", value: String(from)),
             URLQueryItem(name: "size", value: String(size)),
             URLQueryItem(name: "order", value: "1")
+        ]
+        if let groupID {
+            query.append(URLQueryItem(name: "groupid", value: String(groupID)))
+        }
+        return try await get("/topic/me/favorite", query: query, authenticated: true)
+    }
+
+    func favoriteGroups() async throws -> [NativeFavoriteGroup] {
+        let data = try await self.data(path: "/me/favorite-topic-group", authenticated: true)
+        if let envelope = try? decoder.decode(NativeFavoriteGroupEnvelope.self, from: data) {
+            return envelope.data ?? []
+        }
+        if let groups = try? decoder.decode([NativeFavoriteGroup].self, from: data) {
+            return groups
+        }
+        throw CC98APIError.decoding
+    }
+
+    func createFavoriteGroup(name: String) async throws {
+        try await send(
+            "/me/favorite-topic-group",
+            method: "POST",
+            body: try json(["name": name]),
+            contentType: "application/json",
+            authenticated: true
+        )
+    }
+
+    func followings(from: Int, size: Int = 10) async throws -> [Int] {
+        try await userIDList(path: "/me/followee", from: from, size: size)
+    }
+
+    func fans(from: Int, size: Int = 10) async throws -> [Int] {
+        try await userIDList(path: "/me/follower", from: from, size: size)
+    }
+
+    private func userIDList(path: String, from: Int, size: Int) async throws -> [Int] {
+        let data = try await self.data(path: path, query: [
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size))
         ], authenticated: true)
+        if let ids = try? decoder.decode([Int].self, from: data) {
+            return ids
+        }
+        if let users = try? decoder.decode([NativeBasicUser].self, from: data) {
+            return users.map(\.id)
+        }
+        throw CC98APIError.decoding
+    }
+
+    func follow(userID: Int) async throws {
+        try await send("/me/followee/\(userID)", method: "PUT", authenticated: true)
+    }
+
+    func unfollow(userID: Int) async throws {
+        try await send("/me/followee/\(userID)", method: "DELETE", authenticated: true)
     }
 
     func myTopics(from: Int, size: Int = 10) async throws -> [NativeMyTopic] {

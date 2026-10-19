@@ -115,10 +115,14 @@ struct FavoritesView: View {
     @EnvironmentObject private var auth: NativeAuth
 
     @State private var topics: [NativeTopicSummary] = []
+    @State private var groups: [NativeFavoriteGroup] = []
+    @State private var selectedGroupID: Int? = nil
     @State private var loading = false
     @State private var error: String? = nil
     @State private var page = 0
     @State private var hasMore = true
+    @State private var showCreateGroup = false
+    @State private var newGroupName = ""
 
     private let pageSize = 20
 
@@ -151,6 +155,15 @@ struct FavoritesView: View {
                                 Label("取消收藏", systemImage: "star.slash")
                             }
                         }
+                        .contextMenu {
+                            ForEach(groups) { group in
+                                if group.id != selectedGroupID {
+                                    Button("移动到 \(group.name ?? "分组")") {
+                                        Task { await move(topic, to: group.id) }
+                                    }
+                                }
+                            }
+                        }
                     }
                     if hasMore {
                         Button {
@@ -175,7 +188,41 @@ struct FavoritesView: View {
         .background(ShellTheme.pageBackground)
         .navigationTitle("我的收藏")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load(reset: true) }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("全部收藏") { selectGroup(nil) }
+                    ForEach(groups) { group in
+                        Button("\(group.name ?? "分组") (\(group.count ?? 0))") {
+                            selectGroup(group.id)
+                        }
+                    }
+                    Divider()
+                    Button("新建分组") { showCreateGroup = true }
+                } label: {
+                    Label(selectedGroupName, systemImage: "folder")
+                }
+            }
+        }
+        .alert("新建收藏分组", isPresented: $showCreateGroup) {
+            TextField("分组名称", text: $newGroupName)
+            Button("取消", role: .cancel) { newGroupName = "" }
+            Button("创建") { Task { await createGroup() } }
+        }
+        .task {
+            await loadGroups()
+            await load(reset: true)
+        }
+    }
+
+    private var selectedGroupName: String {
+        guard let selectedGroupID else { return "全部分组" }
+        return groups.first { $0.id == selectedGroupID }?.name ?? "分组"
+    }
+
+    private func selectGroup(_ id: Int?) {
+        selectedGroupID = id
+        Task { await load(reset: true) }
     }
 
     @MainActor
@@ -185,7 +232,11 @@ struct FavoritesView: View {
         error = nil
         if reset { page = 0; hasMore = true }
         do {
-            let fetched = try await app.api.favoriteTopics(from: page * pageSize, size: pageSize)
+            let fetched = try await app.api.favoriteTopics(
+                from: page * pageSize,
+                size: pageSize,
+                groupID: selectedGroupID
+            )
             if reset {
                 topics = fetched
             } else {
@@ -204,6 +255,39 @@ struct FavoritesView: View {
         do {
             try await app.api.removeFavorite(topicID: topic.id)
             topics.removeAll { $0.id == topic.id }
+            await loadGroups()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func loadGroups() async {
+        guard auth.profile != nil else { return }
+        groups = (try? await app.api.favoriteGroups()) ?? []
+    }
+
+    @MainActor
+    private func createGroup() async {
+        let name = newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        do {
+            try await app.api.createFavoriteGroup(name: name)
+            newGroupName = ""
+            await loadGroups()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func move(_ topic: NativeTopicSummary, to groupID: Int) async {
+        do {
+            try await app.api.addFavorite(topicID: topic.id, groupID: groupID)
+            await loadGroups()
+            if selectedGroupID != nil {
+                topics.removeAll { $0.id == topic.id }
+            }
         } catch {
             self.error = error.localizedDescription
         }
@@ -368,6 +452,7 @@ struct SettingsView: View {
 
 struct UserProfileView: View {
     @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var auth: NativeAuth
 
     let userID: Int?
     let userName: String?
@@ -375,6 +460,10 @@ struct UserProfileView: View {
     @State private var user: NativeUser? = nil
     @State private var loading = false
     @State private var error: String? = nil
+    @State private var isFollowing = false
+    @State private var followBusy = false
+    @State private var alertMessage = ""
+    @State private var showAlert = false
 
     var body: some View {
         Group {
@@ -411,6 +500,17 @@ struct UserProfileView: View {
                     }
 
                     Section {
+                        if let myID = auth.profile?.id, myID != user.id {
+                            Button {
+                                Task { await toggleFollow(user) }
+                            } label: {
+                                Label(
+                                    isFollowing ? "取消关注" : "关注",
+                                    systemImage: isFollowing ? "person.badge.minus" : "person.badge.plus"
+                                )
+                            }
+                            .disabled(followBusy)
+                        }
                         NavigationLink {
                             PrivateConversationView(
                                 contactID: user.id,
@@ -449,6 +549,11 @@ struct UserProfileView: View {
         .navigationTitle(user?.name ?? "用户")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+        .alert("提示", isPresented: $showAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
     }
 
     private func stat(_ title: String, _ value: Int?) -> some View {
@@ -472,9 +577,13 @@ struct UserProfileView: View {
         error = nil
         do {
             if let userID {
-                user = try await app.api.user(id: userID)
+                let loaded = try await app.api.user(id: userID)
+                user = loaded
+                isFollowing = loaded.isFollowing ?? false
             } else if let userName {
-                user = try await app.api.user(name: userName)
+                let loaded = try await app.api.user(name: userName)
+                user = loaded
+                isFollowing = loaded.isFollowing ?? false
             } else {
                 error = "缺少用户标识。"
             }
@@ -482,6 +591,29 @@ struct UserProfileView: View {
             self.error = error.localizedDescription
         }
         loading = false
+    }
+
+    @MainActor
+    private func toggleFollow(_ user: NativeUser) async {
+        guard auth.profile != nil else {
+            alertMessage = "请先登录。"
+            showAlert = true
+            return
+        }
+        guard !followBusy else { return }
+        followBusy = true
+        do {
+            if isFollowing {
+                try await app.api.unfollow(userID: user.id)
+            } else {
+                try await app.api.follow(userID: user.id)
+            }
+            isFollowing.toggle()
+        } catch {
+            alertMessage = error.localizedDescription
+            showAlert = true
+        }
+        followBusy = false
     }
 }
 
