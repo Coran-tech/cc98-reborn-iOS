@@ -181,6 +181,7 @@ struct UBBBlockView: View {
 
 struct UBBInlineText: View {
     let inlines: [UBBInline]
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         composed
@@ -197,7 +198,7 @@ struct UBBInlineText: View {
             case let .text(attributed):
                 return result + Text(attributed)
             case let .emotion(id):
-                if let image = UBBEmotion.image(id) {
+                if let image = UBBEmotion.image(id, light: colorScheme == .dark) {
                     return result + Text(Image(uiImage: image))
                 }
                 return result + Text("🙂")
@@ -533,16 +534,16 @@ enum UBBEmotion {
 
     private static let cache = NSCache<NSString, UIImage>()
 
-    static func image(_ tag: String) -> UIImage? {
-        let key = tag.lowercased()
+    static func image(_ tag: String, light: Bool = false, maxSide: CGFloat = 60) -> UIImage? {
+        let key = "\(tag.lowercased())|\(light ? "light" : "dark")|\(Int(maxSide))"
         if let cached = cache.object(forKey: key as NSString) { return cached }
-        guard let asset = resolve(key), let image = load(asset) else { return nil }
-        let scaled = resize(image, maxSide: 20)
+        guard let asset = resolve(tag.lowercased(), light: light), let image = load(asset) else { return nil }
+        let scaled = resize(image, maxSide: maxSide)
         cache.setObject(scaled, forKey: key as NSString)
         return scaled
     }
 
-    private static func resolve(_ tag: String) -> Asset? {
+    private static func resolve(_ tag: String, light: Bool) -> Asset? {
         if tag.hasPrefix("cc98") {
             let id = String(tag.dropFirst(4))
             guard isNumeric(id) else { return nil }
@@ -551,7 +552,7 @@ enum UBBEmotion {
         if tag.hasPrefix("ac") {
             let id = String(tag.dropFirst(2))
             guard isNumeric(id) else { return nil }
-            return Asset(folder: "ac", name: id, extensions: ["png"])
+            return Asset(folder: light ? "ac1" : "ac", name: id, extensions: ["png"])
         }
         if tag.hasPrefix("em") {
             let id = String(tag.dropFirst(2))
@@ -572,13 +573,16 @@ enum UBBEmotion {
     }
 
     private static func load(_ asset: Asset) -> UIImage? {
-        for ext in asset.extensions {
-            if let url = Bundle.main.url(
-                forResource: asset.name,
-                withExtension: ext,
-                subdirectory: "Reborn/images/\(asset.folder)"
-            ), let image = UIImage(contentsOfFile: url.path) {
-                return image
+        let folders = asset.folder == "ac1" ? ["ac1", "ac"] : [asset.folder]
+        for folder in folders {
+            for ext in asset.extensions {
+                if let url = Bundle.main.url(
+                    forResource: asset.name,
+                    withExtension: ext,
+                    subdirectory: "Reborn/images/\(folder)"
+                ), let image = UIImage(contentsOfFile: url.path) {
+                    return image
+                }
             }
         }
         return nil
@@ -821,6 +825,20 @@ enum UBBBlockParser {
         private mutating func append(_ raw: String) {
             let text = UBBBlockParser.cleanText(raw)
             guard !text.isEmpty else { return }
+
+            if let link {
+                appendRun(text, link: link)
+            } else if code > 0 {
+                appendRun(text, link: nil)
+            } else {
+                for segment in UBBBlockParser.splitLinks(text) {
+                    appendRun(segment.text, link: segment.url)
+                }
+            }
+        }
+
+        private mutating func appendRun(_ text: String, link: URL?) {
+            guard !text.isEmpty else { return }
             var container = AttributeContainer()
             var font = Font.body
             if let size { font = .system(size: size) }
@@ -845,6 +863,54 @@ enum UBBBlockParser {
     }
 
     // MARK: Lists, tables, media
+
+    static func splitLinks(_ text: String) -> [(text: String, url: URL?)] {
+        guard !text.isEmpty else { return [] }
+        guard let regex = try? NSRegularExpression(
+            pattern: "(?i)(https?://[^\\s<>\"']+|www\\.[^\\s<>\"']+|(?:[a-z0-9-]+\\.)*cc98\\.org/[^\\s<>\"']+)"
+        ) else {
+            return [(text, nil)]
+        }
+        let ns = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        guard !matches.isEmpty else { return [(text, nil)] }
+
+        var result: [(text: String, url: URL?)] = []
+        var cursor = 0
+        let trailingPunctuation = CharacterSet(charactersIn: ".,;:!?)]}，。；：！？）】、")
+
+        for match in matches {
+            if match.range.location > cursor {
+                result.append((ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)), nil))
+            }
+            var raw = ns.substring(with: match.range)
+            var trailing = ""
+            while let scalar = raw.unicodeScalars.last, trailingPunctuation.contains(scalar) {
+                trailing = String(scalar) + trailing
+                raw.removeLast()
+            }
+            guard !raw.isEmpty else {
+                if !trailing.isEmpty { result.append((trailing, nil)) }
+                cursor = match.range.location + match.range.length
+                continue
+            }
+
+            var urlString = raw
+            if !urlString.contains("://") {
+                urlString = "https://" + urlString
+            }
+            result.append((raw, URL(string: urlString)))
+            if !trailing.isEmpty {
+                result.append((trailing, nil))
+            }
+            cursor = match.range.location + match.range.length
+        }
+
+        if cursor < ns.length {
+            result.append((ns.substring(from: cursor), nil))
+        }
+        return result
+    }
 
     private static func parseList(_ content: String) -> [String] {
         let sentinel = "\u{1F}"

@@ -13,6 +13,7 @@ struct NewTopicsView: View {
     @State private var error: String? = nil
     @State private var mediaOnly = false
     @State private var showComposePicker = false
+    @State private var boardNames: [Int: String] = [:]
 
     private let pageSize = 20
 
@@ -64,6 +65,7 @@ struct NewTopicsView: View {
                 }
             }
             .task(id: mediaOnly) { await load(reset: true) }
+            .task { await loadBoardNames() }
             .sheet(isPresented: $showComposePicker) {
                 NewTopicEntryView {
                     showComposePicker = false
@@ -79,7 +81,11 @@ struct NewTopicsView: View {
                 NavigationLink {
                     TopicDetailView(topicID: topic.id, boardID: topic.boardId)
                 } label: {
-                    NewTopicRow(topic: topic, thumbnail: thumbnails.images[topic.id])
+                    NewTopicRow(
+                        topic: topic,
+                        thumbnail: thumbnails.images[topic.id],
+                        boardName: resolvedBoardName(topic)
+                    )
                 }
                 .onAppear { loadMoreIfNeeded(topic) }
                 .task {
@@ -129,7 +135,11 @@ struct NewTopicsView: View {
         NavigationLink {
             TopicDetailView(topicID: topic.id, boardID: topic.boardId)
         } label: {
-            NewTopicCard(topic: topic, thumbnail: thumbnails.images[topic.id])
+            NewTopicCard(
+                topic: topic,
+                thumbnail: thumbnails.images[topic.id],
+                boardName: resolvedBoardName(topic)
+            )
         }
         .buttonStyle(.plain)
         .onAppear { loadMoreIfNeeded(topic) }
@@ -149,6 +159,27 @@ struct NewTopicsView: View {
     private func loadMoreIfNeeded(_ topic: NativeTopicSummary) {
         guard hasMore, !loading, topic.id == topics.last?.id else { return }
         Task { await load(reset: false) }
+    }
+
+    private func resolvedBoardName(_ topic: NativeTopicSummary) -> String? {
+        if let name = topic.boardName, !name.isEmpty {
+            return name
+        }
+        if let boardID = topic.boardId, let name = boardNames[boardID] {
+            return name
+        }
+        return nil
+    }
+
+    @MainActor
+    private func loadBoardNames() async {
+        guard boardNames.isEmpty else { return }
+        guard let groups = try? await app.api.boardGroups() else { return }
+        var map: [Int: String] = [:]
+        for board in groups.flatMap({ $0.boards ?? [] }) {
+            map[board.id] = board.name
+        }
+        boardNames = map
     }
 
     @MainActor
@@ -208,6 +239,7 @@ final class NewTopicThumbnailLoader: ObservableObject {
 private struct NewTopicCard: View {
     let topic: NativeTopicSummary
     let thumbnail: URL?
+    let boardName: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -237,13 +269,15 @@ private struct NewTopicCard: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
-                    Text(topic.boardName ?? "版面")
-                        .font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(ShellTheme.accentSoft, in: Capsule())
-                        .foregroundStyle(ShellTheme.accent)
-                        .lineLimit(1)
+                    if let boardName, !boardName.isEmpty {
+                        Text(boardName)
+                            .font(.system(size: 10, weight: .semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(ShellTheme.accentSoft, in: Capsule())
+                            .foregroundStyle(ShellTheme.accent)
+                            .lineLimit(1)
+                    }
                     Spacer(minLength: 0)
                     Text(NativeFormat.date(topic.lastPostTime ?? topic.time))
                         .font(.system(size: 10))
@@ -307,6 +341,7 @@ private struct NewTopicCard: View {
 private struct NewTopicRow: View {
     let topic: NativeTopicSummary
     let thumbnail: URL?
+    let boardName: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -316,7 +351,7 @@ private struct NewTopicRow: View {
                     .foregroundStyle(ShellTheme.primaryText)
                     .lineLimit(2)
                 HStack(spacing: 8) {
-                    if let boardName = topic.boardName, !boardName.isEmpty {
+                    if let boardName, !boardName.isEmpty {
                         Text(boardName)
                     }
                     Text(topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"))
