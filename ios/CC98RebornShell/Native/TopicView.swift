@@ -749,6 +749,7 @@ struct ReplyComposer: View {
     @AppStorage("native.replyRebornTail") private var replyTail = true
 
     @State private var text: String
+    @State private var selection = NSRange(location: 0, length: 0)
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
@@ -784,12 +785,9 @@ struct ReplyComposer: View {
                         .font(ShellTheme.Fonts.footnote)
                         .foregroundStyle(ShellTheme.danger)
                 }
-                UBBFormatBar(text: $text)
-                TextEditor(text: $text)
-                    .focused($focused)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 240)
-                    .padding(8)
+                UBBFormatBar(text: $text, selection: $selection)
+                UBBTextEditor(text: $text, selection: $selection, minHeight: 240)
+                    .padding(4)
                     .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
@@ -803,11 +801,11 @@ struct ReplyComposer: View {
                     }
                     .font(ShellTheme.Fonts.caption)
                 }
-                ComposerImageButton(text: $text)
+                ComposerImageButton(text: $text, selection: $selection)
                     .disabled(sending)
-                ComposerEmoticonButton(text: $text)
+                ComposerEmoticonButton(text: $text, selection: $selection)
                     .disabled(sending)
-                ComposerFileButton(text: $text)
+                ComposerFileButton(text: $text, selection: $selection)
                     .disabled(sending)
                 HStack {
                     Text("\(text.count) / 8000")

@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct ComposerImageButton: View {
     @EnvironmentObject private var app: NativeAppModel
     @Binding var text: String
+    @Binding var selection: NSRange
 
     @State private var item: PhotosPickerItem?
     @State private var uploading = false
@@ -43,7 +44,7 @@ struct ComposerImageButton: View {
             }
             let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) ?? data
             let url = try await app.api.uploadImage(jpeg)
-            text += "\n[img]\(url)[/img]\n"
+            UBBEditorInsertion.insert("\n[img]\(url)[/img]\n", text: &text, selection: &selection)
         } catch {
             errorMessage = error.localizedDescription
             showError = true
@@ -54,6 +55,7 @@ struct ComposerImageButton: View {
 struct ComposerFileButton: View {
     @EnvironmentObject private var app: NativeAppModel
     @Binding var text: String
+    @Binding var selection: NSRange
 
     @State private var showImporter = false
     @State private var uploading = false
@@ -105,7 +107,7 @@ struct ComposerFileButton: View {
             let mime = UTType(filenameExtension: ext)?.preferredMIMEType ?? "application/octet-stream"
             let remote = try await app.api.uploadAttachment(data, fileName: url.lastPathComponent, mimeType: mime)
             let tag = ext.isEmpty ? "file" : ext
-            text += "\n[upload=\(tag)]\(remote)[/upload]\n"
+            UBBEditorInsertion.insert("\n[upload=\(tag)]\(remote)[/upload]\n", text: &text, selection: &selection)
         } catch {
             errorMessage = error.localizedDescription
             showError = true
@@ -129,6 +131,7 @@ struct NewTopicComposer: View {
     @State private var contentType = 0
     @State private var notifyPoster = true
     @State private var postKind = 0
+    @State private var selection = NSRange(location: 0, length: 0)
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
@@ -162,11 +165,9 @@ struct NewTopicComposer: View {
                         .textFieldStyle(.roundedBorder)
                         .focused($focused)
 
-                    UBBFormatBar(text: $content)
-                    TextEditor(text: $content)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 260)
-                        .padding(8)
+                    UBBFormatBar(text: $content, selection: $selection)
+                    UBBTextEditor(text: $content, selection: $selection, minHeight: 260)
+                        .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
@@ -174,9 +175,9 @@ struct NewTopicComposer: View {
                         )
 
                     HStack {
-                        ComposerImageButton(text: $content)
-                        ComposerEmoticonButton(text: $content)
-                        ComposerFileButton(text: $content)
+                        ComposerImageButton(text: $content, selection: $selection)
+                        ComposerEmoticonButton(text: $content, selection: $selection)
+                        ComposerFileButton(text: $content, selection: $selection)
                         Spacer()
                         Text("\(content.count) / 8000")
                             .font(ShellTheme.Fonts.caption)
@@ -334,6 +335,7 @@ struct EditPostComposer: View {
 
     @State private var title: String
     @State private var content: String
+    @State private var selection = NSRange(location: 0, length: 0)
     @State private var saving = false
     @State private var errorMessage: String? = nil
 
@@ -361,11 +363,9 @@ struct EditPostComposer: View {
                             .textFieldStyle(.roundedBorder)
                     }
 
-                    UBBFormatBar(text: $content)
-                    TextEditor(text: $content)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 260)
-                        .padding(8)
+                    UBBFormatBar(text: $content, selection: $selection)
+                    UBBTextEditor(text: $content, selection: $selection, minHeight: 260)
+                        .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
@@ -373,9 +373,9 @@ struct EditPostComposer: View {
                         )
 
                     HStack {
-                        ComposerImageButton(text: $content)
-                        ComposerEmoticonButton(text: $content)
-                        ComposerFileButton(text: $content)
+                        ComposerImageButton(text: $content, selection: $selection)
+                        ComposerEmoticonButton(text: $content, selection: $selection)
+                        ComposerFileButton(text: $content, selection: $selection)
                         Spacer()
                         Text("\(content.count) / 8000")
                             .font(ShellTheme.Fonts.caption)
@@ -513,6 +513,7 @@ struct TopicNoteView: View {
 
 struct UBBFormatBar: View {
     @Binding var text: String
+    @Binding var selection: NSRange
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -570,7 +571,7 @@ struct UBBFormatBar: View {
     }
 
     private func wrap(_ prefix: String, _ suffix: String, placeholder: String) {
-        text += "\n\(prefix)\(placeholder)\(suffix)\n"
+        UBBEditorInsertion.wrap(prefix, suffix, text: &text, selection: &selection)
     }
 
     private func format(
