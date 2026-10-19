@@ -217,10 +217,7 @@ struct MyTopicsView: View {
                             TopicDetailView(topicID: item.id, boardID: item.boardId)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title ?? "主题 #\(item.id)")
-                                    .font(ShellTheme.Fonts.body.weight(.medium))
-                                    .foregroundStyle(ShellTheme.primaryText)
-                                    .lineLimit(2)
+                                UBBContentView(source: item.title ?? "主题 #\(item.id)")
                                 HStack(spacing: 8) {
                                     if let boardID = item.boardId {
                                         Text("版面 #\(boardID)")
@@ -317,10 +314,10 @@ struct MyPostsView: View {
                             )
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(excerpt(item.content))
-                                    .font(ShellTheme.Fonts.body)
-                                    .foregroundStyle(ShellTheme.primaryText)
-                                    .lineLimit(3)
+                                UBBContentView(
+                                    source: item.content ?? "",
+                                    markdown: item.contentType == 1
+                                )
                                 HStack(spacing: 8) {
                                     Text(item.topicTitle ?? "主题 #\(item.topicId ?? 0)")
                                         .lineLimit(1)
@@ -358,13 +355,6 @@ struct MyPostsView: View {
         }
         .background(ShellTheme.pageBackground)
         .task { await load(reset: true) }
-    }
-
-    private func excerpt(_ raw: String?) -> String {
-        guard let raw, !raw.isEmpty else { return "（内容为空）" }
-        let stripped = raw.replacingOccurrences(of: "\\[/?[^\\]]+\\]", with: "", options: .regularExpression)
-        let collapsed = stripped.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func pageForFloor(_ floor: Int?) -> Int {

@@ -245,6 +245,7 @@ struct NativeMyPost: Identifiable, Decodable {
     let topicId: Int?
     let topicTitle: String?
     let content: String?
+    let contentType: Int?
     let time: String?
     let floor: Int?
     let boardId: Int?

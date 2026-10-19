@@ -713,7 +713,8 @@ struct ReplyComposer: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 10) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
                 if auth.profile == nil {
                     Text("请先在「我的」登录后再回复。")
                         .font(ShellTheme.Fonts.footnote)
@@ -754,9 +755,10 @@ struct ReplyComposer: View {
                             .lineLimit(2)
                     }
                 }
+                .padding(16)
             }
-            .padding(16)
             .background(ShellTheme.pageBackground)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("回复")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
