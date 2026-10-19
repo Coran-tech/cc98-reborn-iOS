@@ -113,6 +113,7 @@ struct TopicDetailView: View {
     @State private var highlightedPostID: Int? = nil
     @State private var scrollNonce = 0
     @State private var showFloorJump = false
+    @State private var showFullTextSearch = false
     @State private var traceRequest: NativeTraceRequest? = nil
     @AppStorage("native.saveBrowseProgress") private var saveBrowseProgress = false
     @State private var scrollToTopOnNextLoad = false
@@ -302,6 +303,14 @@ struct TopicDetailView: View {
                 jumpToFloor(floor)
             }
         }
+        .sheet(isPresented: $showFullTextSearch) {
+            TopicFullTextSearchView(
+                topicID: topicID,
+                maxPage: pageCount
+            ) { floor in
+                jumpToFloor(floor)
+            }
+        }
         .sheet(item: $traceRequest) { request in
             ConversationView(
                 topicID: topicID,
@@ -487,6 +496,11 @@ struct TopicDetailView: View {
                         showFloorJump = true
                     } label: {
                         Label("跳转楼层", systemImage: "number")
+                    }
+                    Button {
+                        showFullTextSearch = true
+                    } label: {
+                        Label("全文搜索", systemImage: "text.magnifyingglass")
                     }
                     Button {
                         showNote = true
@@ -1016,7 +1030,7 @@ struct PostCard: View {
                     Button {
                         onTrace()
                     } label: {
-                        Label("追踪", systemImage: "bubble.left.and.bubble.right")
+                        Label("查看对话", systemImage: "bubble.left.and.bubble.right")
                             .foregroundStyle(ShellTheme.secondaryText)
                     }
                 }

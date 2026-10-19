@@ -38,6 +38,9 @@ struct NativeRootView: View {
                 .tabItem { Label("我的", systemImage: "person.crop.circle") }
         }
         .tint(ShellTheme.accent)
+        .overlay {
+            NativeWatermarkOverlay(raw: app.auth.profile?.watermarkId)
+        }
         .environmentObject(app)
         .environmentObject(app.auth)
         .environmentObject(library)

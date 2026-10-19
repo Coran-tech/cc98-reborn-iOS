@@ -146,6 +146,7 @@ struct NativeUser: Decodable {
     let theme: Int?
     let customBoards: [Int]?
     let isFollowing: Bool?
+    let watermarkId: String?
 
     var avatarURL: URL? {
         guard let raw = portraitUrl ?? photourl, !raw.isEmpty else { return nil }
