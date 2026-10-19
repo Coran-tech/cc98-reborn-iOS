@@ -48,6 +48,7 @@ struct NativeBoard: Identifiable, Decodable {
     let isLock: Bool?
     let internalState: Int?
     let canVote: Bool?
+    let anonymousState: Int?
     let bigPaper: String?
     let boardMasters: [String]?
 }
@@ -318,6 +319,7 @@ extension NativeBoard {
             isLock: nil,
             internalState: nil,
             canVote: nil,
+            anonymousState: nil,
             bigPaper: nil,
             boardMasters: nil
         )
