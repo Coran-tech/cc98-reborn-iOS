@@ -1,5 +1,96 @@
 import SwiftUI
 
+struct RatingRecordTable: View {
+    let awards: [NativeAward]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("评分记录")
+                    .font(ShellTheme.Fonts.footnote.weight(.semibold))
+                    .foregroundStyle(ShellTheme.primaryText)
+                Spacer(minLength: 0)
+                Text(formatDelta(reputationDelta))
+                    .font(.system(.footnote, design: .rounded).weight(.semibold))
+                    .foregroundStyle(deltaColor)
+                Text("风评合计")
+                    .font(.system(size: 10))
+                    .foregroundStyle(ShellTheme.secondaryText)
+            }
+
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
+                GridRow {
+                    Text("用户")
+                    Text("操作")
+                    Text("理由")
+                }
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(ShellTheme.secondaryText)
+
+                ForEach(awards.indices, id: \.self) { index in
+                    let award = awards[index]
+                    GridRow {
+                        Text(award.operatorName ?? "匿名")
+                            .font(.system(size: 11))
+                            .foregroundStyle(ShellTheme.primaryText)
+                            .lineLimit(1)
+                        Text(award.content ?? "-")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(contentColor(award.content))
+                        Text(award.reason ?? "-")
+                            .font(.system(size: 11))
+                            .foregroundStyle(ShellTheme.secondaryText)
+                            .lineLimit(2)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(ShellTheme.separator, lineWidth: 0.5)
+        )
+    }
+
+    private var reputationDelta: Int {
+        let explicit = awards.compactMap { award -> Int? in
+            guard let content = award.content, content.contains("风评值") else { return nil }
+            return signedNumber(in: content)
+        }
+        if !explicit.isEmpty {
+            return explicit.reduce(0, +)
+        }
+        return awards.compactMap { signedNumber(in: $0.content ?? "") }.reduce(0, +)
+    }
+
+    private var deltaColor: Color {
+        if reputationDelta > 0 { return ShellTheme.accent }
+        if reputationDelta < 0 { return ShellTheme.danger }
+        return ShellTheme.secondaryText
+    }
+
+    private func contentColor(_ content: String?) -> Color {
+        guard let value = signedNumber(in: content ?? "") else { return ShellTheme.secondaryText }
+        if value > 0 { return ShellTheme.accent }
+        if value < 0 { return ShellTheme.danger }
+        return ShellTheme.secondaryText
+    }
+
+    private func signedNumber(in text: String) -> Int? {
+        guard let regex = try? NSRegularExpression(pattern: "([+-]?\\d+)") else { return nil }
+        let ns = text as NSString
+        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else {
+            return nil
+        }
+        return Int(ns.substring(with: match.range(at: 1)))
+    }
+
+    private func formatDelta(_ value: Int) -> String {
+        value > 0 ? "+\(value)" : String(value)
+    }
+}
+
 struct RatingStatsView: View {
     @EnvironmentObject private var app: NativeAppModel
     @Environment(\.dismiss) private var dismiss

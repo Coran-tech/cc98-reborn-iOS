@@ -142,6 +142,7 @@ struct NewTopicsView: View {
             )
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
         .onAppear { loadMoreIfNeeded(topic) }
         .task {
             await thumbnails.load(topic: topic, api: app.api)
@@ -264,6 +265,7 @@ private struct NewTopicCard: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 112)
                 .clipped()
+                .allowsHitTesting(false)
                 .accessibilityLabel("帖子图片缩略图")
             }
 
@@ -315,6 +317,7 @@ private struct NewTopicCard: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(ShellTheme.surface)
         .clipShape(RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner))
+        .contentShape(Rectangle())
         .overlay(
             RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner)
                 .stroke(ShellTheme.separator, lineWidth: 0.5)
@@ -387,6 +390,7 @@ private struct NewTopicRow: View {
                 .frame(width: 74, height: 74)
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .allowsHitTesting(false)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(ShellTheme.separator, lineWidth: 0.5)

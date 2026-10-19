@@ -789,7 +789,8 @@ struct PostCard: View {
     @State private var revealBlocked = false
     @State private var showEdit = false
     @State private var showRating = false
-    @State private var showRatingStats = false
+    @State private var awards: [NativeAward]
+    @State private var awardsChecked: Bool
 
     init(
         post: NativePost,
@@ -816,6 +817,8 @@ struct PostCard: View {
         _likeState = State(initialValue: post.likeState ?? 0)
         _likeCount = State(initialValue: post.likeCount ?? 0)
         _dislikeCount = State(initialValue: post.dislikeCount ?? 0)
+        _awards = State(initialValue: post.awards ?? [])
+        _awardsChecked = State(initialValue: post.awards != nil)
     }
 
     var body: some View {
@@ -882,7 +885,11 @@ struct PostCard: View {
                     .opacity(0.85)
             }
 
-            HStack(spacing: 14) {
+            if !isBlocked, !awards.isEmpty {
+                RatingRecordTable(awards: awards)
+            }
+
+            HStack(spacing: 12) {
                 Button {
                     Task { await setLike(1) }
                 } label: {
@@ -897,51 +904,45 @@ struct PostCard: View {
                         .foregroundStyle(likeState == 2 ? ShellTheme.danger : ShellTheme.secondaryText)
                 }
                 .disabled(busy)
-                Menu {
-                    if canEdit {
-                        Button {
-                            showEdit = true
-                        } label: {
-                            Label("编辑", systemImage: "pencil")
-                        }
-                    }
+                if let onQuote {
                     Button {
-                        if auth.profile == nil {
-                            alertMessage = "请先在「我的」登录，再参与风评。"
-                            showAlert = true
-                        } else {
-                            showRating = true
-                        }
+                        onQuote()
                     } label: {
-                        Label("风评", systemImage: "star")
+                        Label("引用", systemImage: "quote.bubble")
+                            .foregroundStyle(ShellTheme.secondaryText)
                     }
+                }
+                if let onTrace {
                     Button {
-                        showRatingStats = true
+                        onTrace()
                     } label: {
-                        Label("风评统计", systemImage: "chart.bar")
+                        Label("追踪", systemImage: "bubble.left.and.bubble.right")
+                            .foregroundStyle(ShellTheme.secondaryText)
                     }
-                    if let onQuote {
-                        Button {
-                            onQuote()
-                        } label: {
-                            Label("引用回复", systemImage: "quote.bubble")
-                        }
-                    }
-                    if let onTrace {
-                        Button {
-                            onTrace()
-                        } label: {
-                            Label("追踪对话", systemImage: "bubble.left.and.bubble.right")
-                        }
+                }
+                Button {
+                    if auth.profile == nil {
+                        alertMessage = "请先在「我的」登录，再参与风评。"
+                        showAlert = true
+                    } else {
+                        showRating = true
                     }
                 } label: {
-                    Label("更多", systemImage: "ellipsis.circle")
+                    Label("风评", systemImage: "star")
                         .foregroundStyle(ShellTheme.secondaryText)
+                }
+                if canEdit {
+                    Button {
+                        showEdit = true
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
+                            .foregroundStyle(ShellTheme.secondaryText)
+                    }
                 }
                 Spacer(minLength: 0)
                 if busy { ProgressView() }
             }
-            .font(ShellTheme.Fonts.caption)
+            .font(.system(size: 11))
             .buttonStyle(.plain)
         }
         .padding(14)
@@ -967,8 +968,10 @@ struct PostCard: View {
         .sheet(isPresented: $showRating) {
             RatingComposer(post: post)
         }
-        .sheet(isPresented: $showRatingStats) {
-            RatingStatsView(postID: post.id)
+        .task(id: post.id) {
+            guard !awardsChecked else { return }
+            awardsChecked = true
+            awards = (try? await app.api.postAwards(postID: post.id)) ?? []
         }
     }
 

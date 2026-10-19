@@ -115,6 +115,7 @@ struct NativePost: Identifiable, Decodable {
     let dislikeCount: Int?
     let likeState: Int?
     let parentId: Int?
+    let awards: [NativeAward]?
     let length: Int?
 }
 
