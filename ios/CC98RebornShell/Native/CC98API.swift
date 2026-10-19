@@ -512,13 +512,21 @@ final class CC98API {
         try await send("/topic/\(topicID)/post", method: "POST", body: body, contentType: "application/json", authenticated: true)
     }
 
-    func newTopic(boardID: Int, title: String, content: String, isAnonymous: Bool) async throws {
+    func newTopic(
+        boardID: Int,
+        title: String,
+        content: String,
+        isAnonymous: Bool,
+        contentType: Int = 0,
+        notifyPoster: Bool = false,
+        type: Int = 0
+    ) async throws {
         let payload: [String: Any] = [
             "content": content,
-            "contentType": 0,
+            "contentType": contentType,
             "title": title,
-            "type": 0,
-            "notifyPoster": false,
+            "type": type,
+            "notifyPoster": notifyPoster,
             "isAnonymous": isAnonymous,
             "clientType": 1
         ]
@@ -552,6 +560,10 @@ final class CC98API {
         try await uploadFile(data, fileName: fileName, mimeType: mimeType, path: "/file")
     }
 
+    func uploadAttachment(_ data: Data, fileName: String, mimeType: String) async throws -> String {
+        try await uploadFile(data, fileName: fileName, mimeType: mimeType, path: "/file")
+    }
+
     func uploadPortrait(_ data: Data, fileName: String = "portrait.jpg") async throws -> String {
         let url = try await uploadFile(data, fileName: fileName, mimeType: "image/jpeg", path: "/file/portrait")
         let body = try JSONEncoder().encode(url)
@@ -575,7 +587,10 @@ final class CC98API {
         append("Content-Disposition: form-data; name=\"files\"; filename=\"\(fileName)\"\r\n")
         append("Content-Type: \(mimeType)\r\n\r\n")
         body.append(data)
-        append("\r\n--\(boundary)--\r\n")
+        append("\r\n--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"contentType\"\r\n\r\n")
+        append("multipart/form-data\r\n")
+        append("--\(boundary)--\r\n")
         let result = try await self.data(
             path: path,
             method: "POST",

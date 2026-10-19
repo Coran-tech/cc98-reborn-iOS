@@ -35,6 +35,7 @@ indirect enum UBBBlock {
     case text([UBBInline], UBBAlignment)
     case heading(String, Int)
     case image(URL?, String?, Bool)
+    case file(URL?, String)
     case quote([UBBBlock])
     case code(String)
     case divider
@@ -113,6 +114,25 @@ struct UBBBlockView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         case let .image(url, alt, hidden):
             UBBImage(url: url, alt: alt, hidden: hidden)
+        case let .file(url, name):
+            if let url {
+                Link(destination: url) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.fill")
+                        Text(name.isEmpty ? "点击下载文件" : name)
+                            .lineLimit(2)
+                    }
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.link)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+                }
+            } else {
+                Text(name.isEmpty ? "文件无法显示" : name)
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.secondaryText)
+            }
         case let .quote(blocks):
             HStack(alignment: .top, spacing: 10) {
                 Rectangle()
@@ -680,7 +700,7 @@ enum UBBBlockParser {
     private static let blockTags: Set<String> = [
         "quote", "code", "math", "md", "no-ubb", "list", "table",
         "align", "center", "left", "right", "bili", "audio", "video",
-        "img", "hr", "line"
+        "img", "upload", "hr", "line"
     ]
 
     private static let nestedTags: Set<String> = ["quote", "code", "math", "md", "no-ubb", "list", "table", "align", "center", "left", "right"]
@@ -812,6 +832,27 @@ enum UBBBlockParser {
                 } else {
                     blocks.append(.image(tag.value.flatMap(resolveURL), nil, false))
                     index = tag.range.upperBound
+                }
+                continue
+            }
+
+            if tag.name == "upload" {
+                if let close = findClose("upload", in: source, after: tag.range.upperBound) {
+                    let content = String(source[tag.range.upperBound..<close.lowerBound])
+                    let parts = (tag.value ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                    let ext = (parts.first ?? "").lowercased()
+                    let hidden = parts.count > 1 && parts[1] == "1"
+                    let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "bmp", "webp"]
+                    if imageExtensions.contains(ext) {
+                        blocks.append(.image(resolveURL(content), "upload图片", hidden))
+                    } else {
+                        let name = URL(string: content)?.lastPathComponent.removingPercentEncoding ?? ""
+                        blocks.append(.file(resolveURL(content), name.isEmpty ? "点击下载文件" : name))
+                    }
+                    index = close.upperBound
+                } else {
+                    appendText(String(source[tag.range.upperBound...]), to: &blocks)
+                    index = source.endIndex
                 }
                 continue
             }
@@ -1158,7 +1199,7 @@ enum UBBBlockParser {
 
     private static func looksLikeUBB(_ text: String) -> Bool {
         text.range(
-            of: "(?i)\\[/?\\s*(b|i|u|del|quote|code|img|url|email|color|size|font|align|center|left|right|list|table|cc98\\d{1,2}|ac\\d{2,4}|em\\d{2}|ms\\d{2}|tb\\d{2})\\b",
+            of: "(?i)\\[/?\\s*(b|i|u|del|quote|code|img|upload|url|email|color|size|font|align|center|left|right|list|table|cc98\\d{1,2}|ac\\d{2,4}|em\\d{2}|ms\\d{2}|tb\\d{2})\\b",
             options: .regularExpression
         ) != nil
     }
