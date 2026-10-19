@@ -213,3 +213,23 @@ struct NativePrivateMessage: Identifiable, Decodable {
     let isRead: Bool?
     let content: String?
 }
+
+extension NativeBoard {
+    static func placeholder(id: Int) -> NativeBoard {
+        NativeBoard(
+            id: id,
+            name: "版面 #\(id)",
+            description: nil,
+            topicCount: nil,
+            postCount: nil,
+            todayCount: nil,
+            parentId: nil,
+            canEntry: nil,
+            isLock: nil,
+            internalState: nil,
+            canVote: nil,
+            bigPaper: nil,
+            boardMasters: nil
+        )
+    }
+}

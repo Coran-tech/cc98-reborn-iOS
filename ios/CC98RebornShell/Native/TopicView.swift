@@ -1,5 +1,31 @@
 import SwiftUI
 
+struct NativeLinkedTopic: Identifiable, Hashable {
+    let id: Int
+    let page: Int
+
+    init?(url: URL) {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        guard let host = url.host?.lowercased(), host == "www.cc98.org" || host == "cc98.org" else { return nil }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count >= 2, parts[0] == "topic", let topicID = Int(parts[1]) else { return nil }
+        id = topicID
+        page = parts.count >= 3 ? max(1, Int(parts[2]) ?? 1) : 1
+    }
+}
+
+struct NativeLinkedBoard: Identifiable, Hashable {
+    let id: Int
+
+    init?(url: URL) {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        guard let host = url.host?.lowercased(), host == "www.cc98.org" || host == "cc98.org" else { return nil }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count >= 2, parts[0] == "board", let boardID = Int(parts[1]) else { return nil }
+        id = boardID
+    }
+}
+
 struct TopicDetailView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
@@ -17,6 +43,10 @@ struct TopicDetailView: View {
     @State private var showReply = false
     @State private var alertMessage = ""
     @State private var showAlert = false
+    @State private var hotPosts: [NativePost] = []
+    @State private var hotLoaded = false
+    @State private var linkedTopic: NativeLinkedTopic? = nil
+    @State private var linkedBoard: NativeLinkedBoard? = nil
 
     private let pageSize = 10
 
@@ -30,6 +60,8 @@ struct TopicDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if let topic { header(topic) }
+
+                if !hotPosts.isEmpty { hotReplies }
 
                 if posts.isEmpty && loading {
                     ProgressView("正在加载楼层…")
@@ -82,6 +114,24 @@ struct TopicDetailView: View {
         .refreshable { await load() }
         .task(id: page) { await load() }
         .task { await loadFavorite() }
+        .task { await loadHot() }
+        .environment(\.openURL, OpenURLAction { url in
+            if let topic = NativeLinkedTopic(url: url) {
+                linkedTopic = topic
+                return .handled
+            }
+            if let board = NativeLinkedBoard(url: url) {
+                linkedBoard = board
+                return .handled
+            }
+            return .systemAction
+        })
+        .navigationDestination(item: $linkedTopic) { link in
+            TopicDetailView(topicID: link.id, boardID: nil, initialPage: link.page)
+        }
+        .navigationDestination(item: $linkedBoard) { link in
+            BoardTopicsView(board: NativeBoard.placeholder(id: link.id))
+        }
         .sheet(isPresented: $showReply) {
             ReplyComposer(topicID: topicID) {
                 Task {
@@ -101,6 +151,23 @@ struct TopicDetailView: View {
     private var pageCount: Int {
         let total = (topic?.replyCount ?? 0) + 1
         return max(1, (total + pageSize - 1) / pageSize)
+    }
+
+    private var hotReplies: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("热评")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(ShellTheme.primaryText)
+                Text("\(hotPosts.count)")
+                    .font(ShellTheme.Fonts.caption)
+                    .foregroundStyle(ShellTheme.secondaryText)
+            }
+            ForEach(hotPosts) { post in
+                PostCard(post: post, isHot: true)
+            }
+        }
+        .padding(.bottom, 4)
     }
 
     private func header(_ topic: NativeTopic) -> some View {
@@ -167,6 +234,13 @@ struct TopicDetailView: View {
     private func loadFavorite() async {
         guard auth.profile != nil else { return }
         isFavorite = (try? await app.api.isFavorite(topicID: topicID)) ?? false
+    }
+
+    @MainActor
+    private func loadHot() async {
+        guard !hotLoaded else { return }
+        hotLoaded = true
+        hotPosts = (try? await app.api.hotPosts(topicID: topicID)) ?? []
     }
 
     @MainActor
@@ -307,6 +381,7 @@ struct PostCard: View {
     @EnvironmentObject private var auth: NativeAuth
 
     let post: NativePost
+    let isHot: Bool
 
     @State private var likeState: Int
     @State private var likeCount: Int
@@ -315,8 +390,9 @@ struct PostCard: View {
     @State private var alertMessage = ""
     @State private var showAlert = false
 
-    init(post: NativePost) {
+    init(post: NativePost, isHot: Bool = false) {
         self.post = post
+        self.isHot = isHot
         _likeState = State(initialValue: post.likeState ?? 0)
         _likeCount = State(initialValue: post.likeCount ?? 0)
         _dislikeCount = State(initialValue: post.dislikeCount ?? 0)
@@ -333,6 +409,7 @@ struct PostCard: View {
                             .foregroundStyle(ShellTheme.primaryText)
                         if post.isLZ == true { badge("楼主", color: ShellTheme.accent) }
                         if post.isBest == true { badge("精彩", color: ShellTheme.warning) }
+                        if isHot { badge("热评", color: ShellTheme.warning) }
                     }
                     Text("\(floorTitle) · \(NativeFormat.date(post.time))")
                         .font(ShellTheme.Fonts.caption)
