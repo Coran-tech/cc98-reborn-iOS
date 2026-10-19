@@ -105,6 +105,8 @@ struct TopicDetailView: View {
     @State private var voteLoaded = false
     @State private var signatures: [Int: String] = [:]
     @State private var signatureChecked: Set<Int> = []
+    @State private var avatars: [Int: URL] = [:]
+    @State private var genders: [Int: Int] = [:]
     @State private var targetFloor: Int? = nil
     @State private var highlightedPostID: Int? = nil
     @State private var scrollNonce = 0
@@ -133,6 +135,8 @@ struct TopicDetailView: View {
                         topicTitle: topic?.title,
                         signature: opPost.userId.flatMap { signatures[$0] },
                         highlighted: highlightedPostID == opPost.id,
+                        avatarURL: opPost.userId.flatMap { avatars[$0] },
+                        gender: opPost.userId.flatMap { genders[$0] },
                         onChanged: {
                             Task { await load() }
                         },
@@ -167,6 +171,8 @@ struct TopicDetailView: View {
                             topicTitle: topic?.title,
                             signature: post.userId.flatMap { signatures[$0] },
                             highlighted: highlightedPostID == post.id,
+                            avatarURL: post.userId.flatMap { avatars[$0] },
+                            gender: post.userId.flatMap { genders[$0] },
                             onChanged: {
                                 Task { await load() }
                             },
@@ -338,6 +344,8 @@ struct TopicDetailView: View {
                     isHot: true,
                     signature: post.userId.flatMap { signatures[$0] },
                     highlighted: highlightedPostID == post.id,
+                    avatarURL: post.userId.flatMap { avatars[$0] },
+                    gender: post.userId.flatMap { genders[$0] },
                     onTrace: {
                         traceRequest = NativeTraceRequest(postID: post.id, floor: post.floor)
                     }
@@ -449,11 +457,17 @@ struct TopicDetailView: View {
         for id in ids {
             signatureChecked.insert(id)
             Task {
-                if let user = try? await app.api.user(id: id),
-                   let signature = user.signatureCode,
-                   !signature.isEmpty {
+                if let user = try? await app.api.user(id: id) {
                     await MainActor.run {
-                        signatures[id] = signature
+                        if let signature = user.signatureCode, !signature.isEmpty {
+                            signatures[id] = signature
+                        }
+                        if let avatar = user.avatarURL {
+                            avatars[id] = avatar
+                        }
+                        if let gender = user.gender {
+                            genders[id] = gender
+                        }
                     }
                 }
             }
@@ -652,6 +666,8 @@ struct PostCard: View {
     let topicTitle: String?
     let signature: String?
     let highlighted: Bool
+    let avatarURL: URL?
+    let gender: Int?
     let onChanged: (() -> Void)?
     let onTrace: (() -> Void)?
 
@@ -671,6 +687,8 @@ struct PostCard: View {
         topicTitle: String? = nil,
         signature: String? = nil,
         highlighted: Bool = false,
+        avatarURL: URL? = nil,
+        gender: Int? = nil,
         onChanged: (() -> Void)? = nil,
         onTrace: (() -> Void)? = nil
     ) {
@@ -679,6 +697,8 @@ struct PostCard: View {
         self.topicTitle = topicTitle
         self.signature = signature
         self.highlighted = highlighted
+        self.avatarURL = avatarURL
+        self.gender = gender
         self.onChanged = onChanged
         self.onTrace = onTrace
         _likeState = State(initialValue: post.likeState ?? 0)
@@ -693,11 +713,11 @@ struct PostCard: View {
                     NavigationLink {
                         UserProfileView(userID: userID, userName: post.userName)
                     } label: {
-                        NativeAvatar(url: nil, name: post.userName, size: 28)
+                        NativeAvatar(url: displayAvatarURL, name: post.userName, size: 28)
                     }
                     .buttonStyle(.plain)
                 } else {
-                    NativeAvatar(url: nil, name: post.userName, size: 28)
+                    NativeAvatar(url: displayAvatarURL, name: post.userName, size: 28)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -830,6 +850,14 @@ struct PostCard: View {
         return myID == postUser && post.isAnonymous != true
     }
 
+    private var displayAvatarURL: URL? {
+        NativeAvatarURLs.resolved(
+            url: avatarURL,
+            gender: gender,
+            anonymous: post.isAnonymous == true
+        )
+    }
+
     private var isBlocked: Bool {
         guard !revealBlocked else { return false }
         return library.isUserBlocked(post.userName) || library.isContentBlocked(post.content)
@@ -884,12 +912,21 @@ struct PostCard: View {
         guard !busy else { return }
         busy = true
         do {
-            let next = likeState == target ? 0 : target
-            try await app.api.setLike(postID: post.id, state: next)
+            let clearing = likeState == target
+            if clearing {
+                try await app.api.clearLike(postID: post.id)
+            } else {
+                try await app.api.setLike(postID: post.id, state: target)
+            }
             let state = try await app.api.likeState(postID: post.id)
-            likeState = state.likeState ?? next
+            let resolved = state.likeState ?? (clearing ? 0 : target)
+            likeState = resolved
             likeCount = state.likeCount ?? likeCount
             dislikeCount = state.dislikeCount ?? dislikeCount
+            if clearing, resolved != 0 {
+                alertMessage = "CC98 没有接受取消操作，赞踩状态没有改变。"
+                showAlert = true
+            }
         } catch {
             alertMessage = error.localizedDescription
             showAlert = true
