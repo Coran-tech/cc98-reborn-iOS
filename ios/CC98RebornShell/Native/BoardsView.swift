@@ -50,6 +50,15 @@ struct BoardsView: View {
                 }
             }
             .navigationTitle("版面")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        SearchView()
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                }
+            }
         }
         .task { await load() }
     }
@@ -115,6 +124,7 @@ private struct BoardRow: View {
 
 struct BoardTopicsView: View {
     @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var auth: NativeAuth
     let board: NativeBoard
 
     @State private var topics: [NativeTopicSummary] = []
@@ -122,6 +132,9 @@ struct BoardTopicsView: View {
     @State private var loading = false
     @State private var hasMore = true
     @State private var error: String?
+    @State private var showCompose = false
+    @State private var alertMessage = ""
+    @State private var showAlert = false
 
     private let pageSize = 20
 
@@ -167,6 +180,30 @@ struct BoardTopicsView: View {
             }
         }
         .navigationTitle(board.name)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    if auth.profile == nil {
+                        alertMessage = "请先在「我的」登录，再发表主题。"
+                        showAlert = true
+                    } else {
+                        showCompose = true
+                    }
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+            }
+        }
+        .sheet(isPresented: $showCompose) {
+            NewTopicComposer(boardID: board.id, boardName: board.name) {
+                Task { await load(reset: true) }
+            }
+        }
+        .alert("提示", isPresented: $showAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
         .task { await load(reset: true) }
     }
 

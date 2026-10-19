@@ -126,6 +126,37 @@ final class CC98API {
         throw CC98APIError.decoding
     }
 
+    func user(id: Int) async throws -> NativeUser {
+        try await get("/user/\(id)", authenticated: false)
+    }
+
+    func user(name: String) async throws -> NativeUser {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/?#")
+        guard let encoded = name.addingPercentEncoding(withAllowedCharacters: allowed) else {
+            throw CC98APIError.invalidURL
+        }
+        return try await get("/user/name/\(encoded)", authenticated: false)
+    }
+
+    func searchTopics(keyword: String, from: Int, size: Int = 20) async throws -> [NativeTopicSummary] {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        return try await get("/topic/search", query: [
+            URLQueryItem(name: "keyword", value: trimmed),
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size))
+        ], authenticated: false)
+    }
+
+    func favoriteTopics(from: Int, size: Int = 20) async throws -> [NativeTopicSummary] {
+        try await get("/topic/me/favorite", query: [
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size)),
+            URLQueryItem(name: "order", value: "1")
+        ], authenticated: true)
+    }
+
     // MARK: Messages
 
     func messageCounts() async throws -> NativeMessageCounts {
@@ -232,6 +263,65 @@ final class CC98API {
         if let parentID { payload["parentId"] = parentID }
         let body = try json(payload)
         try await send("/topic/\(topicID)/post", method: "POST", body: body, contentType: "application/json", authenticated: true)
+    }
+
+    func newTopic(boardID: Int, title: String, content: String, isAnonymous: Bool) async throws {
+        let payload: [String: Any] = [
+            "content": content,
+            "contentType": 0,
+            "title": title,
+            "type": 0,
+            "notifyPoster": false,
+            "isAnonymous": isAnonymous,
+            "clientType": 1
+        ]
+        try await send(
+            "/board/\(boardID)/topic",
+            method: "POST",
+            body: try json(payload),
+            contentType: "application/json",
+            authenticated: true
+        )
+    }
+
+    func editPost(postID: Int, title: String, content: String, contentType: Int) async throws {
+        let payload: [String: Any] = [
+            "content": content,
+            "contentType": contentType,
+            "title": title,
+            "type": 0,
+            "notifyPoster": false
+        ]
+        try await send(
+            "/post/\(postID)",
+            method: "PUT",
+            body: try json(payload),
+            contentType: "application/json",
+            authenticated: true
+        )
+    }
+
+    func uploadImage(_ data: Data, fileName: String = "image.jpg", mimeType: String = "image/jpeg") async throws -> String {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        func append(_ value: String) {
+            body.append(Data(value.utf8))
+        }
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(fileName)\"\r\n")
+        append("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        append("\r\n--\(boundary)--\r\n")
+        let result = try await self.data(
+            path: "/file",
+            method: "POST",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)",
+            authenticated: true
+        )
+        let urls = try decoder.decode([String].self, from: result)
+        guard let first = urls.first, !first.isEmpty else { throw CC98APIError.decoding }
+        return first
     }
 
     // MARK: Transport

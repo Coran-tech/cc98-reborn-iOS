@@ -89,6 +89,13 @@ struct ProfileView: View {
                     .foregroundStyle(ShellTheme.secondaryText)
             }
 
+            Section("Reborn") {
+                NavigationLink("我的收藏") { FavoritesView() }
+                NavigationLink("稍后再看") { ReadLaterView() }
+                NavigationLink("浏览历史") { HistoryView() }
+                NavigationLink("设置") { SettingsView() }
+            }
+
             Section {
                 Button("退出登录", role: .destructive) { confirmSignOut = true }
             }
