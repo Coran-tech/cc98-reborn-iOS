@@ -42,15 +42,7 @@ struct MessagesView: View {
                     .navigationTitle("消息")
             } else {
                 VStack(spacing: 0) {
-                    countsBar
-                    Picker("消息分类", selection: $section) {
-                        ForEach(NativeMessageSection.allCases) { item in
-                            Text(item.title).tag(item)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                    messageTabs
 
                     Group {
                         switch section {
@@ -84,27 +76,46 @@ struct MessagesView: View {
         }
     }
 
-    private var countsBar: some View {
-        HStack(spacing: 10) {
-            countChip("回复", counts?.replyCount)
-            countChip("@我", counts?.atCount)
-            countChip("系统", counts?.systemCount)
-            countChip("私信", counts?.messageCount)
+    private var messageTabs: some View {
+        HStack(spacing: 4) {
+            ForEach(NativeMessageSection.allCases) { item in
+                Button {
+                    section = item
+                } label: {
+                    VStack(spacing: 1) {
+                        Text(count(for: item))
+                            .font(.system(.footnote, design: .rounded).weight(.semibold))
+                        Text(item.title)
+                            .font(.system(size: 10))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(
+                        section == item ? ShellTheme.accentSoft : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
+                    .foregroundStyle(section == item ? ShellTheme.accent : ShellTheme.secondaryText)
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .padding(4)
+        .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 10))
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
     }
 
-    private func countChip(_ title: String, _ value: Int?) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(NativeFormat.count(value))
-                .font(.system(.footnote, design: .rounded).weight(.semibold))
-                .foregroundStyle(ShellTheme.primaryText)
-            Text(title)
-                .font(ShellTheme.Fonts.caption)
-                .foregroundStyle(ShellTheme.secondaryText)
+    private func count(for section: NativeMessageSection) -> String {
+        switch section {
+        case .reply:
+            return NativeFormat.count(counts?.replyCount)
+        case .at:
+            return NativeFormat.count(counts?.atCount)
+        case .system:
+            return NativeFormat.count(counts?.systemCount)
+        case .privateMessages:
+            return NativeFormat.count(counts?.messageCount)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @MainActor
@@ -314,6 +325,8 @@ private struct PrivateMessageListView: View {
     @State private var users: [Int: NativeBasicUser] = [:]
     @State private var loading = false
     @State private var error: String? = nil
+    @State private var page = 0
+    @State private var hasMore = true
 
     var body: some View {
         Group {
@@ -323,7 +336,7 @@ private struct PrivateMessageListView: View {
                     .background(ShellTheme.pageBackground)
             } else if contacts.isEmpty, let error {
                 NativeStateView(icon: "bubble.left.and.exclamationmark.bubble.right", title: "私信无法加载", message: error, action: {
-                    Task { await load() }
+                    Task { await load(reset: true) }
                 })
             } else if contacts.isEmpty {
                 NativeStateView(icon: "bubble.left.and.bubble.right", title: "暂无私信", message: "还没有最近联系人。")
@@ -340,14 +353,30 @@ private struct PrivateMessageListView: View {
                             contactRow(contact)
                         }
                     }
+
+                    if error != nil {
+                        Button("加载失败，点击重试") {
+                            Task { await load(reset: false) }
+                        }
+                        .font(ShellTheme.Fonts.footnote)
+                    } else if hasMore {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                        .onAppear {
+                            Task { await load(reset: false) }
+                        }
+                    }
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
                 .background(ShellTheme.pageBackground)
-                .refreshable { await load() }
+                .refreshable { await load(reset: true) }
             }
         }
-        .task { await load() }
+        .task { await load(reset: true) }
     }
 
     private func contactRow(_ contact: NativeRecentContact) -> some View {
@@ -382,18 +411,30 @@ private struct PrivateMessageListView: View {
     }
 
     @MainActor
-    private func load() async {
+    private func load(reset: Bool) async {
         guard !loading else { return }
         loading = true
         error = nil
+        if reset {
+            page = 0
+            hasMore = true
+        }
+        let pageSize = 10
         do {
-            let fetched = try await app.api.recentContacts(from: 0, size: 10)
-            contacts = fetched
-            let ids = Array(Set(fetched.map(\.userId)))
-            if let basics = try? await app.api.userBasics(ids: ids) {
-                var map: [Int: NativeBasicUser] = [:]
-                for user in basics { map[user.id] = user }
-                users = map
+            let fetched = try await app.api.recentContacts(from: page * pageSize, size: pageSize)
+            if reset {
+                contacts = fetched
+            } else {
+                let existing = Set(contacts.map(\.userId))
+                contacts.append(contentsOf: fetched.filter { !existing.contains($0.userId) })
+            }
+            hasMore = fetched.count >= pageSize
+            page += 1
+
+            let known = Set(users.keys)
+            let newIDs = Array(Set(fetched.map(\.userId)).subtracting(known))
+            if !newIDs.isEmpty, let basics = try? await app.api.userBasics(ids: newIDs) {
+                for user in basics { users[user.id] = user }
             }
         } catch {
             self.error = error.localizedDescription

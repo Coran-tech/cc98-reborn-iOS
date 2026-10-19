@@ -37,7 +37,7 @@ struct ProfileView: View {
     private func profileList(_ user: NativeUser) -> some View {
         List {
             Section {
-                HStack(spacing: 14) {
+                HStack(alignment: .top, spacing: 14) {
                     NativeAvatar(url: user.avatarURL ?? NativeAvatarURLs.defaultURL(gender: user.gender), name: user.name, size: 56)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(user.name ?? "CC98 用户")
@@ -49,9 +49,17 @@ struct ProfileView: View {
                                 .font(ShellTheme.Fonts.footnote)
                                 .foregroundStyle(ShellTheme.secondaryText)
                         }
+                        if let introduction = user.introduction, !introduction.isEmpty {
+                            Text(introduction)
+                                .font(ShellTheme.Fonts.footnote)
+                                .foregroundStyle(ShellTheme.secondaryText)
+                                .lineLimit(3)
+                                .padding(.top, 1)
+                        }
                     }
                 }
                 .padding(.vertical, 4)
+
                 HStack(spacing: 10) {
                     profileStat("发帖", NativeFormat.count(user.postCount))
                     profileStat("威望", NativeFormat.count(user.prestige))
@@ -61,12 +69,27 @@ struct ProfileView: View {
                 }
             }
 
-            if let introduction = user.introduction, !introduction.isEmpty {
-                Section("个人简介") {
-                    Text(introduction)
-                        .font(ShellTheme.Fonts.footnote)
-                        .foregroundStyle(ShellTheme.secondaryText)
+            Section("社交") {
+                NavigationLink {
+                    FollowListView(kind: .followings)
+                } label: {
+                    socialRow("关注", count: user.followCount, systemImage: "person.badge.plus")
                 }
+                NavigationLink {
+                    FollowListView(kind: .fans)
+                } label: {
+                    socialRow("粉丝", count: user.fanCount, systemImage: "person.2")
+                }
+            }
+
+            Section("我的内容") {
+                NavigationLink("回复 + 发帖") { MyActivityView() }
+                NavigationLink("我的收藏") { FavoritesView() }
+                NavigationLink("稍后再看") { ReadLaterView() }
+                NavigationLink("浏览历史") { HistoryView() }
+                NavigationLink("查看我的主页") { UserProfileView(userID: user.id, userName: user.name) }
+                NavigationLink("编辑资料") { ProfileSettingsView() }
+                NavigationLink("设置") { SettingsView() }
             }
 
             Section("账号") {
@@ -79,6 +102,10 @@ struct ProfileView: View {
                 }
             }
 
+            Section {
+                Button("退出登录", role: .destructive) { confirmSignOut = true }
+            }
+
             Section("关于") {
                 LabeledContent("版本", value: appVersion)
                 Text("原生客户端 · 数据来自 api.cc98.org，使用 CC98 OpenID 授权。")
@@ -88,27 +115,20 @@ struct ProfileView: View {
                     .font(ShellTheme.Fonts.footnote)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
-
-            Section("我的内容") {
-                NavigationLink("查看我的主页") { UserProfileView(userID: user.id, userName: user.name) }
-                NavigationLink("编辑资料") { ProfileSettingsView() }
-                NavigationLink("我的主题") { MyTopicsView() }
-                NavigationLink("我的回复") { MyPostsView() }
-                NavigationLink("我的关注") { FollowListView(kind: .followings) }
-                NavigationLink("我的粉丝") { FollowListView(kind: .fans) }
-                NavigationLink("我的收藏") { FavoritesView() }
-                NavigationLink("稍后再看") { ReadLaterView() }
-                NavigationLink("浏览历史") { HistoryView() }
-                NavigationLink("设置") { SettingsView() }
-            }
-
-            Section {
-                Button("退出登录", role: .destructive) { confirmSignOut = true }
-            }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(ShellTheme.pageBackground)
+    }
+
+    private func socialRow(_ title: String, count: Int?, systemImage: String) -> some View {
+        HStack {
+            Label(title, systemImage: systemImage)
+            Spacer(minLength: 0)
+            Text(NativeFormat.count(count))
+                .font(ShellTheme.Fonts.footnote)
+                .foregroundStyle(ShellTheme.secondaryText)
+        }
     }
 
     private func profileStat(_ title: String, _ value: String) -> some View {

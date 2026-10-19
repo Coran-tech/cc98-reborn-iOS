@@ -92,11 +92,19 @@ struct NewTopicsView: View {
                     await thumbnails.load(topic: topic, api: app.api)
                 }
             }
-            if loading && hasMore {
+            if error != nil {
+                Button("加载失败，点击重试") {
+                    Task { await load(reset: false) }
+                }
+                .font(ShellTheme.Fonts.footnote)
+            } else if hasMore {
                 HStack {
                     Spacer()
                     ProgressView()
                     Spacer()
+                }
+                .onAppear {
+                    Task { await load(reset: false) }
                 }
             }
         }
@@ -129,9 +137,18 @@ struct NewTopicsView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
 
-                if loading && hasMore {
+                if error != nil {
+                    Button("加载失败，点击重试") {
+                        Task { await load(reset: false) }
+                    }
+                    .font(ShellTheme.Fonts.footnote)
+                    .padding(.bottom, 20)
+                } else if hasMore {
                     ProgressView()
                         .padding(.bottom, 20)
+                        .onAppear {
+                            Task { await load(reset: false) }
+                        }
                 }
             }
             .refreshable { await load(reset: true) }
@@ -166,7 +183,9 @@ struct NewTopicsView: View {
     }
 
     private func loadMoreIfNeeded(_ topic: NativeTopicSummary) {
-        guard hasMore, !loading, topic.id == topics.last?.id else { return }
+        guard hasMore, !loading, error == nil else { return }
+        let lastIDs = Set([topics.last?.id, evenTopics.last?.id, oddTopics.last?.id].compactMap { $0 })
+        guard lastIDs.contains(topic.id) else { return }
         Task { await load(reset: false) }
     }
 
