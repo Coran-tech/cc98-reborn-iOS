@@ -277,7 +277,7 @@ final class ShellModel: ObservableObject {
     func selectTab(_ tab: ShellTab) {
         guard tab != selectedTab, !isReading else { return }
         let previous = selectedTab
-        guard previous != .me, let browser = webView else {
+        guard previous != .me, let browser = webView, !browser.isLoading else {
             activate(tab)
             return
         }
@@ -375,6 +375,10 @@ final class ShellModel: ObservableObject {
     (() => {
       const notify = () => {
         try { window.dispatchEvent(new Event('cc98-ios-route')); } catch {}
+        try {
+          const root = document.documentElement;
+          if (root) root.setAttribute('data-cc98-ios-route', String(Date.now()));
+        } catch {}
       };
       try {
         for (const method of ['pushState', 'replaceState']) {
@@ -414,6 +418,14 @@ final class ShellModel: ObservableObject {
         }
       } catch {}
       window.addEventListener('cc98-ios-route', report);
+      const attach = () => {
+        const root = document.documentElement;
+        if (!root) { setTimeout(attach, 50); return; }
+        try {
+          new MutationObserver(report).observe(root, { attributes: true, attributeFilter: ['data-cc98-ios-route'] });
+        } catch {}
+      };
+      attach();
       report();
     })();
     """
