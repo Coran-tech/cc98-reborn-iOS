@@ -1,10 +1,29 @@
 import SwiftUI
 
+private enum SearchScope: String, CaseIterable, Identifiable {
+    case all
+    case board
+    case user
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: return "全站"
+        case .board: return "版内"
+        case .user: return "用户"
+        }
+    }
+}
+
 struct SearchView: View {
     @EnvironmentObject private var app: NativeAppModel
 
     @State private var keyword = ""
+    @State private var scope: SearchScope = .all
+    @State private var board: NativeBoard? = nil
+    @State private var showBoardPicker = false
     @State private var results: [NativeTopicSummary] = []
+    @State private var users: [NativeUser] = []
     @State private var loading = false
     @State private var error: String? = nil
     @State private var page = 0
@@ -14,16 +33,46 @@ struct SearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Picker("搜索范围", selection: $scope) {
+                ForEach(SearchScope.allCases) { item in
+                    Text(item.title).tag(item)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+
+            if scope == .board {
+                Button {
+                    showBoardPicker = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.grid.2x2")
+                        Text(board?.name ?? "选择版面")
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(board == nil ? ShellTheme.secondaryText : ShellTheme.primaryText)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+            }
+
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(ShellTheme.secondaryText)
-                TextField("搜索主题、关键词", text: $keyword)
+                TextField(placeholder, text: $keyword)
                     .submitLabel(.search)
                     .onSubmit { Task { await search(reset: true) } }
                 if !keyword.isEmpty {
                     Button {
                         keyword = ""
                         results = []
+                        users = []
                         error = nil
                     } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -44,24 +93,35 @@ struct SearchView: View {
             }
 
             Group {
-                if results.isEmpty && loading {
+                if isEmpty && loading {
                     ProgressView("正在搜索…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if results.isEmpty, let error {
+                } else if isEmpty, let error {
                     NativeStateView(icon: "magnifyingglass", title: "搜索失败", message: error, action: {
                         Task { await search(reset: true) }
                     })
-                } else if results.isEmpty {
-                    NativeStateView(icon: "text.magnifyingglass", title: "搜索 CC98", message: "输入关键词后搜索全站主题。")
+                } else if isEmpty {
+                    NativeStateView(icon: "text.magnifyingglass", title: "搜索 CC98", message: emptyMessage)
                 } else {
                     List {
-                        ForEach(results) { topic in
-                            NavigationLink {
-                                TopicDetailView(topicID: topic.id, boardID: topic.boardId)
-                            } label: {
-                                TopicLinkRow(topic: topic)
+                        if scope == .user {
+                            ForEach(users, id: \.id) { user in
+                                NavigationLink {
+                                    UserProfileView(userID: user.id, userName: user.name)
+                                } label: {
+                                    userRow(user)
+                                }
+                            }
+                        } else {
+                            ForEach(results) { topic in
+                                NavigationLink {
+                                    TopicDetailView(topicID: topic.id, boardID: topic.boardId)
+                                } label: {
+                                    TopicLinkRow(topic: topic)
+                                }
                             }
                         }
+
                         if hasMore {
                             Button {
                                 Task { await search(reset: false) }
@@ -85,24 +145,192 @@ struct SearchView: View {
         .background(ShellTheme.pageBackground)
         .navigationTitle("搜索")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: scope) { _, _ in
+            results = []
+            users = []
+            error = nil
+            hasMore = false
+            page = 0
+        }
+        .sheet(isPresented: $showBoardPicker) {
+            BoardPickerView { selected in
+                board = selected
+                showBoardPicker = false
+            }
+        }
+    }
+
+    private var isEmpty: Bool {
+        results.isEmpty && users.isEmpty
+    }
+
+    private var placeholder: String {
+        switch scope {
+        case .all: return "搜索全站主题"
+        case .board: return board.map { "在 \($0.name) 内搜索" } ?? "输入关键词"
+        case .user: return "搜索用户名或用户 ID"
+        }
+    }
+
+    private var emptyMessage: String {
+        switch scope {
+        case .all: return "输入关键词后搜索全站主题。"
+        case .board: return board == nil ? "先选择版面，再搜索版内主题。" : "输入关键词后搜索当前版面。"
+        case .user: return "输入用户名或用户 ID 查找用户。"
+        }
+    }
+
+    private func userRow(_ user: NativeUser) -> some View {
+        HStack(spacing: 10) {
+            NativeAvatar(
+                url: user.avatarURL ?? NativeAvatarURLs.defaultURL(gender: user.gender),
+                name: user.name,
+                size: 40
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.name ?? "CC98 用户")
+                    .font(ShellTheme.Fonts.body.weight(.medium))
+                    .foregroundStyle(ShellTheme.primaryText)
+                let title = user.customTitle ?? user.displayTitle
+                if let title, !title.isEmpty {
+                    Text(title)
+                        .font(ShellTheme.Fonts.caption)
+                        .foregroundStyle(ShellTheme.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     @MainActor
     private func search(reset: Bool) async {
         let query = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty, !loading else { return }
+        if scope == .board, board == nil {
+            error = "请先选择要搜索的版面。"
+            return
+        }
         loading = true
         error = nil
-        if reset { page = 0 }
+        if reset {
+            page = 0
+            results = []
+            users = []
+            hasMore = true
+        }
         do {
-            let fetched = try await app.api.searchTopics(keyword: query, from: page * pageSize, size: pageSize)
-            if reset {
-                results = fetched
-            } else {
-                results.append(contentsOf: fetched)
+            switch scope {
+            case .all:
+                let fetched = try await app.api.searchTopics(keyword: query, from: page * pageSize, size: pageSize)
+                if reset { results = fetched } else { results.append(contentsOf: fetched) }
+                hasMore = fetched.count == pageSize
+            case .board:
+                guard let board else { loading = false; return }
+                let fetched = try await app.api.searchBoardTopics(
+                    keyword: query,
+                    boardID: board.id,
+                    from: page * pageSize,
+                    size: pageSize
+                )
+                if reset { results = fetched } else { results.append(contentsOf: fetched) }
+                hasMore = fetched.count == pageSize
+            case .user:
+                let fetched = try await app.api.searchUsers(keyword: query, from: page * pageSize, size: pageSize)
+                if reset { users = fetched } else { users.append(contentsOf: fetched) }
+                hasMore = fetched.count == pageSize
             }
             page += 1
-            hasMore = fetched.count == pageSize
+        } catch {
+            self.error = error.localizedDescription
+        }
+        loading = false
+    }
+}
+
+struct BoardPickerView: View {
+    @EnvironmentObject private var app: NativeAppModel
+    @Environment(\.dismiss) private var dismiss
+
+    let onSelect: (NativeBoard) -> Void
+
+    @State private var groups: [NativeBoardGroup] = []
+    @State private var keyword = ""
+    @State private var loading = false
+    @State private var error: String? = nil
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if loading && groups.isEmpty {
+                    ProgressView("正在加载版面…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if groups.isEmpty, let error {
+                    NativeStateView(icon: "square.grid.2x2", title: "版面无法加载", message: error, action: {
+                        Task { await load() }
+                    })
+                } else {
+                    List {
+                        ForEach(filteredGroups) { group in
+                            Section(group.name) {
+                                ForEach(group.boards ?? []) { board in
+                                    Button {
+                                        onSelect(board)
+                                        dismiss()
+                                    } label: {
+                                        HStack {
+                                            Text(board.name)
+                                                .foregroundStyle(ShellTheme.primaryText)
+                                            Spacer(minLength: 0)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                    .scrollContentBackground(.hidden)
+                }
+            }
+            .background(ShellTheme.pageBackground)
+            .navigationTitle("选择版面")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $keyword, prompt: "搜索版面")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+            .task { await load() }
+        }
+    }
+
+    private var filteredGroups: [NativeBoardGroup] {
+        let query = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return groups }
+        return groups.compactMap { group in
+            let boards = (group.boards ?? []).filter {
+                $0.name.localizedCaseInsensitiveContains(query) ||
+                ($0.description?.localizedCaseInsensitiveContains(query) ?? false)
+            }
+            guard !boards.isEmpty else { return nil }
+            return NativeBoardGroup(
+                id: group.id,
+                name: group.name,
+                masters: group.masters,
+                order: group.order,
+                boards: boards
+            )
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        guard !loading else { return }
+        loading = true
+        error = nil
+        do {
+            groups = try await app.api.boardGroups()
         } catch {
             self.error = error.localizedDescription
         }

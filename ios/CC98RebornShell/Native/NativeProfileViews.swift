@@ -149,6 +149,41 @@ struct ProfileSettingsView: View {
     }
 }
 
+struct MyActivityView: View {
+    private enum ActivityKind: String, CaseIterable, Identifiable {
+        case topics
+        case replies
+
+        var id: String { rawValue }
+        var title: String { self == .topics ? "发帖" : "回复" }
+    }
+
+    @State private var kind: ActivityKind = .topics
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("内容类型", selection: $kind) {
+                ForEach(ActivityKind.allCases) { item in
+                    Text(item.title).tag(item)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            switch kind {
+            case .topics:
+                MyTopicsView()
+            case .replies:
+                MyPostsView()
+            }
+        }
+        .background(ShellTheme.pageBackground)
+        .navigationTitle("回复 + 发帖")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 struct MyTopicsView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
@@ -220,8 +255,6 @@ struct MyTopicsView: View {
             }
         }
         .background(ShellTheme.pageBackground)
-        .navigationTitle("我的主题")
-        .navigationBarTitleDisplayMode(.inline)
         .task { await load(reset: true) }
     }
 
@@ -324,8 +357,6 @@ struct MyPostsView: View {
             }
         }
         .background(ShellTheme.pageBackground)
-        .navigationTitle("我的回复")
-        .navigationBarTitleDisplayMode(.inline)
         .task { await load(reset: true) }
     }
 

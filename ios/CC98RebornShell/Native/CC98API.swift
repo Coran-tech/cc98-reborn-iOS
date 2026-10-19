@@ -185,6 +185,50 @@ final class CC98API {
         ], authenticated: false)
     }
 
+    func searchBoardTopics(keyword: String, boardID: Int, from: Int, size: Int = 20) async throws -> [NativeTopicSummary] {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        return try await get("/topic/search/board/\(boardID)", query: [
+            URLQueryItem(name: "keyword", value: trimmed),
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size))
+        ], authenticated: false)
+    }
+
+    func searchUsers(keyword: String, from: Int, size: Int = 20) async throws -> [NativeUser] {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        do {
+            let data = try await self.data(
+                path: "/user/search",
+                query: [
+                    URLQueryItem(name: "keyword", value: trimmed),
+                    URLQueryItem(name: "from", value: String(from)),
+                    URLQueryItem(name: "size", value: String(size))
+                ],
+                authenticated: false
+            )
+            if let users = try? decoder.decode([NativeUser].self, from: data) {
+                return users
+            }
+            if let envelope = try? decoder.decode(DataEnvelope<[NativeUser]>.self, from: data) {
+                return envelope.data
+            }
+        } catch {
+            // Fall through to the exact-name/id lookup.
+        }
+
+        if from > 0 { return [] }
+        if let id = Int(trimmed), let user = try? await user(id: id) {
+            return [user]
+        }
+        if let user = try? await user(name: trimmed) {
+            return [user]
+        }
+        return []
+    }
+
     func favoriteTopics(from: Int, size: Int = 20, groupID: Int? = nil) async throws -> [NativeTopicSummary] {
         var query = [
             URLQueryItem(name: "from", value: String(from)),
