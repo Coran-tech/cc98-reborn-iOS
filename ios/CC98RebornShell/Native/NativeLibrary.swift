@@ -55,14 +55,40 @@ final class NativeLibrary: ObservableObject {
     private var readPositions: [String: NativeReadPosition] = [:]
 
     private var data = NativeLibraryData()
-    private let fileURL: URL
+    private var fileURL: URL
+    private let directory: URL
+    private var accountID: Int?
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let directory = support.appendingPathComponent("CC98Reborn", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        fileURL = directory.appendingPathComponent("library.json")
+        self.directory = directory
+        self.fileURL = directory.appendingPathComponent("library.json")
+        load()
+    }
+
+    func setAccount(_ id: Int?) {
+        guard accountID != id else { return }
+        save()
+        accountID = id
+        fileURL = directory.appendingPathComponent(id.map { "library-\($0).json" } ?? "library.json")
+
+        data = NativeLibraryData()
+        readLater = []
+        history = []
+        notes = [:]
+        blockedUsers = []
+        blockedKeywords = []
+        blockedUserIDs = []
+        blockedBoards = []
+        blockedTitleKeywords = []
+        blockedContentRules = []
+        blockedNumericRules = []
+        blockedTopicIDs = []
+        drafts = [:]
+        readPositions = [:]
         load()
     }
 

@@ -64,6 +64,9 @@ struct NativeRootView: View {
                 notifications.markMessagesOpened()
             }
         }
+        .onChange(of: app.auth.profile?.id) { _, accountID in
+            library.setAccount(accountID)
+        }
     }
 
     private var preferredColorScheme: ColorScheme? {

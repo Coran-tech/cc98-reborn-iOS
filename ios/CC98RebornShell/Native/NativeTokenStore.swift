@@ -20,16 +20,42 @@ enum NativeTokenStoreError: LocalizedError {
     }
 }
 
-// Access and refresh tokens live only in the system keychain. The native app
-// never writes them to UserDefaults, diagnostics or logs.
+// Each account gets its own keychain item. Passwords are never stored.
 final class NativeTokenStore {
     static let shared = NativeTokenStore()
 
     private let service = "org.cc98.reborn.shell.native"
-    private let account = "oauth-token"
+    private let legacyAccount = "oauth-token"
 
-    func load() -> NativeTokenSet? {
-        var query = baseQuery
+    func load(accountID: Int) -> NativeTokenSet? {
+        load(account: "oauth-token.\(accountID)")
+    }
+
+    func save(_ tokens: NativeTokenSet, accountID: Int) throws {
+        try save(tokens, account: "oauth-token.\(accountID)")
+    }
+
+    func clear(accountID: Int) {
+        clear(account: "oauth-token.\(accountID)")
+    }
+
+    func loadLegacy() -> NativeTokenSet? {
+        load(account: legacyAccount)
+    }
+
+    func clearLegacy() {
+        clear(account: legacyAccount)
+    }
+
+    func clearAll() {
+        SecItemDelete([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ] as CFDictionary)
+    }
+
+    private func load(account: String) -> NativeTokenSet? {
+        var query = baseQuery(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
@@ -38,16 +64,17 @@ final class NativeTokenStore {
         return try? JSONDecoder().decode(NativeTokenSet.self, from: data)
     }
 
-    func save(_ tokens: NativeTokenSet) throws {
+    private func save(_ tokens: NativeTokenSet, account: String) throws {
         let data: Data
         do { data = try JSONEncoder().encode(tokens) } catch { throw NativeTokenStoreError.encoding }
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-        let status = SecItemUpdate(baseQuery as CFDictionary, attributes as CFDictionary)
+        let query = baseQuery(account: account)
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
-            var add = baseQuery
+            var add = query
             add.merge(attributes) { _, new in new }
             let addStatus = SecItemAdd(add as CFDictionary, nil)
             guard addStatus == errSecSuccess else { throw NativeTokenStoreError.keychain(addStatus) }
@@ -56,11 +83,11 @@ final class NativeTokenStore {
         }
     }
 
-    func clear() {
-        SecItemDelete(baseQuery as CFDictionary)
+    private func clear(account: String) {
+        SecItemDelete(baseQuery(account: account) as CFDictionary)
     }
 
-    private var baseQuery: [String: Any] {
+    private func baseQuery(account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
