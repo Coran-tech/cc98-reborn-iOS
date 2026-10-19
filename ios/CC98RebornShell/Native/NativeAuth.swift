@@ -242,8 +242,13 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
         )
     }
 
-    private func fetchMe(token: String? = nil) async throws -> NativeUser {
-        let access: String
+    func refreshProfile() async {
+        if let user = try? await fetchMe() {
+            profile = user
+        }
+    }
+
+    private func fetchMe(token: String? = nil) async throws -> NativeUser {        let access: String
         if let token {
             access = token
         } else {

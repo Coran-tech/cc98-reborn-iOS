@@ -89,7 +89,10 @@ struct ProfileView: View {
                     .foregroundStyle(ShellTheme.secondaryText)
             }
 
-            Section("Reborn") {
+            Section("我的内容") {
+                NavigationLink("编辑资料") { ProfileSettingsView() }
+                NavigationLink("我的主题") { MyTopicsView() }
+                NavigationLink("我的回复") { MyPostsView() }
                 NavigationLink("我的收藏") { FavoritesView() }
                 NavigationLink("稍后再看") { ReadLaterView() }
                 NavigationLink("浏览历史") { HistoryView() }

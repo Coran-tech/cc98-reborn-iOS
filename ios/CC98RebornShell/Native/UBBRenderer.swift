@@ -343,19 +343,67 @@ struct NativeImageViewer: View {
 }
 
 enum UBBEmotion {
+    private struct Asset {
+        let folder: String
+        let name: String
+        let extensions: [String]
+    }
+
     private static let cache = NSCache<NSString, UIImage>()
 
-    static func image(_ id: String) -> UIImage? {
-        guard id.count > 2, let number = Int(id.dropFirst(2)) else { return nil }
-        let valid = (1...54).contains(number) || (1001...1040).contains(number) || (2001...2055).contains(number)
-        guard valid else { return nil }
-        let name = number < 100 ? String(format: "%02d", number) : String(number)
-        if let cached = cache.object(forKey: name as NSString) { return cached }
-        guard let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Reborn/images/ac"),
-              let image = UIImage(contentsOfFile: url.path) else { return nil }
+    static func image(_ tag: String) -> UIImage? {
+        let key = tag.lowercased()
+        if let cached = cache.object(forKey: key as NSString) { return cached }
+        guard let asset = resolve(key), let image = load(asset) else { return nil }
         let scaled = resize(image, maxSide: 20)
-        cache.setObject(scaled, forKey: name as NSString)
+        cache.setObject(scaled, forKey: key as NSString)
         return scaled
+    }
+
+    private static func resolve(_ tag: String) -> Asset? {
+        if tag.hasPrefix("cc98") {
+            let id = String(tag.dropFirst(4))
+            guard isNumeric(id) else { return nil }
+            return Asset(folder: "CC98", name: "CC98" + id, extensions: ["png", "gif"])
+        }
+        if tag.hasPrefix("ac") {
+            let id = String(tag.dropFirst(2))
+            guard isNumeric(id) else { return nil }
+            return Asset(folder: "ac", name: id, extensions: ["png"])
+        }
+        if tag.hasPrefix("em") {
+            let id = String(tag.dropFirst(2))
+            guard isNumeric(id) else { return nil }
+            return Asset(folder: "em", name: "em" + id, extensions: ["gif", "png"])
+        }
+        if tag.hasPrefix("ms") {
+            let id = String(tag.dropFirst(2))
+            guard isNumeric(id) else { return nil }
+            return Asset(folder: "ms", name: "ms" + id, extensions: ["png", "gif"])
+        }
+        if tag.hasPrefix("tb") {
+            let id = String(tag.dropFirst(2))
+            guard isNumeric(id) else { return nil }
+            return Asset(folder: "tb", name: "tb" + id, extensions: ["png", "gif"])
+        }
+        return nil
+    }
+
+    private static func load(_ asset: Asset) -> UIImage? {
+        for ext in asset.extensions {
+            if let url = Bundle.main.url(
+                forResource: asset.name,
+                withExtension: ext,
+                subdirectory: "Reborn/images/\(asset.folder)"
+            ), let image = UIImage(contentsOfFile: url.path) {
+                return image
+            }
+        }
+        return nil
+    }
+
+    private static func isNumeric(_ value: String) -> Bool {
+        !value.isEmpty && value.allSatisfy { $0.isNumber }
     }
 
     private static func resize(_ image: UIImage, maxSide: CGFloat) -> UIImage {
@@ -580,8 +628,7 @@ enum UBBBlockParser {
                 flush()
                 result.append(.text(AttributedString("［图片］")))
             default:
-                if tag.name.hasPrefix("ac"), tag.name.count > 2,
-                   tag.name.dropFirst(2).allSatisfy({ $0.isNumber }) {
+                if !tag.closing, UBBBlockParser.isEmotionTag(tag.name) {
                     flush()
                     result.append(.emotion(tag.name))
                 }
@@ -703,9 +750,16 @@ enum UBBBlockParser {
         return nil
     }
 
+    static func isEmotionTag(_ name: String) -> Bool {
+        let prefixes = ["cc98", "ac", "em", "ms", "tb"]
+        guard let prefix = prefixes.first(where: { name.hasPrefix($0) }),
+              name.count > prefix.count else { return false }
+        return name.dropFirst(prefix.count).allSatisfy { $0.isNumber }
+    }
+
     private static func looksLikeUBB(_ text: String) -> Bool {
         text.range(
-            of: "(?i)\\[/?\\s*(b|i|u|del|quote|code|img|url|email|color|size|font|align|center|left|right|list|table|ac\\d{2,4})\\b",
+            of: "(?i)\\[/?\\s*(b|i|u|del|quote|code|img|url|email|color|size|font|align|center|left|right|list|table|cc98\\d{1,2}|ac\\d{2,4}|em\\d{2}|ms\\d{2}|tb\\d{2})\\b",
             options: .regularExpression
         ) != nil
     }
