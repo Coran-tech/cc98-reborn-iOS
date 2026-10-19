@@ -103,7 +103,7 @@ struct NewTopicsView: View {
                     Spacer()
                 }
             } else if error != nil {
-                Button("加载失败，点击重试") {
+                Button("点击继续加载") {
                     Task { await load(reset: false) }
                 }
                 .font(ShellTheme.Fonts.footnote)
@@ -147,7 +147,7 @@ struct NewTopicsView: View {
                     ProgressView()
                         .padding(.bottom, 20)
                 } else if error != nil {
-                    Button("加载失败，点击重试") {
+                    Button("点击继续加载") {
                         Task { await load(reset: false) }
                     }
                     .font(ShellTheme.Fonts.footnote)
