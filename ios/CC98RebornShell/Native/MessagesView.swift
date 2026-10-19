@@ -157,7 +157,12 @@ private struct NotificationListView: View {
     private func notificationRow(_ item: NativeNotification) -> some View {
         if let topicID = item.topicId {
             NavigationLink {
-                TopicDetailView(topicID: topicID, boardID: nil, initialPage: pageForFloor(item.postBasicInfo?.floor))
+                TopicDetailView(
+                    topicID: topicID,
+                    boardID: nil,
+                    initialPage: pageForFloor(item.postBasicInfo?.floor),
+                    initialFloor: item.postBasicInfo?.floor
+                )
             } label: {
                 NotificationRow(item: item, kind: kind, topicTitle: topicTitles[topicID])
             }
