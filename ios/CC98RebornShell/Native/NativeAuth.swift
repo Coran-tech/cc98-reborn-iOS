@@ -219,25 +219,26 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
     }
 
     private func decodeTokens(_ data: Data) throws -> NativeTokenSet {
-        struct Response: Decodable {
-            let access_token: String
-            let token_type: String?
-            let expires_in: Int?
-            let refresh_token: String?
-            let scope: String?
-        }
-        guard let response = try? decoder.decode(Response.self, from: data),
-              !response.access_token.isEmpty,
-              response.access_token.count <= 16_384,
-              (response.token_type ?? "Bearer").lowercased() == "bearer" else {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let access = json["access_token"] as? String,
+              !access.isEmpty,
+              access.count <= 16_384,
+              ((json["token_type"] as? String) ?? "Bearer").lowercased() == "bearer" else {
             throw NativeAuthError.token
         }
-        let lifetime = max(60, response.expires_in ?? 3600)
+        let lifetime: Int
+        if let number = json["expires_in"] as? NSNumber {
+            lifetime = number.intValue
+        } else if let text = json["expires_in"] as? String, let value = Int(text) {
+            lifetime = value
+        } else {
+            lifetime = 3600
+        }
         return NativeTokenSet(
-            accessToken: response.access_token,
-            refreshToken: response.refresh_token,
-            expiresAt: Date().addingTimeInterval(TimeInterval(lifetime)),
-            scope: response.scope
+            accessToken: access,
+            refreshToken: json["refresh_token"] as? String,
+            expiresAt: Date().addingTimeInterval(TimeInterval(max(60, lifetime))),
+            scope: json["scope"] as? String
         )
     }
 
