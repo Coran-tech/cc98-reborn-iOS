@@ -46,7 +46,7 @@ struct ConversationView: View {
                 }
             }
             .background(ShellTheme.pageBackground)
-            .navigationTitle("追踪对话")
+            .navigationTitle("查看对话")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

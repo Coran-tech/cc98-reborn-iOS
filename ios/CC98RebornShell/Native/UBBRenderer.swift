@@ -1083,7 +1083,7 @@ enum UBBBlockParser {
 
     // MARK: Helpers
 
-    private static func plainText(_ raw: String) -> String {
+    static func plainText(_ raw: String) -> String {
         let inlines = parseInline(raw)
         var value = ""
         for inline in inlines {
