@@ -347,7 +347,7 @@ private struct PrivateMessageListView: View {
         loading = true
         error = nil
         do {
-            let fetched = try await app.api.recentContacts(from: 0, size: 50)
+            let fetched = try await app.api.recentContacts(from: 0, size: 10)
             contacts = fetched
             let ids = Array(Set(fetched.map(\.userId)))
             if let basics = try? await app.api.userBasics(ids: ids) {
@@ -380,7 +380,7 @@ private struct PrivateConversationView: View {
     @State private var showError = false
     @FocusState private var focused: Bool
 
-    private let pageSize = 30
+    private let pageSize = 10
 
     var body: some View {
         VStack(spacing: 0) {

@@ -115,6 +115,10 @@ final class CC98API {
         ])
     }
 
+    func hotPosts(topicID: Int) async throws -> [NativePost] {
+        try await get("/topic/\(topicID)/hot-post", authenticated: false)
+    }
+
     func me() async throws -> NativeUser {
         let data = try await data(path: "/me", authenticated: true)
         if let user = try? decoder.decode(NativeUser.self, from: data) { return user }
@@ -139,18 +143,26 @@ final class CC98API {
         try await send(kind.readAllPath, method: "PUT", body: Data(), authenticated: true)
     }
 
-    func recentContacts(from: Int, size: Int = 20) async throws -> [NativeRecentContact] {
+    func recentContacts(from: Int, size: Int = 10) async throws -> [NativeRecentContact] {
         try await get("/message/recent-contact-users", query: [
             URLQueryItem(name: "from", value: String(from)),
             URLQueryItem(name: "size", value: String(size))
         ], authenticated: true)
     }
 
-    func privateMessages(userID: Int, from: Int, size: Int = 30) async throws -> [NativePrivateMessage] {
-        try await get("/message/user/\(userID)", query: [
-            URLQueryItem(name: "from", value: String(from)),
-            URLQueryItem(name: "size", value: String(size))
-        ], authenticated: true)
+    func privateMessages(userID: Int, from: Int, size: Int = 10) async throws -> [NativePrivateMessage] {
+        do {
+            return try await get("/message/user/\(userID)", query: [
+                URLQueryItem(name: "from", value: String(from)),
+                URLQueryItem(name: "size", value: String(size))
+            ], authenticated: true)
+        } catch CC98APIError.server(let status, _) where status == 400 {
+            // Some deployments reject size > 10 or the combined query. Retry
+            // without size before giving up.
+            return try await get("/message/user/\(userID)", query: [
+                URLQueryItem(name: "from", value: String(from))
+            ], authenticated: true)
+        }
     }
 
     func sendPrivateMessage(receiverID: Int, content: String) async throws {

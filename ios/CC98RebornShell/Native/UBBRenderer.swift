@@ -179,35 +179,36 @@ struct UBBInlineText: View {
 struct UBBImage: View {
     let url: URL?
     let alt: String?
-    @Environment(\.openURL) private var openURL
+
+    @State private var showViewer = false
 
     var body: some View {
         if let url {
-            Button {
-                openURL(url)
-            } label: {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                    case .failure:
-                        failure
-                    case .empty:
-                        ProgressView()
-                            .frame(maxWidth: .infinity, minHeight: 120)
-                    @unknown default:
-                        failure
-                    }
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case let .success(image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                case .failure:
+                    failure
+                case .empty:
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                @unknown default:
+                    failure
                 }
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(ShellTheme.separator, lineWidth: 0.5))
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(ShellTheme.separator, lineWidth: 0.5))
+            .contentShape(Rectangle())
+            .onTapGesture { showViewer = true }
             .accessibilityLabel(alt?.isEmpty == false ? alt! : "图片")
-            .accessibilityHint("在浏览器中打开原图")
+            .accessibilityHint("查看大图")
+            .fullScreenCover(isPresented: $showViewer) {
+                NativeImageViewer(url: url, alt: alt)
+            }
         } else {
             failure
         }
@@ -221,15 +222,123 @@ struct UBBImage: View {
             Text(alt?.isEmpty == false ? alt! : "图片无法显示")
                 .font(ShellTheme.Fonts.caption)
                 .foregroundStyle(ShellTheme.secondaryText)
-            if let url {
-                Link("打开原图", destination: url)
-                    .font(ShellTheme.Fonts.caption)
-                    .foregroundStyle(ShellTheme.link)
-            }
         }
         .padding(12)
         .frame(maxWidth: .infinity)
         .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct NativeImageViewer: View {
+    let url: URL
+    let alt: String?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1
+    @State private var baseScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var baseOffset: CGSize = .zero
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case let .success(image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .accessibilityLabel(alt?.isEmpty == false ? alt! : "图片")
+                        .gesture(
+                            MagnifyGesture()
+                                .onChanged { value in
+                                    scale = min(max(baseScale * value.magnification, 1), 5)
+                                }
+                                .onEnded { _ in
+                                    baseScale = scale
+                                    if scale <= 1.01 {
+                                        reset()
+                                    }
+                                }
+                        )
+                        .simultaneousGesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    guard scale > 1.01 else { return }
+                                    offset = CGSize(
+                                        width: baseOffset.width + value.translation.width,
+                                        height: baseOffset.height + value.translation.height
+                                    )
+                                }
+                                .onEnded { _ in baseOffset = offset }
+                        )
+                        .onTapGesture(count: 2) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                if scale > 1.01 {
+                                    reset()
+                                } else {
+                                    scale = 2
+                                    baseScale = 2
+                                }
+                            }
+                        }
+                case .failure:
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo")
+                            .font(.largeTitle)
+                        Text("图片加载失败")
+                            .font(.subheadline)
+                        Text(url.absoluteString)
+                            .font(.caption)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+                    .foregroundStyle(.white)
+                case .empty:
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.2)
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.title3.weight(.semibold))
+                            .padding(12)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                }
+                Spacer()
+                HStack {
+                    ShareLink(item: url) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title3.weight(.semibold))
+                            .padding(12)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    Spacer()
+                }
+            }
+            .padding(16)
+            .foregroundStyle(.white)
+        }
+        .statusBarHidden()
+    }
+
+    private func reset() {
+        scale = 1
+        baseScale = 1
+        offset = .zero
+        baseOffset = .zero
     }
 }
 
@@ -244,20 +353,26 @@ enum UBBEmotion {
         if let cached = cache.object(forKey: name as NSString) { return cached }
         guard let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Reborn/images/ac"),
               let image = UIImage(contentsOfFile: url.path) else { return nil }
-        let scaled = resize(image, to: CGSize(width: 20, height: 20))
+        let scaled = resize(image, maxSide: 20)
         cache.setObject(scaled, forKey: name as NSString)
         return scaled
     }
 
-    private static func resize(_ image: UIImage, to size: CGSize) -> UIImage {
+    private static func resize(_ image: UIImage, maxSide: CGFloat) -> UIImage {
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return image }
+        let ratio = min(maxSide / size.width, maxSide / size.height)
+        let target = CGSize(
+            width: max(1, (size.width * ratio).rounded()),
+            height: max(1, (size.height * ratio).rounded())
+        )
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 2
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: size))
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
         }
     }
 }
-
 enum UBBBlockParser {
     private struct Tag {
         let name: String
