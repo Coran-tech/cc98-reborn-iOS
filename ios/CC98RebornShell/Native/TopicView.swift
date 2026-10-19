@@ -101,7 +101,7 @@ struct TopicDetailView: View {
                     })
                 }
 
-                if !hotPosts.isEmpty { hotReplies }
+                if page == 1, !hotReplyPosts.isEmpty { hotReplies }
 
                 if posts.isEmpty && loading {
                     ProgressView("正在加载楼层…")
@@ -230,17 +230,22 @@ struct TopicDetailView: View {
         return posts.filter { $0.id != opPost.id }
     }
 
+    private var hotReplyPosts: [NativePost] {
+        guard let opPost else { return hotPosts }
+        return hotPosts.filter { $0.id != opPost.id }
+    }
+
     private var hotReplies: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("热评")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(ShellTheme.primaryText)
-                Text("\(hotPosts.count)")
+                Text("\(hotReplyPosts.count)")
                     .font(ShellTheme.Fonts.caption)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
-            ForEach(hotPosts) { post in
+            ForEach(hotReplyPosts) { post in
                 PostCard(post: post, isHot: true)
             }
         }
