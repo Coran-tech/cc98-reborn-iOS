@@ -136,6 +136,7 @@ struct BoardTopicsView: View {
     @State private var hasMore = true
     @State private var error: String?
     @State private var showCompose = false
+    @State private var bigPaperExpanded = true
     @State private var alertMessage = ""
     @State private var showAlert = false
 
@@ -155,6 +156,20 @@ struct BoardTopicsView: View {
                 NativeStateView(icon: "tray", title: "本版暂无主题", message: nil)
             } else {
                 List {
+                    if let bigPaper = board.bigPaper?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !bigPaper.isEmpty {
+                        Section {
+                            DisclosureGroup(isExpanded: $bigPaperExpanded) {
+                                UBBContentView(source: bigPaper)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } label: {
+                                Label("本版大字报", systemImage: "megaphone")
+                                    .font(ShellTheme.Fonts.footnote.weight(.semibold))
+                                    .foregroundStyle(ShellTheme.accent)
+                            }
+                        }
+                    }
+
                     ForEach(topics) { topic in
                         NavigationLink {
                             TopicDetailView(topicID: topic.id, boardID: topic.boardId ?? board.id)
@@ -184,7 +199,14 @@ struct BoardTopicsView: View {
         }
         .navigationTitle(board.name)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                NavigationLink {
+                    SearchView(initialBoard: board)
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("版内搜索")
+
                 Button {
                     if auth.profile == nil {
                         alertMessage = "请先在「我的」登录，再发表主题。"

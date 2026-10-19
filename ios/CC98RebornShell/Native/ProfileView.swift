@@ -1,8 +1,17 @@
 import SwiftUI
 
 struct ProfileView: View {
+    private enum ProfileDestination: String, Identifiable {
+        case activity
+        case followings
+        case fans
+
+        var id: String { rawValue }
+    }
+
     @EnvironmentObject private var auth: NativeAuth
     @State private var confirmSignOut = false
+    @State private var destination: ProfileDestination?
 
     var body: some View {
         NavigationStack {
@@ -25,6 +34,16 @@ struct ProfileView: View {
                 }
             }
             .navigationTitle("我的")
+            .navigationDestination(item: $destination) { destination in
+                switch destination {
+                case .activity:
+                    MyActivityView()
+                case .followings:
+                    FollowListView(kind: .followings)
+                case .fans:
+                    FollowListView(kind: .fans)
+                }
+            }
         }
         .alert("退出登录？", isPresented: $confirmSignOut) {
             Button("取消", role: .cancel) {}
@@ -60,30 +79,15 @@ struct ProfileView: View {
                 }
                 .padding(.vertical, 4)
 
-                HStack(spacing: 10) {
-                    NavigationLink {
-                        MyActivityView()
-                    } label: {
-                        profileStat("发帖", NativeFormat.count(user.postCount))
-                    }
-                    .buttonStyle(.plain)
-
+                HStack(spacing: 8) {
+                    statButton("发帖", NativeFormat.count(user.postCount), destination: .activity)
+                    statDivider
                     profileStat("威望", NativeFormat.count(user.prestige))
                     profileStat("风评", NativeFormat.count(user.popularity))
-
-                    NavigationLink {
-                        FollowListView(kind: .followings)
-                    } label: {
-                        profileStat("关注", NativeFormat.count(user.followCount))
-                    }
-                    .buttonStyle(.plain)
-
-                    NavigationLink {
-                        FollowListView(kind: .fans)
-                    } label: {
-                        profileStat("粉丝", NativeFormat.count(user.fanCount))
-                    }
-                    .buttonStyle(.plain)
+                    statDivider
+                    statButton("关注", NativeFormat.count(user.followCount), destination: .followings)
+                    statDivider
+                    statButton("粉丝", NativeFormat.count(user.fanCount), destination: .fans)
                 }
             }
 
@@ -117,6 +121,21 @@ struct ProfileView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(ShellTheme.pageBackground)
+    }
+
+    private func statButton(_ title: String, _ value: String, destination route: ProfileDestination) -> some View {
+        Button {
+            destination = route
+        } label: {
+            profileStat(title, value)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var statDivider: some View {
+        Rectangle()
+            .fill(ShellTheme.separator)
+            .frame(width: 0.5, height: 28)
     }
 
     private func profileStat(_ title: String, _ value: String) -> some View {

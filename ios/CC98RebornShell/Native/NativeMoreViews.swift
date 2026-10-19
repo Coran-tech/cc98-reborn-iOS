@@ -31,6 +31,11 @@ struct SearchView: View {
 
     private let pageSize = 20
 
+    init(initialBoard: NativeBoard? = nil) {
+        _board = State(initialValue: initialBoard)
+        _scope = State(initialValue: initialBoard == nil ? .all : .board)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Picker("搜索范围", selection: $scope) {

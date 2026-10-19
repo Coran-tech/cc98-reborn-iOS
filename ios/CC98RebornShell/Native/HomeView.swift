@@ -33,7 +33,7 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .navigationTitle("浏览")
+            .navigationTitle("首页")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {

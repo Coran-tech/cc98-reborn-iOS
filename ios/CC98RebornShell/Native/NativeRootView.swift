@@ -23,7 +23,7 @@ struct NativeRootView: View {
         TabView(selection: $selectedTab) {
             HomeView()
                 .tag(0)
-                .tabItem { Label("浏览", systemImage: "list.bullet.rectangle") }
+                .tabItem { Label("首页", systemImage: "list.bullet.rectangle") }
             BoardsView()
                 .tag(1)
                 .tabItem { Label("版面", systemImage: "square.grid.2x2") }
