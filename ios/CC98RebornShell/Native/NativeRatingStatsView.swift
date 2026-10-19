@@ -38,11 +38,6 @@ struct RatingRecordTable: View {
                             Text(award.content ?? "-")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(contentColor(award.content))
-                            if !isReputation(award.content) {
-                                Text("不计入风评")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(ShellTheme.secondaryText)
-                            }
                         }
                         Text(award.reason ?? "-")
                             .font(.system(size: 11))

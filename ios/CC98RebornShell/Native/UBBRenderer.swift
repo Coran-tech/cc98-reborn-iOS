@@ -714,6 +714,22 @@ enum UBBBlockParser {
     private static func expandBareImages(_ source: String) -> String {
         var value = source
 
+        // CC98 sometimes emits images as literal [图片] path/to/file.webp [图片]
+        // markers rather than an [img] tag.
+        let markedImagePatterns = [
+            "(?i)\\[图片\\]\\s*([^\\s\\[\\]]+?\\.(?:png|jpe?g|gif|webp)(?:\\?[^\\s\\[\\]]*)?)\\s*(?:\\[图片\\])?",
+            "(?i)【图片】\\s*([^\\s【】]+?\\.(?:png|jpe?g|gif|webp)(?:\\?[^\\s【】]*)?)\\s*(?:【图片】)?"
+        ]
+        for pattern in markedImagePatterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let ns = value as NSString
+            value = regex.stringByReplacingMatches(
+                in: value,
+                range: NSRange(location: 0, length: ns.length),
+                withTemplate: "[img]$1[/img]"
+            )
+        }
+
         if let regex = try? NSRegularExpression(pattern: "(?i)<img[^>]+src=[\"']([^\"']+)[\"'][^>]*>") {
             let ns = value as NSString
             value = regex.stringByReplacingMatches(

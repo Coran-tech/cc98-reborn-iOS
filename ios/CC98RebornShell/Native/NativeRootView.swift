@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @MainActor
 final class NativeAppModel: ObservableObject {
@@ -66,10 +67,6 @@ struct LoginGateView: View {
             Text("登录 CC98")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(ShellTheme.primaryText)
-            Text("使用 CC98 OpenID 授权。登录后可查看消息、收藏并参与回复；令牌只保存在本机钥匙串。")
-                .font(ShellTheme.Fonts.footnote)
-                .foregroundStyle(ShellTheme.secondaryText)
-                .multilineTextAlignment(.center)
             Button {
                 Task { await signIn() }
             } label: {
@@ -129,23 +126,79 @@ struct NativeAvatar: View {
 
     var body: some View {
         Group {
-            if let url {
+            if isAnonymousAvatar, let localAnonymous {
+                Image(uiImage: localAnonymous)
+                    .resizable()
+                    .scaledToFill()
+            } else if isDefaultAvatar, let localDefault {
+                Image(uiImage: localDefault)
+                    .resizable()
+                    .scaledToFill()
+            } else if let url {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     default:
-                        placeholder
+                        fallbackAvatar
                     }
                 }
             } else {
-                placeholder
+                fallbackAvatar
             }
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
         .overlay(Circle().stroke(ShellTheme.separator, lineWidth: 0.5))
         .accessibilityHidden(true)
+    }
+
+    private var isAnonymousAvatar: Bool {
+        guard let url else { return false }
+        let file = (url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
+        return file.contains("心灵头像")
+    }
+
+    private var localAnonymous: UIImage? {
+        guard let path = Bundle.main.path(
+            forResource: "anonymous",
+            ofType: "gif",
+            inDirectory: "Reborn/images/avatar"
+        ) else {
+            return nil
+        }
+        return UIImage(contentsOfFile: path)
+    }
+
+    private var isDefaultAvatar: Bool {
+        guard let url else { return true }
+        let file = (url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
+        return file.contains("default_avatar") || file.contains("心灵头像")
+    }
+
+    private var localDefault: UIImage? {
+        let file = (url?.lastPathComponent.removingPercentEncoding ?? "").lowercased()
+        let isGirl = file.contains("girl") || file.contains("女性")
+        let resource = isGirl ? "default_avatar_girl" : "default_avatar_boy"
+        guard let path = Bundle.main.path(
+            forResource: resource,
+            ofType: "png",
+            inDirectory: "Reborn/images/avatar"
+        ) else {
+            return nil
+        }
+        return UIImage(contentsOfFile: path)
+    }
+
+    @ViewBuilder
+    private var fallbackAvatar: some View {
+        if let localDefault {
+            Image(uiImage: localDefault)
+                .resizable()
+                .scaledToFill()
+        } else {
+            placeholder
+        }
     }
 
     private var placeholder: some View {
