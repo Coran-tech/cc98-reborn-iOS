@@ -624,11 +624,48 @@ enum UBBBlockParser {
     private static let nestedTags: Set<String> = ["quote", "code", "math", "md", "no-ubb", "list", "table", "align", "center", "left", "right"]
 
     static func parse(_ source: String, markdown: Bool) -> [UBBBlock] {
-        let text = decodeEntities(source)
+        let text = expandBareImages(decodeEntities(source))
         if markdown, !looksLikeUBB(text), let attributed = try? AttributedString(markdown: text) {
             return [.text([.text(attributed)], .leading)]
         }
         return parseBlocks(text)
+    }
+
+    private static func expandBareImages(_ source: String) -> String {
+        var value = source
+
+        if let regex = try? NSRegularExpression(pattern: "(?i)<img[^>]+src=[\"']([^\"']+)[\"'][^>]*>") {
+            let ns = value as NSString
+            value = regex.stringByReplacingMatches(
+                in: value,
+                range: NSRange(location: 0, length: ns.length),
+                withTemplate: "[img]$1[/img]"
+            )
+        }
+
+        if let regex = try? NSRegularExpression(pattern: "!\\[[^\\]]*\\]\\(([^\\)]+)\\)") {
+            let ns = value as NSString
+            value = regex.stringByReplacingMatches(
+                in: value,
+                range: NSRange(location: 0, length: ns.length),
+                withTemplate: "[img]$1[/img]"
+            )
+        }
+
+        let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp"]
+        let punctuation = CharacterSet(charactersIn: "。，；：！？）】、,;:!?)]}")
+        return value.components(separatedBy: "\n").map { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.lowercased().hasPrefix("http") else { return line }
+            let candidate = trimmed.trimmingCharacters(in: punctuation)
+            guard let url = URL(string: candidate),
+                  imageExtensions.contains(url.pathExtension.lowercased()) else {
+                return line
+            }
+            let indentation = line.prefix { $0 == " " || $0 == "\t" }
+            return String(indentation) + "[img]\(candidate)[/img]"
+        }
+        .joined(separator: "\n")
     }
 
     // MARK: Blocks
