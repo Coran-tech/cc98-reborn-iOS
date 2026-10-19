@@ -265,6 +265,7 @@ struct NewTopicComposer: View {
                         MarkdownFormatBar(text: $content, selection: $selection)
                     }
                     UBBTextEditor(text: $content, selection: $selection, minHeight: 260)
+                        .frame(minHeight: 260)
                         .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
                         .overlay(
@@ -637,6 +638,7 @@ struct EditPostComposer: View {
                         MarkdownFormatBar(text: $content, selection: $selection)
                     }
                     UBBTextEditor(text: $content, selection: $selection, minHeight: 260)
+                        .frame(minHeight: 260)
                         .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
                         .overlay(
