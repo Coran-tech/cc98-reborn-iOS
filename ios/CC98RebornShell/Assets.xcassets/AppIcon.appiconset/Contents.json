@@ -1,6 +1,12 @@
 {
   "images" : [
     {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "light"
+        }
+      ],
       "filename" : "AppIcon-Light.png",
       "idiom" : "universal",
       "platform" : "ios",
