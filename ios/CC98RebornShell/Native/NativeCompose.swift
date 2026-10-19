@@ -32,14 +32,14 @@ struct ComposerImageButton: View {
     }
 
     @MainActor
-    private func upload(_ selection: PhotosPickerItem) async {
+    private func upload(_ pickerItem: PhotosPickerItem) async {
         uploading = true
         defer {
             uploading = false
             item = nil
         }
         do {
-            guard let data = try await selection.loadTransferable(type: Data.self) else {
+            guard let data = try await pickerItem.loadTransferable(type: Data.self) else {
                 throw NSError(domain: "CC98Reborn", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法读取所选图片。"])
             }
             let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) ?? data
