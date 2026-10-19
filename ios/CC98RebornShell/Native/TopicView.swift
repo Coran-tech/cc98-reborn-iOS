@@ -112,6 +112,7 @@ struct TopicDetailView: View {
     @State private var scrollNonce = 0
     @State private var showFloorJump = false
     @State private var traceRequest: NativeTraceRequest? = nil
+    @State private var savedPosition: NativeReadPosition? = nil
 
     private let pageSize = 10
 
@@ -128,6 +129,25 @@ struct TopicDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                 if let topic { header(topic) }
+
+                if page == 1, let savedPosition, savedPosition.page > 1 {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bookmark")
+                            .foregroundStyle(ShellTheme.accent)
+                        Text("上次读到第 \(savedPosition.page) 页")
+                            .font(ShellTheme.Fonts.caption)
+                            .foregroundStyle(ShellTheme.secondaryText)
+                        Spacer(minLength: 0)
+                        Button("继续阅读") {
+                            let floor = savedPosition.floor ?? ((savedPosition.page - 1) * pageSize + 1)
+                            jumpToFloor(floor)
+                        }
+                        .font(ShellTheme.Fonts.caption.weight(.medium))
+                        .foregroundStyle(ShellTheme.accent)
+                    }
+                    .padding(10)
+                    .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
+                }
 
                 if let opPost {
                     PostCard(
@@ -256,6 +276,7 @@ struct TopicDetailView: View {
         .task { await loadFavorite() }
         .task { await loadHot() }
         .task { await loadOP() }
+        .task { savedPosition = library.lastPosition(for: topicID) }
         .environment(\.openURL, OpenURLAction { url in
             if let topic = NativeLinkedTopic(url: url) {
                 linkedTopic = topic
@@ -550,6 +571,9 @@ struct TopicDetailView: View {
             topic = loadedTopic
             posts = loadedPosts
             library.recordHistory(loadedTopic)
+            if page > 1 {
+                library.recordPosition(topicID: topicID, page: page, floor: loadedPosts.first?.floor)
+            }
             if loadedTopic.isVote == true {
                 await loadVote()
             }
@@ -564,6 +588,7 @@ struct TopicDetailView: View {
 struct ReplyComposer: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
     @Environment(\.dismiss) private var dismiss
 
     let topicID: Int
@@ -573,6 +598,8 @@ struct ReplyComposer: View {
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
+
+    private var draftKey: String { "reply:\(topicID)" }
 
     var body: some View {
         NavigationStack {
@@ -593,6 +620,13 @@ struct ReplyComposer: View {
                             .stroke(ShellTheme.separator, lineWidth: 0.5)
                     )
                     .disabled(sending)
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    DisclosureGroup("预览") {
+                        UBBContentView(source: text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(ShellTheme.Fonts.caption)
+                }
                 ComposerImageButton(text: $text)
                     .disabled(sending)
                 ComposerEmoticonButton(text: $text)
@@ -626,7 +660,15 @@ struct ReplyComposer: View {
                     .disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .onAppear { focused = true }
+            .onAppear {
+                if text.isEmpty {
+                    text = library.draft(for: draftKey)
+                }
+                focused = true
+            }
+            .onChange(of: text) { _, value in
+                library.setDraft(value, for: draftKey)
+            }
         }
     }
 
@@ -647,6 +689,7 @@ struct ReplyComposer: View {
         errorMessage = nil
         do {
             try await app.api.reply(topicID: topicID, content: value)
+            library.clearDraft(for: draftKey)
             onSent()
             dismiss()
         } catch {

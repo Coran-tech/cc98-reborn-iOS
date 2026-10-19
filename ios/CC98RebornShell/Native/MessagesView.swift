@@ -30,6 +30,10 @@ struct MessagesView: View {
 
     @State private var section: NativeMessageSection = .reply
     @State private var counts: NativeMessageCounts? = nil
+    @State private var refreshID = 0
+    @State private var markingRead = false
+    @State private var alertMessage = ""
+    @State private var showAlert = false
 
     var body: some View {
         NavigationStack {
@@ -52,6 +56,7 @@ struct MessagesView: View {
                         switch section {
                         case .reply, .at, .system:
                             NotificationListView(kind: section.kind ?? .reply)
+                                .id(refreshID)
                         case .privateMessages:
                             PrivateMessageListView()
                         }
@@ -59,6 +64,21 @@ struct MessagesView: View {
                 }
                 .background(ShellTheme.pageBackground)
                 .navigationTitle("消息")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        if section != .privateMessages {
+                            Button("全部已读") {
+                                Task { await markAllRead() }
+                            }
+                            .disabled(markingRead)
+                        }
+                    }
+                }
+                .alert("提示", isPresented: $showAlert) {
+                    Button("好", role: .cancel) {}
+                } message: {
+                    Text(alertMessage)
+                }
                 .task { await loadCounts() }
             }
         }
@@ -90,6 +110,21 @@ struct MessagesView: View {
     @MainActor
     private func loadCounts() async {
         counts = try? await app.api.messageCounts()
+    }
+
+    @MainActor
+    private func markAllRead() async {
+        guard let kind = section.kind, !markingRead else { return }
+        markingRead = true
+        do {
+            try await app.api.markAllRead(kind: kind)
+            await loadCounts()
+            refreshID += 1
+        } catch {
+            alertMessage = error.localizedDescription
+            showAlert = true
+        }
+        markingRead = false
     }
 }
 
@@ -403,9 +438,9 @@ struct PrivateConversationView: View {
                             ProgressView("正在加载私信…")
                                 .padding(.top, 40)
                         }
-                        ForEach(messages) { message in
-                            bubble(message)
-                                .id(message.id)
+                        ForEach(messages.indices, id: \.self) { index in
+                            bubble(messages[index], showTime: shouldShowTime(at: index))
+                                .id(messages[index].id)
                         }
                     }
                     .padding(16)
@@ -427,10 +462,15 @@ struct PrivateConversationView: View {
         }
     }
 
-    private func bubble(_ message: NativePrivateMessage) -> some View {
+    private func bubble(_ message: NativePrivateMessage, showTime: Bool) -> some View {
         let mine = message.senderId == auth.profile?.id
-        return HStack {
-            if mine { Spacer(minLength: 40) }
+        let otherAvatar = contactAvatarURL ?? NativeAvatarURLs.defaultURL(gender: nil)
+        let myAvatar = auth.profile?.avatarURL ?? NativeAvatarURLs.defaultURL(gender: auth.profile?.gender)
+        return HStack(alignment: .bottom, spacing: 6) {
+            if !mine {
+                NativeAvatar(url: otherAvatar, name: contactName, size: 24)
+            }
+            if mine { Spacer(minLength: 30) }
             VStack(alignment: mine ? .trailing : .leading, spacing: 3) {
                 UBBContentView(source: message.content ?? "")
                     .padding(10)
@@ -438,12 +478,32 @@ struct PrivateConversationView: View {
                         mine ? ShellTheme.accent.opacity(0.16) : ShellTheme.surface,
                         in: RoundedRectangle(cornerRadius: 12)
                     )
-                Text(NativeFormat.date(message.time))
-                    .font(.system(size: 10))
-                    .foregroundStyle(ShellTheme.secondaryText)
+                if showTime {
+                    Text(NativeFormat.date(message.time))
+                        .font(.system(size: 10))
+                        .foregroundStyle(ShellTheme.secondaryText)
+                }
             }
-            if !mine { Spacer(minLength: 40) }
+            if !mine { Spacer(minLength: 30) }
+            if mine {
+                NativeAvatar(url: myAvatar, name: auth.profile?.name, size: 24)
+            }
         }
+    }
+
+    private var contactAvatarURL: URL? {
+        guard let contactAvatar, !contactAvatar.isEmpty else { return nil }
+        if let url = URL(string: contactAvatar), url.scheme != nil { return url }
+        return URL(string: "https://www.cc98.org" + (contactAvatar.hasPrefix("/") ? contactAvatar : "/" + contactAvatar))
+    }
+
+    private func shouldShowTime(at index: Int) -> Bool {
+        guard index > 0, messages.indices.contains(index) else { return true }
+        guard let current = NativeFormat.dateValue(messages[index].time),
+              let previous = NativeFormat.dateValue(messages[index - 1].time) else {
+            return true
+        }
+        return current.timeIntervalSince(previous) > 300
     }
 
     private var composer: some View {
