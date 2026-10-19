@@ -61,14 +61,16 @@ struct RatingRecordTable: View {
     }
 
     private var reputationDelta: Int {
-        let explicit = awards.compactMap { award -> Int? in
-            guard let content = award.content, content.contains("风评值") else { return nil }
-            return signedNumber(in: content)
-        }
-        if !explicit.isEmpty {
-            return explicit.reduce(0, +)
-        }
-        return awards.compactMap { signedNumber(in: $0.content ?? "") }.reduce(0, +)
+        awards.filter { isReputation($0.content) }
+            .compactMap { signedNumber(in: $0.content ?? "") }
+            .reduce(0, +)
+    }
+
+    private func isReputation(_ content: String?) -> Bool {
+        guard let content else { return false }
+        if content.contains("风评值") { return true }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.range(of: "^[+-]?\\d+$", options: .regularExpression) != nil
     }
 
     private var deltaColor: Color {
@@ -78,7 +80,9 @@ struct RatingRecordTable: View {
     }
 
     private func contentColor(_ content: String?) -> Color {
-        guard let value = signedNumber(in: content ?? "") else { return ShellTheme.secondaryText }
+        guard isReputation(content), let value = signedNumber(in: content ?? "") else {
+            return ShellTheme.secondaryText
+        }
         if value > 0 { return ShellTheme.accent }
         if value < 0 { return ShellTheme.danger }
         return ShellTheme.secondaryText
