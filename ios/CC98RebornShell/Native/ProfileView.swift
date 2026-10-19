@@ -136,6 +136,13 @@ struct ProfileView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        if account.id != auth.activeAccountID {
+                            Button("移除账号", role: .destructive) {
+                                Task { await auth.removeAccount(account.id) }
+                            }
+                        }
+                    }
                 }
 
                 Button {
