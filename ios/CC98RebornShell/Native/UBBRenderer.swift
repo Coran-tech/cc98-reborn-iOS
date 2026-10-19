@@ -32,6 +32,7 @@ enum UBBInline {
 
 indirect enum UBBBlock {
     case text([UBBInline], UBBAlignment)
+    case heading(String, Int)
     case image(URL?, String?, Bool)
     case quote([UBBBlock])
     case code(String)
@@ -101,6 +102,13 @@ struct UBBBlockView: View {
             UBBInlineText(inlines: inlines)
                 .multilineTextAlignment(alignment.textAlignment)
                 .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
+        case let .heading(text, level):
+            Text(text)
+                .font(.system(size: headingSize(level), weight: .bold))
+                .foregroundStyle(ShellTheme.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         case let .image(url, alt, hidden):
             UBBImage(url: url, alt: alt, hidden: hidden)
         case let .quote(blocks):
@@ -175,6 +183,17 @@ struct UBBBlockView: View {
                     .font(ShellTheme.Fonts.footnote)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
+        }
+    }
+
+    private func headingSize(_ level: Int) -> CGFloat {
+        switch level {
+        case 1: return 28
+        case 2: return 24
+        case 3: return 21
+        case 4: return 19
+        case 5: return 17
+        default: return 16
         }
     }
 }
@@ -624,11 +643,29 @@ enum UBBBlockParser {
     private static let nestedTags: Set<String> = ["quote", "code", "math", "md", "no-ubb", "list", "table", "align", "center", "left", "right"]
 
     static func parse(_ source: String, markdown: Bool) -> [UBBBlock] {
-        let text = expandBareImages(decodeEntities(source))
-        if markdown, !looksLikeUBB(text), let attributed = try? AttributedString(markdown: text) {
-            return [.text([.text(attributed)], .leading)]
+        let decoded = decodeEntities(source)
+        if markdown, !looksLikeUBB(decoded) {
+            return NativeMarkdownRenderer.parse(decoded)
         }
-        return parseBlocks(text)
+        return parseBlocks(expandBareImages(normalizeImplicitLinks(decoded)))
+    }
+
+    private static func normalizeImplicitLinks(_ source: String) -> String {
+        var value = source
+        let replacements: [(String, String)] = [
+            ("\\[url\\]\\s*(https?://[^\\[\\]\\s]+|www\\.[^\\[\\]\\s]+|/[^\\[\\]\\s]+)\\s*\\[/url\\]", "[url=$1]$1[/url]"),
+            ("\\[email\\]\\s*([^\\[\\]\\s]+@[^\\[\\]\\s]+)\\s*\\[/email\\]", "[email=$1]$1[/email]")
+        ]
+        for (pattern, template) in replacements {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { continue }
+            let ns = value as NSString
+            value = regex.stringByReplacingMatches(
+                in: value,
+                range: NSRange(location: 0, length: ns.length),
+                withTemplate: template
+            )
+        }
+        return value
     }
 
     private static func expandBareImages(_ source: String) -> String {
@@ -735,11 +772,7 @@ enum UBBBlockParser {
             case "math":
                 blocks.append(.code(trimNewlines(content)))
             case "md":
-                if let attributed = try? AttributedString(markdown: content) {
-                    blocks.append(.text([.text(attributed)], .leading))
-                } else {
-                    appendText(content, to: &blocks)
-                }
+                blocks.append(contentsOf: NativeMarkdownRenderer.parse(content))
             case "no-ubb":
                 blocks.append(.text([.text(AttributedString(cleanText(content)))], .leading))
             case "list":
@@ -747,7 +780,16 @@ enum UBBBlockParser {
             case "table":
                 blocks.append(.table(parseTable(content)))
             case "align", "center", "left", "right":
-                let alignment: UBBAlignment = tag.name == "center" ? .center : tag.name == "right" ? .trailing : .leading
+                let requested = tag.value?.lowercased() ?? tag.name
+                let alignment: UBBAlignment
+                switch requested {
+                case "center":
+                    alignment = .center
+                case "right", "trailing":
+                    alignment = .trailing
+                default:
+                    alignment = .leading
+                }
                 blocks.append(.text(parseInline(content), alignment))
             case "bili":
                 let identifier = trimNewlines(content).trimmingCharacters(in: .whitespacesAndNewlines)
