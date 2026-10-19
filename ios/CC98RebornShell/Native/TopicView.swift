@@ -76,20 +76,6 @@ struct NativeTraceRequest: Identifiable {
     let floor: Int?
 }
 
-private struct TopicBottomOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = .greatestFiniteMagnitude
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct TopicViewportHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 struct TopicDetailView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
@@ -130,9 +116,9 @@ struct TopicDetailView: View {
     @State private var traceRequest: NativeTraceRequest? = nil
     @State private var scrollToTopOnNextLoad = false
     @State private var didAutoResume: Bool
-    @State private var topicViewportHeight: CGFloat = 0
-    @State private var topicBottomY: CGFloat = .greatestFiniteMagnitude
-    @State private var topicMaxBottomY: CGFloat = 0
+    @State private var atTopicBottom = false
+    @State private var dragStartedAtBottom = false
+    @State private var draggingTopic = false
     @State private var pullNextTriggered = false
 
     private let pageSize = 10
@@ -238,37 +224,39 @@ struct TopicDetailView: View {
                     }
                     Color.clear
                         .frame(height: 1)
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear.preference(
-                                    key: TopicBottomOffsetKey.self,
-                                    value: geo.frame(in: .named("topicScroll")).maxY
-                                )
-                            }
-                        )
+                        .onAppear { atTopicBottom = true }
+                        .onDisappear { atTopicBottom = false }
                 }
             }
             .padding(16)
             .id("topic-top")
             }
-            .coordinateSpace(name: "topicScroll")
-            .background(
-                GeometryReader { geo in
-                    Color.clear.preference(key: TopicViewportHeightKey.self, value: geo.size.height)
-                }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 24)
+                    .onChanged { _ in
+                        if !draggingTopic {
+                            draggingTopic = true
+                            dragStartedAtBottom = atTopicBottom
+                        }
+                    }
+                    .onEnded { value in
+                        let shouldTurn = dragStartedAtBottom
+                            && atTopicBottom
+                            && !pullNextTriggered
+                            && page < pageCount
+                            && !loading
+                            && posts.count >= pageSize
+                            && value.translation.height < -64
+                        draggingTopic = false
+                        dragStartedAtBottom = false
+                        if shouldTurn {
+                            pullNextTriggered = true
+                            turnPage(1)
+                        }
+                    }
             )
-            .onPreferenceChange(TopicViewportHeightKey.self) { topicViewportHeight = $0 }
-            .onPreferenceChange(TopicBottomOffsetKey.self) { value in
-                topicBottomY = value
-                topicMaxBottomY = max(topicMaxBottomY, value)
-                if shouldPullNext {
-                    pullNextTriggered = true
-                    turnPage(1)
-                }
-            }
             .onChange(of: page) { _, _ in
-                topicMaxBottomY = 0
-                topicBottomY = .greatestFiniteMagnitude
+                atTopicBottom = false
                 pullNextTriggered = false
             }
             .onChange(of: loading) { _, value in
@@ -546,15 +534,6 @@ struct TopicDetailView: View {
                 .fill(ShellTheme.separator)
                 .frame(height: 0.5)
         }
-    }
-
-    private var shouldPullNext: Bool {
-        guard page < pageCount, !loading, !pullNextTriggered, posts.count >= pageSize,
-              topicViewportHeight > 0,
-              topicMaxBottomY >= topicViewportHeight - 4 else {
-            return false
-        }
-        return topicBottomY < topicViewportHeight - 64
     }
 
     private func turnPage(_ delta: Int) {
