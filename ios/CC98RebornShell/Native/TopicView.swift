@@ -161,7 +161,7 @@ struct TopicDetailView: View {
                     .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
                 }
 
-                if let opPost {
+                if page == 1, let opPost {
                     PostCard(
                         post: opPost,
                         topicTitle: topic?.title,
@@ -287,7 +287,6 @@ struct TopicDetailView: View {
         .task(id: page) { await load() }
         .task { await loadFavorite() }
         .task { await loadHot() }
-        .task { await loadOP() }
         .task { savedPosition = library.lastPosition(for: topicID) }
         .environment(\.openURL, OpenURLAction { url in
             if let topic = NativeLinkedTopic(url: url) {
@@ -475,13 +474,6 @@ struct TopicDetailView: View {
     }
 
     @MainActor
-    private func loadOP() async {
-        guard opPost == nil else { return }
-        opPost = try? await app.api.posts(topicID: topicID, from: 0, size: 1).first
-        if let opPost { await loadSignatures(for: [opPost]) }
-    }
-
-    @MainActor
     private func loadVote(force: Bool = false) async {
         guard force || !voteLoaded else { return }
         voteLoaded = true
@@ -587,6 +579,9 @@ struct TopicDetailView: View {
             let loadedPosts = try await postsRequest
             topic = loadedTopic
             posts = loadedPosts
+            if page == 1 {
+                opPost = loadedPosts.first
+            }
             library.recordHistory(loadedTopic)
             if page > 1 {
                 library.recordPosition(topicID: topicID, page: page, floor: loadedPosts.first?.floor)
