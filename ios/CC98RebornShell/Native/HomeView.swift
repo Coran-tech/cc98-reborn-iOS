@@ -13,8 +13,8 @@ struct HomeView: View {
             Group {
                 if let home {
                     List {
-                        statsSection(home)
                         hotSection
+                        statsSection(home)
                     }
                     .listStyle(.insetGrouped)
                     .scrollContentBackground(.hidden)
