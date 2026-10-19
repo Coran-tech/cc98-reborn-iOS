@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 
 struct NativeLinkedTopic: Identifiable, Hashable {
     let id: Int
     let page: Int
+    let floor: Int?
 
     init?(url: URL) {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
@@ -11,6 +13,18 @@ struct NativeLinkedTopic: Identifiable, Hashable {
         guard parts.count >= 2, parts[0] == "topic", let topicID = Int(parts[1]) else { return nil }
         id = topicID
         page = parts.count >= 3 ? max(1, Int(parts[2]) ?? 1) : 1
+        if let fragment = url.fragment?.trimmingCharacters(in: .whitespacesAndNewlines), !fragment.isEmpty {
+            if let value = Int(fragment) {
+                floor = value
+            } else if fragment.lowercased().hasPrefix("floor"),
+                      let value = Int(fragment.dropFirst(5)) {
+                floor = value
+            } else {
+                floor = nil
+            }
+        } else {
+            floor = nil
+        }
     }
 }
 
@@ -56,6 +70,12 @@ struct NativeLinkedUser: Identifiable, Hashable {
     }
 }
 
+struct NativeTraceRequest: Identifiable {
+    let id = UUID()
+    let postID: Int?
+    let floor: Int?
+}
+
 struct TopicDetailView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
@@ -85,18 +105,26 @@ struct TopicDetailView: View {
     @State private var voteLoaded = false
     @State private var signatures: [Int: String] = [:]
     @State private var signatureChecked: Set<Int> = []
+    @State private var targetFloor: Int? = nil
+    @State private var highlightedPostID: Int? = nil
+    @State private var scrollNonce = 0
+    @State private var showFloorJump = false
+    @State private var traceRequest: NativeTraceRequest? = nil
 
     private let pageSize = 10
 
-    init(topicID: Int, boardID: Int?, initialPage: Int = 1) {
+    init(topicID: Int, boardID: Int?, initialPage: Int = 1, initialFloor: Int? = nil) {
         self.topicID = topicID
         self.boardID = boardID
-        _page = State(initialValue: max(1, initialPage))
+        let resolvedPage = initialFloor.map { max(1, ($0 + 9) / 10) } ?? max(1, initialPage)
+        _page = State(initialValue: resolvedPage)
+        _targetFloor = State(initialValue: initialFloor)
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
                 if let topic { header(topic) }
 
                 if let opPost {
@@ -104,10 +132,15 @@ struct TopicDetailView: View {
                         post: opPost,
                         topicTitle: topic?.title,
                         signature: opPost.userId.flatMap { signatures[$0] },
+                        highlighted: highlightedPostID == opPost.id,
                         onChanged: {
                             Task { await load() }
+                        },
+                        onTrace: {
+                            traceRequest = NativeTraceRequest(postID: opPost.id, floor: opPost.floor)
                         }
                     )
+                    .id(floorAnchor(opPost.id))
                 }
 
                 if page == 1, let voteInfo {
@@ -133,10 +166,15 @@ struct TopicDetailView: View {
                             post: post,
                             topicTitle: topic?.title,
                             signature: post.userId.flatMap { signatures[$0] },
+                            highlighted: highlightedPostID == post.id,
                             onChanged: {
                                 Task { await load() }
+                            },
+                            onTrace: {
+                                traceRequest = NativeTraceRequest(postID: post.id, floor: post.floor)
                             }
                         )
+                        .id(floorAnchor(post.id))
                     }
                     if let error {
                         Text(error)
@@ -148,6 +186,16 @@ struct TopicDetailView: View {
                 }
             }
             .padding(16)
+            }
+            .onChange(of: loading) { _, value in
+                if !value { scrollToTarget(proxy) }
+            }
+            .onChange(of: scrollNonce) { _, _ in
+                scrollToTarget(proxy)
+            }
+            .onAppear {
+                scrollToTarget(proxy)
+            }
         }
         .background(ShellTheme.pageBackground)
         .navigationTitle("主题")
@@ -178,6 +226,11 @@ struct TopicDetailView: View {
                                 systemImage: library.isReadLater(topic.id) ? "bookmark.slash" : "bookmark"
                             )
                         }
+                    }
+                    Button {
+                        showFloorJump = true
+                    } label: {
+                        Label("跳转楼层", systemImage: "number")
                     }
                     Button {
                         showNote = true
@@ -213,7 +266,7 @@ struct TopicDetailView: View {
             return .systemAction
         })
         .navigationDestination(item: $linkedTopic) { link in
-            TopicDetailView(topicID: link.id, boardID: nil, initialPage: link.page)
+            TopicDetailView(topicID: link.id, boardID: nil, initialPage: link.page, initialFloor: link.floor)
         }
         .navigationDestination(item: $linkedBoard) { link in
             BoardTopicsView(board: NativeBoard.placeholder(id: link.id))
@@ -232,6 +285,20 @@ struct TopicDetailView: View {
         }
         .sheet(isPresented: $showNote) {
             TopicNoteView(topicID: topicID, topicTitle: topic?.title ?? "主题 #\(topicID)")
+        }
+        .sheet(isPresented: $showFloorJump) {
+            FloorJumpView(maxFloor: max(1, (topic?.replyCount ?? 0) + 1)) { floor in
+                jumpToFloor(floor)
+            }
+        }
+        .sheet(item: $traceRequest) { request in
+            ConversationView(
+                topicID: topicID,
+                focusPostID: request.postID,
+                focusFloor: request.floor
+            ) { floor in
+                jumpToFloor(floor)
+            }
         }
         .alert("提示", isPresented: $showAlert) {
             Button("好", role: .cancel) {}
@@ -269,8 +336,13 @@ struct TopicDetailView: View {
                 PostCard(
                     post: post,
                     isHot: true,
-                    signature: post.userId.flatMap { signatures[$0] }
+                    signature: post.userId.flatMap { signatures[$0] },
+                    highlighted: highlightedPostID == post.id,
+                    onTrace: {
+                        traceRequest = NativeTraceRequest(postID: post.id, floor: post.floor)
+                    }
                 )
+                .id(hotAnchor(post.id))
             }
         }
         .padding(.bottom, 4)
@@ -386,6 +458,46 @@ struct TopicDetailView: View {
                 }
             }
         }
+    }
+
+    @MainActor
+    private func scrollToTarget(_ proxy: ScrollViewProxy) {
+        guard let targetFloor else { return }
+        var candidates: [NativePost] = []
+        if let opPost { candidates.append(opPost) }
+        candidates.append(contentsOf: posts)
+        guard let post = candidates.first(where: { $0.floor == targetFloor }) else { return }
+        withAnimation {
+            proxy.scrollTo(floorAnchor(post.id), anchor: .top)
+        }
+        highlightedPostID = post.id
+        self.targetFloor = nil
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if highlightedPostID == post.id {
+                highlightedPostID = nil
+            }
+        }
+    }
+
+    private func jumpToFloor(_ floor: Int) {
+        let maxFloor = max(1, (topic?.replyCount ?? 0) + 1)
+        let clamped = min(max(1, floor), maxFloor)
+        targetFloor = clamped
+        let targetPage = max(1, (clamped + 9) / pageSize)
+        if page != targetPage {
+            page = targetPage
+        } else {
+            scrollNonce += 1
+        }
+    }
+
+    private func floorAnchor(_ postID: Int) -> String {
+        "floor-\(postID)"
+    }
+
+    private func hotAnchor(_ postID: Int) -> String {
+        "hot-\(postID)"
     }
 
     @MainActor
@@ -539,7 +651,9 @@ struct PostCard: View {
     let isHot: Bool
     let topicTitle: String?
     let signature: String?
+    let highlighted: Bool
     let onChanged: (() -> Void)?
+    let onTrace: (() -> Void)?
 
     @State private var likeState: Int
     @State private var likeCount: Int
@@ -556,13 +670,17 @@ struct PostCard: View {
         isHot: Bool = false,
         topicTitle: String? = nil,
         signature: String? = nil,
-        onChanged: (() -> Void)? = nil
+        highlighted: Bool = false,
+        onChanged: (() -> Void)? = nil,
+        onTrace: (() -> Void)? = nil
     ) {
         self.post = post
         self.isHot = isHot
         self.topicTitle = topicTitle
         self.signature = signature
+        self.highlighted = highlighted
         self.onChanged = onChanged
+        self.onTrace = onTrace
         _likeState = State(initialValue: post.likeState ?? 0)
         _likeCount = State(initialValue: post.likeCount ?? 0)
         _dislikeCount = State(initialValue: post.dislikeCount ?? 0)
@@ -593,6 +711,16 @@ struct PostCard: View {
                     Text("\(floorTitle) · \(NativeFormat.date(post.time))")
                         .font(ShellTheme.Fonts.caption)
                         .foregroundStyle(ShellTheme.secondaryText)
+                        .contextMenu {
+                            if let topicID = post.topicId, let floor = post.floor, floor > 0 {
+                                Button {
+                                    let page = max(1, (floor + 9) / 10)
+                                    UIPasteboard.general.string = "https://www.cc98.org/topic/\(topicID)/\(page)#\(floor)"
+                                } label: {
+                                    Label("复制楼层链接", systemImage: "link")
+                                }
+                            }
+                        }
                 }
                 Spacer(minLength: 0)
             }
@@ -637,23 +765,33 @@ struct PostCard: View {
                         .foregroundStyle(likeState == 2 ? ShellTheme.danger : ShellTheme.secondaryText)
                 }
                 .disabled(busy)
-                if canEdit {
-                    Button {
-                        showEdit = true
-                    } label: {
-                        Label("编辑", systemImage: "pencil")
-                            .foregroundStyle(ShellTheme.secondaryText)
+                Menu {
+                    if canEdit {
+                        Button {
+                            showEdit = true
+                        } label: {
+                            Label("编辑", systemImage: "pencil")
+                        }
                     }
-                }
-                Button {
-                    if auth.profile == nil {
-                        alertMessage = "请先在「我的」登录，再参与风评。"
-                        showAlert = true
-                    } else {
-                        showRating = true
+                    Button {
+                        if auth.profile == nil {
+                            alertMessage = "请先在「我的」登录，再参与风评。"
+                            showAlert = true
+                        } else {
+                            showRating = true
+                        }
+                    } label: {
+                        Label("风评", systemImage: "star")
+                    }
+                    if let onTrace {
+                        Button {
+                            onTrace()
+                        } label: {
+                            Label("查看对话", systemImage: "bubble.left.and.bubble.right")
+                        }
                     }
                 } label: {
-                    Label("风评", systemImage: "star")
+                    Label("更多", systemImage: "ellipsis.circle")
                         .foregroundStyle(ShellTheme.secondaryText)
                 }
                 Spacer(minLength: 0)
@@ -667,7 +805,10 @@ struct PostCard: View {
         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner))
         .overlay(
             RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner)
-                .stroke(ShellTheme.separator, lineWidth: 0.5)
+                .stroke(
+                    highlighted ? ShellTheme.accent : ShellTheme.separator,
+                    lineWidth: highlighted ? 1.5 : 0.5
+                )
         )
         .alert("提示", isPresented: $showAlert) {
             Button("好", role: .cancel) {}
@@ -754,5 +895,45 @@ struct PostCard: View {
             showAlert = true
         }
         busy = false
+    }
+}
+
+struct FloorJumpView: View {
+    let maxFloor: Int
+    var onJump: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("跳转到楼层") {
+                    TextField("1 – \(max(1, maxFloor))", text: $text)
+                        .keyboardType(.numberPad)
+                        .focused($focused)
+                    Button("跳转") {
+                        jump()
+                    }
+                    .disabled(Int(text) == nil)
+                }
+            }
+            .navigationTitle("跳转楼层")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+            .onAppear { focused = true }
+        }
+    }
+
+    private func jump() {
+        guard let value = Int(text) else { return }
+        let clamped = min(max(1, value), max(1, maxFloor))
+        onJump(clamped)
+        dismiss()
     }
 }
