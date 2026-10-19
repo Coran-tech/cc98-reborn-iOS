@@ -464,6 +464,11 @@ struct UserProfileView: View {
     @State private var followBusy = false
     @State private var alertMessage = ""
     @State private var showAlert = false
+    @State private var topics: [NativeMyTopic] = []
+    @State private var topicsLoading = false
+    @State private var topicsError: String? = nil
+    @State private var topicOffset = 0
+    @State private var topicsHasMore = true
 
     var body: some View {
         Group {
@@ -519,6 +524,46 @@ struct UserProfileView: View {
                             )
                         } label: {
                             Label("发送私信", systemImage: "bubble.left")
+                        }
+                    }
+
+                    Section("发帖") {
+                        if topicsLoading && topics.isEmpty {
+                            ProgressView("正在加载发帖…")
+                        } else if topics.isEmpty {
+                            Text(topicsError ?? "暂无主题")
+                                .font(ShellTheme.Fonts.footnote)
+                                .foregroundStyle(topicsError == nil ? ShellTheme.secondaryText : ShellTheme.danger)
+                        } else {
+                            ForEach(topics) { topic in
+                                NavigationLink {
+                                    TopicDetailView(topicID: topic.id, boardID: topic.boardId)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(topic.title ?? "主题 #\(topic.id)")
+                                            .font(ShellTheme.Fonts.footnote.weight(.medium))
+                                            .foregroundStyle(ShellTheme.primaryText)
+                                            .lineLimit(2)
+                                        HStack(spacing: 8) {
+                                            if let boardID = topic.boardId {
+                                                Text("版面 #\(boardID)")
+                                            }
+                                            Spacer(minLength: 0)
+                                            Text(NativeFormat.date(topic.time))
+                                        }
+                                        .font(ShellTheme.Fonts.caption)
+                                        .foregroundStyle(ShellTheme.secondaryText)
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                            }
+                            if topicsHasMore {
+                                Button("加载更多发帖") {
+                                    Task { await loadTopics(reset: false) }
+                                }
+                                .font(ShellTheme.Fonts.footnote)
+                                .disabled(topicsLoading)
+                            }
                         }
                     }
 
@@ -580,10 +625,12 @@ struct UserProfileView: View {
                 let loaded = try await app.api.user(id: userID)
                 user = loaded
                 isFollowing = loaded.isFollowing ?? false
+                await loadTopics(reset: true)
             } else if let userName {
                 let loaded = try await app.api.user(name: userName)
                 user = loaded
                 isFollowing = loaded.isFollowing ?? false
+                await loadTopics(reset: true)
             } else {
                 error = "缺少用户标识。"
             }
@@ -614,6 +661,32 @@ struct UserProfileView: View {
             showAlert = true
         }
         followBusy = false
+    }
+
+    @MainActor
+    private func loadTopics(reset: Bool) async {
+        guard let userID = user?.id, !topicsLoading else { return }
+        topicsLoading = true
+        if reset {
+            topicOffset = 0
+            topicsHasMore = true
+            topicsError = nil
+            topics = []
+        }
+        do {
+            let fetched = try await app.api.userTopics(userID: userID, from: topicOffset, size: 10)
+            if reset {
+                topics = fetched
+            } else {
+                topics.append(contentsOf: fetched)
+            }
+            topicOffset += fetched.count
+            topicsHasMore = fetched.count == 10
+        } catch {
+            topicsError = error.localizedDescription
+            topicsHasMore = false
+        }
+        topicsLoading = false
     }
 }
 

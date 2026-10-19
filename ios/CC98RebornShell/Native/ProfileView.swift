@@ -90,6 +90,7 @@ struct ProfileView: View {
             }
 
             Section("我的内容") {
+                NavigationLink("查看我的主页") { UserProfileView(userID: user.id, userName: user.name) }
                 NavigationLink("编辑资料") { ProfileSettingsView() }
                 NavigationLink("我的主题") { MyTopicsView() }
                 NavigationLink("我的回复") { MyPostsView() }
