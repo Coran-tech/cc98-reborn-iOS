@@ -121,6 +121,12 @@ struct NativeUser: Decodable {
     let photourl: String?
     let introduction: String?
     let signatureCode: String?
+    let emailAddress: String?
+    let gender: Int?
+    let qq: String?
+    let birthday: String?
+    let displayTitleId: Int?
+    let userTitleIds: [Int]?
     let postCount: Int?
     let prestige: Int?
     let popularity: Int?
@@ -213,6 +219,35 @@ struct NativePrivateMessage: Identifiable, Decodable {
     let time: String?
     let isRead: Bool?
     let content: String?
+}
+
+struct NativeJudgeReason: Identifiable, Decodable {
+    let id: Int
+    let reason: String?
+    let type: Int?
+    let enabled: Bool?
+}
+
+struct NativeMyTopic: Identifiable, Decodable {
+    let id: Int
+    let title: String?
+    let boardId: Int?
+    let time: String?
+}
+
+struct NativeMyPost: Identifiable, Decodable {
+    let id: Int
+    let topicId: Int?
+    let topicTitle: String?
+    let content: String?
+    let time: String?
+    let floor: Int?
+    let boardId: Int?
+}
+
+struct NativeMyPostPage: Decodable {
+    let data: [NativeMyPost]
+    let count: Int?
 }
 
 extension NativeBoard {

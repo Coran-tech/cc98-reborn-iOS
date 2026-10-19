@@ -18,8 +18,8 @@ struct ComposerImageButton: View {
                 .foregroundStyle(ShellTheme.accent)
         }
         .disabled(uploading)
-        .onChange(of: item) { _, newItem in
-            Task { await upload(newItem) }
+        .onChange(of: item?.itemIdentifier) { _, _ in
+            Task { await upload(item) }
         }
         .alert("图片上传失败", isPresented: $showError) {
             Button("好", role: .cancel) {}
@@ -88,6 +88,7 @@ struct NewTopicComposer: View {
 
                     HStack {
                         ComposerImageButton(text: $content)
+                        ComposerEmoticonButton(text: $content)
                         Spacer()
                         Text("\(content.count) / 8000")
                             .font(ShellTheme.Fonts.caption)
@@ -208,6 +209,7 @@ struct EditPostComposer: View {
 
                     HStack {
                         ComposerImageButton(text: $content)
+                        ComposerEmoticonButton(text: $content)
                         Spacer()
                         Text("\(content.count) / 8000")
                             .font(ShellTheme.Fonts.caption)

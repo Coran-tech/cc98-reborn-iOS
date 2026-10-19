@@ -414,6 +414,8 @@ struct ReplyComposer: View {
                     .disabled(sending)
                 ComposerImageButton(text: $text)
                     .disabled(sending)
+                ComposerEmoticonButton(text: $text)
+                    .disabled(sending)
                 HStack {
                     Text("\(text.count) / 8000")
                         .font(ShellTheme.Fonts.caption)
@@ -491,6 +493,7 @@ struct PostCard: View {
     @State private var showAlert = false
     @State private var revealBlocked = false
     @State private var showEdit = false
+    @State private var showRating = false
 
     init(post: NativePost, isHot: Bool = false, topicTitle: String? = nil, onChanged: (() -> Void)? = nil) {
         self.post = post
@@ -564,6 +567,17 @@ struct PostCard: View {
                             .foregroundStyle(ShellTheme.secondaryText)
                     }
                 }
+                Button {
+                    if auth.profile == nil {
+                        alertMessage = "请先在「我的」登录，再参与风评。"
+                        showAlert = true
+                    } else {
+                        showRating = true
+                    }
+                } label: {
+                    Label("风评", systemImage: "star")
+                        .foregroundStyle(ShellTheme.secondaryText)
+                }
                 Spacer(minLength: 0)
                 if busy { ProgressView() }
             }
@@ -586,6 +600,9 @@ struct PostCard: View {
             EditPostComposer(post: post, topicTitle: topicTitle) {
                 onChanged?()
             }
+        }
+        .sheet(isPresented: $showRating) {
+            RatingComposer(post: post)
         }
     }
 

@@ -157,6 +157,77 @@ final class CC98API {
         ], authenticated: true)
     }
 
+    func myTopics(from: Int, size: Int = 10) async throws -> [NativeMyTopic] {
+        try await get("/me/recent-topic", query: [
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size))
+        ], authenticated: true)
+    }
+
+    func myPosts(from: Int, size: Int = 10) async throws -> [NativeMyPost] {
+        let data = try await data(
+            path: "/me/recent-post",
+            query: [
+                URLQueryItem(name: "from", value: String(from)),
+                URLQueryItem(name: "size", value: String(size))
+            ],
+            authenticated: true
+        )
+        if let page = try? decoder.decode(NativeMyPostPage.self, from: data) {
+            return page.data
+        }
+        if let posts = try? decoder.decode([NativeMyPost].self, from: data) {
+            return posts
+        }
+        throw CC98APIError.decoding
+    }
+
+    func updateProfile(
+        email: String,
+        gender: Int,
+        introduction: String,
+        qq: String,
+        signature: String,
+        birthday: String,
+        displayTitleID: Int,
+        userTitleIDs: [Int]
+    ) async throws {
+        let payload: [String: Any] = [
+            "EmailAddress": email,
+            "Gender": gender,
+            "Introduction": introduction,
+            "QQ": qq,
+            "SignatureCode": signature,
+            "Birthday": birthday,
+            "DisplayTitleId": displayTitleID,
+            "userTitleIds": userTitleIDs
+        ]
+        try await send(
+            "/me",
+            method: "PUT",
+            body: try json(payload),
+            contentType: "application/json",
+            authenticated: true
+        )
+    }
+
+    func ratingReasons(type: Int) async throws -> [NativeJudgeReason] {
+        try await get("/post/rating-reason", query: [
+            URLQueryItem(name: "type", value: String(type))
+        ], authenticated: true)
+    }
+
+    func ratePost(postID: Int, reasonID: Int, type: Int) async throws {
+        let payload: [String: Any] = ["reasonId": reasonID, "type": type]
+        try await send(
+            "/post/\(postID)/rating-v2",
+            method: "PUT",
+            body: try json(payload),
+            contentType: "application/json",
+            authenticated: true
+        )
+    }
+
     // MARK: Messages
 
     func messageCounts() async throws -> NativeMessageCounts {
@@ -302,6 +373,23 @@ final class CC98API {
     }
 
     func uploadImage(_ data: Data, fileName: String = "image.jpg", mimeType: String = "image/jpeg") async throws -> String {
+        try await uploadFile(data, fileName: fileName, mimeType: mimeType, path: "/file")
+    }
+
+    func uploadPortrait(_ data: Data, fileName: String = "portrait.jpg") async throws -> String {
+        let url = try await uploadFile(data, fileName: fileName, mimeType: "image/jpeg", path: "/file/portrait")
+        let body = try JSONEncoder().encode(url)
+        try await send(
+            "/me/portrait",
+            method: "PUT",
+            body: body,
+            contentType: "application/json",
+            authenticated: true
+        )
+        return url
+    }
+
+    private func uploadFile(_ data: Data, fileName: String, mimeType: String, path: String) async throws -> String {
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
         func append(_ value: String) {
@@ -313,7 +401,7 @@ final class CC98API {
         body.append(data)
         append("\r\n--\(boundary)--\r\n")
         let result = try await self.data(
-            path: "/file",
+            path: path,
             method: "POST",
             body: body,
             contentType: "multipart/form-data; boundary=\(boundary)",
