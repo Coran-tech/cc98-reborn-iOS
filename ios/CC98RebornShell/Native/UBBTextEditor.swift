@@ -15,10 +15,14 @@ enum UBBEditorInsertion {
         let selected = ns.substring(with: range)
         let replacement = prefix + selected + suffix
         text = ns.replacingCharacters(in: range, with: replacement)
-        let cursor = selected.isEmpty
-            ? range.location + (prefix as NSString).length
-            : range.location + (replacement as NSString).length
-        selection = NSRange(location: cursor, length: 0)
+
+        if selected.isEmpty {
+            // Empty block: leave the caret between the opening and closing tags.
+            selection = NSRange(location: range.location + (prefix as NSString).length, length: 0)
+        } else {
+            // Applied to existing text: select the whole processed segment.
+            selection = NSRange(location: range.location, length: (replacement as NSString).length)
+        }
     }
 
     static func clamped(_ range: NSRange, length: Int) -> NSRange {
