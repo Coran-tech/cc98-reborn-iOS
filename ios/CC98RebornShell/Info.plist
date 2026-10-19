@@ -17,4 +17,5 @@
   <key>NSCameraUsageDescription</key><string>仅在你通过论坛上传控件选择拍摄照片或视频时使用相机。</string>
   <key>NSMicrophoneUsageDescription</key><string>仅在你选择录制带声音的视频时使用麦克风。</string>
   <key>NSPhotoLibraryUsageDescription</key><string>仅在你选择论坛上传的照片或视频时访问所选内容。</string>
+  <key>NSPhotoLibraryAddUsageDescription</key><string>仅在你主动保存帖子图片时写入相册。</string>
 </dict></plist>

@@ -197,6 +197,15 @@ enum NativeFormat {
         return value.count > 16 ? String(value.prefix(16)) : value
     }
 
+    static func dateValue(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let value = formatter.date(from: raw) { return value }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: raw)
+    }
+
     static func count(_ value: Int?) -> String {
         guard let value else { return "—" }
         if value >= 10000 {

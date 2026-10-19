@@ -7,12 +7,20 @@ struct NativeSavedTopic: Identifiable, Codable, Hashable {
     let savedAt: Date
 }
 
+struct NativeReadPosition: Codable, Hashable {
+    let page: Int
+    let floor: Int?
+    let updatedAt: Date
+}
+
 private struct NativeLibraryData: Codable {
     var readLater: [NativeSavedTopic] = []
     var history: [NativeSavedTopic] = []
     var notes: [String: String] = [:]
     var blockedUsers: [String] = []
     var blockedKeywords: [String] = []
+    var drafts: [String: String]?
+    var readPositions: [String: NativeReadPosition]?
 }
 
 // Local-only Reborn conveniences: read later, history, topic notes and
@@ -24,6 +32,8 @@ final class NativeLibrary: ObservableObject {
     @Published private(set) var notes: [String: String] = [:]
     @Published private(set) var blockedUsers: [String] = []
     @Published private(set) var blockedKeywords: [String] = []
+    private var drafts: [String: String] = [:]
+    private var readPositions: [String: NativeReadPosition] = [:]
 
     private var data = NativeLibraryData()
     private let fileURL: URL
@@ -128,6 +138,40 @@ final class NativeLibrary: ObservableObject {
         save()
     }
 
+    // MARK: Drafts and reading position
+
+    func draft(for key: String) -> String {
+        drafts[key] ?? ""
+    }
+
+    func setDraft(_ value: String, for key: String) {
+        if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            drafts.removeValue(forKey: key)
+        } else {
+            drafts[key] = value
+        }
+        save()
+    }
+
+    func clearDraft(for key: String) {
+        drafts.removeValue(forKey: key)
+        save()
+    }
+
+    func lastPosition(for topicID: Int) -> NativeReadPosition? {
+        readPositions[String(topicID)]
+    }
+
+    func recordPosition(topicID: Int, page: Int, floor: Int?) {
+        guard page > 0 else { return }
+        readPositions[String(topicID)] = NativeReadPosition(
+            page: page,
+            floor: floor,
+            updatedAt: Date()
+        )
+        save()
+    }
+
     // MARK: Storage
 
     private func saved(_ topic: NativeTopic) -> NativeSavedTopic {
@@ -148,6 +192,8 @@ final class NativeLibrary: ObservableObject {
         notes = decoded.notes
         blockedUsers = decoded.blockedUsers
         blockedKeywords = decoded.blockedKeywords
+        drafts = decoded.drafts ?? [:]
+        readPositions = decoded.readPositions ?? [:]
     }
 
     private func save() {
@@ -156,7 +202,9 @@ final class NativeLibrary: ObservableObject {
             history: history,
             notes: notes,
             blockedUsers: blockedUsers,
-            blockedKeywords: blockedKeywords
+            blockedKeywords: blockedKeywords,
+            drafts: drafts,
+            readPositions: readPositions
         )
         guard let encoded = try? JSONEncoder().encode(data) else { return }
         try? encoded.write(to: fileURL, options: .atomic)

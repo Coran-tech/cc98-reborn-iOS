@@ -51,6 +51,7 @@ struct ComposerImageButton: View {
 struct NewTopicComposer: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
     @Environment(\.dismiss) private var dismiss
 
     let boardID: Int
@@ -63,6 +64,9 @@ struct NewTopicComposer: View {
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
+
+    private var titleKey: String { "newtopic.title:\(boardID)" }
+    private var bodyKey: String { "newtopic.body:\(boardID)" }
 
     var body: some View {
         NavigationStack {
@@ -95,6 +99,14 @@ struct NewTopicComposer: View {
                             .foregroundStyle(content.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
                     }
 
+                    if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        DisclosureGroup("预览") {
+                            UBBContentView(source: content)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .font(ShellTheme.Fonts.caption)
+                    }
+
                     Toggle("匿名发布", isOn: $anonymous)
                         .font(ShellTheme.Fonts.footnote)
 
@@ -119,7 +131,17 @@ struct NewTopicComposer: View {
                         .disabled(sending || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .onAppear { focused = true }
+            .onAppear {
+                if title.isEmpty { title = library.draft(for: titleKey) }
+                if content.isEmpty { content = library.draft(for: bodyKey) }
+                focused = true
+            }
+            .onChange(of: title) { _, value in
+                library.setDraft(value, for: titleKey)
+            }
+            .onChange(of: content) { _, value in
+                library.setDraft(value, for: bodyKey)
+            }
         }
     }
 
@@ -153,6 +175,8 @@ struct NewTopicComposer: View {
                 content: content,
                 isAnonymous: anonymous
             )
+            library.clearDraft(for: titleKey)
+            library.clearDraft(for: bodyKey)
             onCreated()
             dismiss()
         } catch {
@@ -165,6 +189,7 @@ struct NewTopicComposer: View {
 struct EditPostComposer: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
     @Environment(\.dismiss) private var dismiss
 
     let post: NativePost
@@ -175,6 +200,9 @@ struct EditPostComposer: View {
     @State private var content: String
     @State private var saving = false
     @State private var errorMessage: String? = nil
+
+    private var titleKey: String { "edit.title:\(post.id)" }
+    private var bodyKey: String { "edit.body:\(post.id)" }
 
     init(post: NativePost, topicTitle: String?, onSaved: @escaping () -> Void) {
         self.post = post
@@ -216,6 +244,14 @@ struct EditPostComposer: View {
                             .foregroundStyle(content.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
                     }
 
+                    if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        DisclosureGroup("预览") {
+                            UBBContentView(source: content)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .font(ShellTheme.Fonts.caption)
+                    }
+
                     if let errorMessage {
                         Text(errorMessage)
                             .font(ShellTheme.Fonts.footnote)
@@ -236,6 +272,18 @@ struct EditPostComposer: View {
                     Button("保存") { Task { await save() } }
                         .disabled(saving || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+            }
+            .onAppear {
+                let savedTitle = library.draft(for: titleKey)
+                let savedBody = library.draft(for: bodyKey)
+                if !savedTitle.isEmpty { title = savedTitle }
+                if !savedBody.isEmpty { content = savedBody }
+            }
+            .onChange(of: title) { _, value in
+                library.setDraft(value, for: titleKey)
+            }
+            .onChange(of: content) { _, value in
+                library.setDraft(value, for: bodyKey)
             }
         }
     }
@@ -265,6 +313,8 @@ struct EditPostComposer: View {
                 content: content,
                 contentType: post.contentType ?? 0
             )
+            library.clearDraft(for: titleKey)
+            library.clearDraft(for: bodyKey)
             onSaved()
             dismiss()
         } catch {

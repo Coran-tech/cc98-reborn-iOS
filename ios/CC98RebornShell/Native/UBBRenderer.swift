@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Foundation
 
 // Block-level UBB renderer for native topic posts. It handles the tags that
 // appear in real CC98 content: inline emphasis/color/links, quotes, code,
@@ -31,7 +32,7 @@ enum UBBInline {
 
 indirect enum UBBBlock {
     case text([UBBInline], UBBAlignment)
-    case image(URL?, String?)
+    case image(URL?, String?, Bool)
     case quote([UBBBlock])
     case code(String)
     case divider
@@ -40,12 +41,41 @@ indirect enum UBBBlock {
     case media(String, URL?)
 }
 
+extension UBBBlock {
+    var images: [URL] {
+        switch self {
+        case let .image(url, _, _):
+            return url.map { [$0] } ?? []
+        case let .quote(blocks):
+            return blocks.flatMap(\.images)
+        default:
+            return []
+        }
+    }
+}
+
+private struct UBBGalleryKey: EnvironmentKey {
+    static let defaultValue: [URL] = []
+}
+
+extension EnvironmentValues {
+    var ubbGallery: [URL] {
+        get { self[UBBGalleryKey.self] }
+        set { self[UBBGalleryKey.self] = newValue }
+    }
+}
+
 struct UBBContentView: View {
     let source: String
     var markdown: Bool = false
 
+    private var blocks: [UBBBlock] {
+        UBBBlockParser.parse(source, markdown: markdown)
+    }
+
     var body: some View {
-        UBBBlocksView(blocks: UBBBlockParser.parse(source, markdown: markdown))
+        UBBBlocksView(blocks: blocks)
+            .environment(\.ubbGallery, blocks.flatMap(\.images))
     }
 }
 
@@ -71,8 +101,8 @@ struct UBBBlockView: View {
             UBBInlineText(inlines: inlines)
                 .multilineTextAlignment(alignment.textAlignment)
                 .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
-        case let .image(url, alt):
-            UBBImage(url: url, alt: alt)
+        case let .image(url, alt, hidden):
+            UBBImage(url: url, alt: alt, hidden: hidden)
         case let .quote(blocks):
             HStack(alignment: .top, spacing: 10) {
                 Rectangle()
@@ -179,35 +209,65 @@ struct UBBInlineText: View {
 struct UBBImage: View {
     let url: URL?
     let alt: String?
+    var hidden: Bool = false
 
+    @Environment(\.ubbGallery) private var gallery
     @State private var showViewer = false
+
+    private var resolvedGallery: [URL] {
+        guard let url else { return gallery }
+        return gallery.contains(url) ? gallery : [url]
+    }
+
+    private var initialIndex: Int {
+        guard let url, let index = resolvedGallery.firstIndex(of: url) else { return 0 }
+        return index
+    }
 
     var body: some View {
         if let url {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case let .success(image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                case .failure:
-                    failure
-                case .empty:
-                    ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: 120)
-                @unknown default:
-                    failure
+            Group {
+                if hidden {
+                    VStack(spacing: 6) {
+                        Image(systemName: "eye.slash")
+                            .font(.title3)
+                        Text("隐藏图片，点击查看")
+                    }
+                    .font(ShellTheme.Fonts.caption)
+                    .foregroundStyle(ShellTheme.secondaryText)
+                    .frame(maxWidth: .infinity, minHeight: 90)
+                    .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(ShellTheme.separator, lineWidth: 0.5)
+                    )
+                } else {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case let .success(image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                        case .failure:
+                            failure
+                        case .empty:
+                            ProgressView()
+                                .frame(maxWidth: .infinity, minHeight: 120)
+                        @unknown default:
+                            failure
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(ShellTheme.separator, lineWidth: 0.5))
                 }
             }
-            .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(ShellTheme.separator, lineWidth: 0.5))
             .contentShape(Rectangle())
             .onTapGesture { showViewer = true }
             .accessibilityLabel(alt?.isEmpty == false ? alt! : "图片")
-            .accessibilityHint("查看大图")
+            .accessibilityHint(hidden ? "查看隐藏图片" : "查看大图")
             .fullScreenCover(isPresented: $showViewer) {
-                NativeImageViewer(url: url, alt: alt)
+                NativeImageViewer(urls: resolvedGallery, initialIndex: initialIndex, alt: alt)
             }
         } else {
             failure
@@ -230,83 +290,42 @@ struct UBBImage: View {
 }
 
 struct NativeImageViewer: View {
-    let url: URL
+    let urls: [URL]
     let alt: String?
 
     @Environment(\.dismiss) private var dismiss
-    @State private var scale: CGFloat = 1
-    @State private var baseScale: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var baseOffset: CGSize = .zero
+    @State private var index: Int
+    @State private var saveMessage: String? = nil
+    @State private var showSaveMessage = false
+
+    init(urls: [URL], initialIndex: Int, alt: String?) {
+        self.urls = urls
+        self.alt = alt
+        let upper = max(0, urls.count - 1)
+        _index = State(initialValue: max(0, min(initialIndex, upper)))
+    }
+
+    private var currentURL: URL? {
+        urls.indices.contains(index) ? urls[index] : nil
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case let .success(image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .scaleEffect(scale)
-                        .offset(offset)
-                        .accessibilityLabel(alt?.isEmpty == false ? alt! : "图片")
-                        .gesture(
-                            MagnifyGesture()
-                                .onChanged { value in
-                                    scale = min(max(baseScale * value.magnification, 1), 5)
-                                }
-                                .onEnded { _ in
-                                    baseScale = scale
-                                    if scale <= 1.01 {
-                                        reset()
-                                    }
-                                }
-                        )
-                        .simultaneousGesture(
-                            DragGesture()
-                                .onChanged { value in
-                                    guard scale > 1.01 else { return }
-                                    offset = CGSize(
-                                        width: baseOffset.width + value.translation.width,
-                                        height: baseOffset.height + value.translation.height
-                                    )
-                                }
-                                .onEnded { _ in baseOffset = offset }
-                        )
-                        .onTapGesture(count: 2) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                if scale > 1.01 {
-                                    reset()
-                                } else {
-                                    scale = 2
-                                    baseScale = 2
-                                }
-                            }
-                        }
-                case .failure:
-                    VStack(spacing: 10) {
-                        Image(systemName: "photo")
-                            .font(.largeTitle)
-                        Text("图片加载失败")
-                            .font(.subheadline)
-                        Text(url.absoluteString)
-                            .font(.caption)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                    }
-                    .foregroundStyle(.white)
-                case .empty:
-                    ProgressView()
-                        .tint(.white)
-                        .scaleEffect(1.2)
-                @unknown default:
-                    EmptyView()
+
+            TabView(selection: $index) {
+                ForEach(urls.indices, id: \.self) { itemIndex in
+                    ZoomableImage(url: urls[itemIndex], alt: alt)
+                        .tag(itemIndex)
                 }
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+
             VStack {
                 HStack {
+                    Text(urls.isEmpty ? "" : "\(index + 1) / \(urls.count)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.85))
                     Spacer()
                     Button {
                         dismiss()
@@ -318,9 +337,19 @@ struct NativeImageViewer: View {
                     }
                 }
                 Spacer()
-                HStack {
-                    ShareLink(item: url) {
-                        Image(systemName: "square.and.arrow.up")
+                HStack(spacing: 14) {
+                    if let currentURL {
+                        ShareLink(item: currentURL) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.title3.weight(.semibold))
+                                .padding(12)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+                    }
+                    Button {
+                        Task { await saveCurrent() }
+                    } label: {
+                        Image(systemName: "arrow.down.to.line")
                             .font(.title3.weight(.semibold))
                             .padding(12)
                             .background(.ultraThinMaterial, in: Circle())
@@ -332,6 +361,103 @@ struct NativeImageViewer: View {
             .foregroundStyle(.white)
         }
         .statusBarHidden()
+        .alert("图片", isPresented: $showSaveMessage) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(saveMessage ?? "")
+        }
+    }
+
+    @MainActor
+    private func saveCurrent() async {
+        guard let currentURL else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: currentURL)
+            guard let image = UIImage(data: data) else {
+                throw NSError(domain: "CC98Reborn", code: 2, userInfo: [NSLocalizedDescriptionKey: "图片数据无法识别。"])
+            }
+            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+            saveMessage = "已保存到相册。"
+        } catch {
+            saveMessage = "保存失败：\(error.localizedDescription)"
+        }
+        showSaveMessage = true
+    }
+}
+
+private struct ZoomableImage: View {
+    let url: URL
+    let alt: String?
+
+    @State private var scale: CGFloat = 1
+    @State private var baseScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var baseOffset: CGSize = .zero
+
+    var body: some View {
+        AsyncImage(url: url) { phase in
+            switch phase {
+            case let .success(image):
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .accessibilityLabel(alt?.isEmpty == false ? alt! : "图片")
+                    .gesture(
+                        MagnifyGesture()
+                            .onChanged { value in
+                                scale = min(max(baseScale * value.magnification, 1), 5)
+                            }
+                            .onEnded { _ in
+                                baseScale = scale
+                                if scale <= 1.01 {
+                                    reset()
+                                }
+                            }
+                    )
+                    .simultaneousGesture(
+                        DragGesture()
+                            .onChanged { value in
+                                guard scale > 1.01 else { return }
+                                offset = CGSize(
+                                    width: baseOffset.width + value.translation.width,
+                                    height: baseOffset.height + value.translation.height
+                                )
+                            }
+                            .onEnded { _ in baseOffset = offset }
+                    )
+                    .onTapGesture(count: 2) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            if scale > 1.01 {
+                                reset()
+                            } else {
+                                scale = 2
+                                baseScale = 2
+                            }
+                        }
+                    }
+            case .failure:
+                VStack(spacing: 10) {
+                    Image(systemName: "photo")
+                        .font(.largeTitle)
+                    Text("图片加载失败")
+                        .font(.subheadline)
+                    Text(url.absoluteString)
+                        .font(.caption)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+                .foregroundStyle(.white)
+            case .empty:
+                ProgressView()
+                    .tint(.white)
+                    .scaleEffect(1.2)
+            @unknown default:
+                EmptyView()
+            }
+        }
     }
 
     private func reset() {
@@ -341,7 +467,6 @@ struct NativeImageViewer: View {
         baseOffset = .zero
     }
 }
-
 enum UBBEmotion {
     private struct Asset {
         let folder: String
@@ -487,10 +612,11 @@ enum UBBBlockParser {
                     let content = String(source[tag.range.upperBound..<close.lowerBound])
                     let rawURL = (tag.value.flatMap { isRemoteURL($0) ? $0 : nil }) ?? content
                     let alt = tag.value.flatMap { isRemoteURL($0) ? nil : ($0 == "1" ? nil : $0) }
-                    blocks.append(.image(resolveURL(rawURL), alt))
+                    let hidden = tag.value == "1"
+                    blocks.append(.image(resolveURL(rawURL), alt, hidden))
                     index = close.upperBound
                 } else {
-                    blocks.append(.image(tag.value.flatMap(resolveURL), nil))
+                    blocks.append(.image(tag.value.flatMap(resolveURL), nil, false))
                     index = tag.range.upperBound
                 }
                 continue
