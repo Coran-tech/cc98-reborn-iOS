@@ -34,9 +34,16 @@ struct RatingRecordTable: View {
                             .font(.system(size: 11))
                             .foregroundStyle(ShellTheme.primaryText)
                             .lineLimit(1)
-                        Text(award.content ?? "-")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(contentColor(award.content))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(award.content ?? "-")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(contentColor(award.content))
+                            if !isReputation(award.content) {
+                                Text("不计入风评")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(ShellTheme.secondaryText)
+                            }
+                        }
                         Text(award.reason ?? "-")
                             .font(.system(size: 11))
                             .foregroundStyle(ShellTheme.secondaryText)
@@ -179,18 +186,19 @@ struct RatingStatsView: View {
         }
     }
 
-    // The original table sums rows whose operation contains 风评值, e.g.
-    // "风评值 +1" / "风评值 -1". If a server returns a bare signed value,
-    // fall back to summing the operation field directly.
+    // Only operations that describe 风评值 (or a bare signed value) count
+    // toward the total. Wealth/prestige changes remain visible but neutral.
     private var reputationDelta: Int {
-        let explicit = awards.compactMap { award -> Int? in
-            guard let content = award.content, content.contains("风评值") else { return nil }
-            return signedNumber(in: content)
-        }
-        if !explicit.isEmpty {
-            return explicit.reduce(0, +)
-        }
-        return awards.compactMap { signedNumber(in: $0.content ?? "") }.reduce(0, +)
+        awards.filter { isReputation($0.content) }
+            .compactMap { signedNumber(in: $0.content ?? "") }
+            .reduce(0, +)
+    }
+
+    private func isReputation(_ content: String?) -> Bool {
+        guard let content else { return false }
+        if content.contains("风评值") { return true }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.range(of: "^[+-]?\\d+$", options: .regularExpression) != nil
     }
 
     private var deltaColor: Color {
@@ -200,7 +208,9 @@ struct RatingStatsView: View {
     }
 
     private func contentColor(_ content: String?) -> Color {
-        guard let value = signedNumber(in: content ?? "") else { return ShellTheme.secondaryText }
+        guard isReputation(content), let value = signedNumber(in: content ?? "") else {
+            return ShellTheme.secondaryText
+        }
         if value > 0 { return ShellTheme.accent }
         if value < 0 { return ShellTheme.danger }
         return ShellTheme.secondaryText
