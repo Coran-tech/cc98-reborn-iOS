@@ -109,6 +109,7 @@ struct NativePost: Identifiable, Decodable {
     let isBest: Bool?
     let likeCount: Int?
     let dislikeCount: Int?
+    let likeState: Int?
     let length: Int?
 }
 
@@ -149,4 +150,66 @@ struct NativeAPIErrorBody: Decodable {
     let message: String?
     let error: String?
     let title: String?
+}
+
+struct NativeLikeState: Decodable {
+    let likeCount: Int?
+    let dislikeCount: Int?
+    let likeState: Int?
+}
+
+struct NativeBasicUser: Identifiable, Decodable {
+    let id: Int
+    let name: String?
+    let portraitUrl: String?
+}
+
+struct NativeTopicBasic: Identifiable, Decodable {
+    let id: Int
+    let title: String?
+    let boardId: Int?
+}
+
+struct NativeMessageCounts: Decodable {
+    let replyCount: Int?
+    let atCount: Int?
+    let systemCount: Int?
+    let messageCount: Int?
+}
+
+struct NativePostBasic: Decodable {
+    let id: Int?
+    let floor: Int?
+    let userId: Int?
+    let userName: String?
+}
+
+struct NativeNotification: Identifiable, Decodable {
+    let id: Int
+    let type: Int?
+    let topicId: Int?
+    let postId: Int?
+    let isRead: Bool?
+    let time: String?
+    let title: String?
+    let content: String?
+    let postBasicInfo: NativePostBasic?
+}
+
+struct NativeRecentContact: Identifiable, Decodable {
+    let userId: Int
+    let time: String?
+    let isRead: Bool?
+    let lastContent: String?
+
+    var id: Int { userId }
+}
+
+struct NativePrivateMessage: Identifiable, Decodable {
+    let id: Int
+    let senderId: Int
+    let receiverId: Int
+    let time: String?
+    let isRead: Bool?
+    let content: String?
 }

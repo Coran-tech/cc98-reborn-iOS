@@ -24,6 +24,36 @@ enum CC98APIError: LocalizedError {
     }
 }
 
+enum NativeNotificationKind: String, CaseIterable, Identifiable {
+    case reply, at, system
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .reply: return "回复"
+        case .at: return "@我"
+        case .system: return "系统"
+        }
+    }
+
+    var path: String {
+        switch self {
+        case .reply: return "/notification/reply"
+        case .at: return "/notification/at"
+        case .system: return "/notification/system"
+        }
+    }
+
+    var readAllPath: String {
+        switch self {
+        case .reply: return "/notification/read-all-reply"
+        case .at: return "/notification/read-all-at"
+        case .system: return "/notification/read-all-system"
+        }
+    }
+}
+
 // Native API client. The base host is fixed, redirects are rejected so a
 // bearer token can never be forwarded to another host, and tokens are only
 // attached from the keychain-backed NativeAuth session.
@@ -45,6 +75,8 @@ final class CC98API {
         configuration.timeoutIntervalForResource = 30
         self.session = URLSession(configuration: configuration, delegate: redirectBlocker, delegateQueue: nil)
     }
+
+    // MARK: Reading
 
     func home() async throws -> NativeHome {
         try await get("/config/index")
@@ -90,6 +122,108 @@ final class CC98API {
         throw CC98APIError.decoding
     }
 
+    // MARK: Messages
+
+    func messageCounts() async throws -> NativeMessageCounts {
+        try await get("/me/all-message-count", authenticated: true)
+    }
+
+    func notifications(kind: NativeNotificationKind, from: Int, size: Int = 10) async throws -> [NativeNotification] {
+        try await get(kind.path, query: [
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size))
+        ], authenticated: true)
+    }
+
+    func markAllRead(kind: NativeNotificationKind) async throws {
+        try await send(kind.readAllPath, method: "PUT", body: Data(), authenticated: true)
+    }
+
+    func recentContacts(from: Int, size: Int = 20) async throws -> [NativeRecentContact] {
+        try await get("/message/recent-contact-users", query: [
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size))
+        ], authenticated: true)
+    }
+
+    func privateMessages(userID: Int, from: Int, size: Int = 30) async throws -> [NativePrivateMessage] {
+        try await get("/message/user/\(userID)", query: [
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size))
+        ], authenticated: true)
+    }
+
+    func sendPrivateMessage(receiverID: Int, content: String) async throws {
+        let body = try json(["receiverId": receiverID, "content": content])
+        try await send("/message", method: "POST", body: body, contentType: "application/json", authenticated: true)
+    }
+
+    func userBasics(ids: [Int]) async throws -> [NativeBasicUser] {
+        guard !ids.isEmpty else { return [] }
+        return try await get("/user/basic", query: ids.map { URLQueryItem(name: "id", value: String($0)) }, authenticated: false)
+    }
+
+    func topicBasics(ids: [Int]) async throws -> [NativeTopicBasic] {
+        guard !ids.isEmpty else { return [] }
+        return try await get("/topic/basic", query: ids.map { URLQueryItem(name: "id", value: String($0)) }, authenticated: false)
+    }
+
+    // MARK: Interactions
+
+    func likeState(postID: Int) async throws -> NativeLikeState {
+        try await get("/post/\(postID)/like", authenticated: true)
+    }
+
+    func setLike(postID: Int, state: Int) async throws {
+        let clamped = min(max(state, 0), 2)
+        try await send(
+            "/post/\(postID)/like",
+            method: "PUT",
+            body: Data(String(clamped).utf8),
+            contentType: "application/json",
+            authenticated: true
+        )
+    }
+
+    func isFavorite(topicID: Int) async throws -> Bool {
+        do {
+            let data = try await self.data(path: "/topic/\(topicID)/isfavorite", authenticated: true)
+            let object = try? JSONSerialization.jsonObject(with: data)
+            if let number = object as? NSNumber { return number.boolValue }
+            if let object = object as? [String: Any] {
+                if let value = object["isFavorite"] as? Bool { return value }
+                if let value = object["isFavorite"] as? NSNumber { return value.boolValue }
+                if let value = object["data"] as? Bool { return value }
+            }
+            let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return text == "true"
+        } catch CC98APIError.notFound {
+            return false
+        }
+    }
+
+    func addFavorite(topicID: Int, groupID: Int = 0) async throws {
+        try await send(
+            "/me/favorite/\(topicID)",
+            query: [URLQueryItem(name: "groupid", value: String(groupID))],
+            method: "PUT",
+            authenticated: true
+        )
+    }
+
+    func removeFavorite(topicID: Int) async throws {
+        try await send("/me/favorite/\(topicID)", method: "DELETE", authenticated: true)
+    }
+
+    func reply(topicID: Int, content: String, parentID: Int? = nil) async throws {
+        var payload: [String: Any] = ["content": content, "contentType": 0, "title": ""]
+        if let parentID { payload["parentId"] = parentID }
+        let body = try json(payload)
+        try await send("/topic/\(topicID)/post", method: "POST", body: body, contentType: "application/json", authenticated: true)
+    }
+
+    // MARK: Transport
+
     private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = [], authenticated: Bool = false) async throws -> T {
         let data = try await data(path: path, query: query, authenticated: authenticated)
         do {
@@ -99,7 +233,33 @@ final class CC98API {
         }
     }
 
-    private func data(path: String, query: [URLQueryItem] = [], authenticated: Bool, allowRetry: Bool = true) async throws -> Data {
+    private func send(
+        _ path: String,
+        query: [URLQueryItem] = [],
+        method: String,
+        body: Data? = nil,
+        contentType: String? = nil,
+        authenticated: Bool
+    ) async throws {
+        _ = try await data(
+            path: path,
+            query: query,
+            method: method,
+            body: body,
+            contentType: contentType,
+            authenticated: authenticated
+        )
+    }
+
+    private func data(
+        path: String,
+        query: [URLQueryItem] = [],
+        method: String = "GET",
+        body: Data? = nil,
+        contentType: String? = nil,
+        authenticated: Bool,
+        allowRetry: Bool = true
+    ) async throws -> Data {
         guard path.hasPrefix("/"), !path.contains("://"), !path.contains("..") else {
             throw CC98APIError.invalidURL
         }
@@ -110,14 +270,17 @@ final class CC98API {
         guard let url = components.url else { throw CC98APIError.invalidURL }
 
         var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body
+        if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("CC98Reborn/1.0 (iOS)", forHTTPHeaderField: "User-Agent")
 
         let token: String?
-        if authenticated {
-            token = try await auth.validAccessToken()
-        } else {
-            token = await auth.optionalAccessToken()
+        do {
+            token = authenticated ? try await auth.validAccessToken() : await auth.optionalAccessToken()
+        } catch {
+            throw CC98APIError.unauthorized
         }
         if let token {
             request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
@@ -133,7 +296,15 @@ final class CC98API {
                 if allowRetry, token != nil {
                     do {
                         try await auth.refreshIfPossible()
-                        return try await self.data(path: path, query: query, authenticated: authenticated, allowRetry: false)
+                        return try await self.data(
+                            path: path,
+                            query: query,
+                            method: method,
+                            body: body,
+                            contentType: contentType,
+                            authenticated: authenticated,
+                            allowRetry: false
+                        )
                     } catch {
                         throw CC98APIError.unauthorized
                     }
@@ -151,6 +322,15 @@ final class CC98API {
             throw error
         } catch {
             throw CC98APIError.transport
+        }
+    }
+
+    private func json(_ object: [String: Any]) throws -> Data {
+        guard JSONSerialization.isValidJSONObject(object) else { throw CC98APIError.invalidURL }
+        do {
+            return try JSONSerialization.data(withJSONObject: object)
+        } catch {
+            throw CC98APIError.decoding
         }
     }
 }
