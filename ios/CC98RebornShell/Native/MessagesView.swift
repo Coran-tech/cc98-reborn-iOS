@@ -362,7 +362,7 @@ private struct PrivateMessageListView: View {
     }
 }
 
-private struct PrivateConversationView: View {
+struct PrivateConversationView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
 

@@ -55,6 +55,7 @@ struct NativeBoard: Identifiable, Decodable {
 struct NativeTopicSummary: Identifiable, Decodable {
     let id: Int
     let boardId: Int?
+    let boardName: String?
     let title: String?
     let userId: Int?
     let userName: String?

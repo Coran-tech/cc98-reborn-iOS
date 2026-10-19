@@ -14,6 +14,8 @@ final class NativeAppModel: ObservableObject {
 
 struct NativeRootView: View {
     @StateObject private var app = NativeAppModel()
+    @StateObject private var library = NativeLibrary()
+    @AppStorage("native.appearance") private var appearance = "system"
 
     var body: some View {
         TabView {
@@ -29,7 +31,17 @@ struct NativeRootView: View {
         .tint(ShellTheme.accent)
         .environmentObject(app)
         .environmentObject(app.auth)
+        .environmentObject(library)
+        .preferredColorScheme(preferredColorScheme)
         .task { @MainActor in await app.auth.restore() }
+    }
+
+    private var preferredColorScheme: ColorScheme? {
+        switch appearance {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
     }
 }
 

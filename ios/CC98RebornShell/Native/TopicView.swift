@@ -26,9 +26,40 @@ struct NativeLinkedBoard: Identifiable, Hashable {
     }
 }
 
+struct NativeLinkedUser: Identifiable, Hashable {
+    let id: String
+    let userID: Int?
+    let userName: String?
+
+    init?(url: URL) {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        guard let host = url.host?.lowercased(), host == "www.cc98.org" || host == "cc98.org" else { return nil }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count >= 2, parts[0] == "user" else { return nil }
+        if parts.count >= 3, parts[1] == "id", let value = Int(parts[2]) {
+            id = "id:\(value)"
+            userID = value
+            userName = nil
+        } else if parts.count >= 3, parts[1] == "name" {
+            let raw = parts[2].removingPercentEncoding ?? parts[2]
+            guard !raw.isEmpty else { return nil }
+            id = "name:\(raw)"
+            userID = nil
+            userName = raw
+        } else if parts.count == 2, let value = Int(parts[1]) {
+            id = "id:\(value)"
+            userID = value
+            userName = nil
+        } else {
+            return nil
+        }
+    }
+}
+
 struct TopicDetailView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
 
     let topicID: Int
     let boardID: Int?
@@ -45,8 +76,11 @@ struct TopicDetailView: View {
     @State private var showAlert = false
     @State private var hotPosts: [NativePost] = []
     @State private var hotLoaded = false
+    @State private var opPost: NativePost? = nil
     @State private var linkedTopic: NativeLinkedTopic? = nil
     @State private var linkedBoard: NativeLinkedBoard? = nil
+    @State private var linkedUser: NativeLinkedUser? = nil
+    @State private var showNote = false
 
     private let pageSize = 10
 
@@ -61,6 +95,12 @@ struct TopicDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if let topic { header(topic) }
 
+                if let opPost {
+                    PostCard(post: opPost, topicTitle: topic?.title, onChanged: {
+                        Task { await load() }
+                    })
+                }
+
                 if !hotPosts.isEmpty { hotReplies }
 
                 if posts.isEmpty && loading {
@@ -73,8 +113,10 @@ struct TopicDetailView: View {
                     })
                     .frame(minHeight: 280)
                 } else {
-                    ForEach(posts) { post in
-                        PostCard(post: post)
+                    ForEach(displayPosts) { post in
+                        PostCard(post: post, topicTitle: topic?.title, onChanged: {
+                            Task { await load() }
+                        })
                     }
                     if let error {
                         Text(error)
@@ -106,8 +148,27 @@ struct TopicDetailView: View {
                     Label("回复", systemImage: "arrowshape.turn.up.left")
                 }
                 Spacer()
-                ShareLink(item: URL(string: "https://www.cc98.org/topic/\(topicID)")!) {
-                    Label("分享", systemImage: "square.and.arrow.up")
+                Menu {
+                    if let topic {
+                        Button {
+                            library.toggleReadLater(topic)
+                        } label: {
+                            Label(
+                                library.isReadLater(topic.id) ? "取消稍后再看" : "稍后再看",
+                                systemImage: library.isReadLater(topic.id) ? "bookmark.slash" : "bookmark"
+                            )
+                        }
+                    }
+                    Button {
+                        showNote = true
+                    } label: {
+                        Label("主题备注", systemImage: "note.text")
+                    }
+                    ShareLink(item: URL(string: "https://www.cc98.org/topic/\(topicID)")!) {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
+                } label: {
+                    Label("更多", systemImage: "ellipsis.circle")
                 }
             }
         }
@@ -115,6 +176,7 @@ struct TopicDetailView: View {
         .task(id: page) { await load() }
         .task { await loadFavorite() }
         .task { await loadHot() }
+        .task { await loadOP() }
         .environment(\.openURL, OpenURLAction { url in
             if let topic = NativeLinkedTopic(url: url) {
                 linkedTopic = topic
@@ -122,6 +184,10 @@ struct TopicDetailView: View {
             }
             if let board = NativeLinkedBoard(url: url) {
                 linkedBoard = board
+                return .handled
+            }
+            if let user = NativeLinkedUser(url: url) {
+                linkedUser = user
                 return .handled
             }
             return .systemAction
@@ -132,6 +198,9 @@ struct TopicDetailView: View {
         .navigationDestination(item: $linkedBoard) { link in
             BoardTopicsView(board: NativeBoard.placeholder(id: link.id))
         }
+        .navigationDestination(item: $linkedUser) { link in
+            UserProfileView(userID: link.userID, userName: link.userName)
+        }
         .sheet(isPresented: $showReply) {
             ReplyComposer(topicID: topicID) {
                 Task {
@@ -140,6 +209,9 @@ struct TopicDetailView: View {
                     await load()
                 }
             }
+        }
+        .sheet(isPresented: $showNote) {
+            TopicNoteView(topicID: topicID, topicTitle: topic?.title ?? "主题 #\(topicID)")
         }
         .alert("提示", isPresented: $showAlert) {
             Button("好", role: .cancel) {}
@@ -151,6 +223,11 @@ struct TopicDetailView: View {
     private var pageCount: Int {
         let total = (topic?.replyCount ?? 0) + 1
         return max(1, (total + pageSize - 1) / pageSize)
+    }
+
+    private var displayPosts: [NativePost] {
+        guard let opPost else { return posts }
+        return posts.filter { $0.id != opPost.id }
     }
 
     private var hotReplies: some View {
@@ -189,6 +266,12 @@ struct TopicDetailView: View {
                 Text("版面 #\(boardID)")
                     .font(ShellTheme.Fonts.caption)
                     .foregroundStyle(ShellTheme.secondaryText)
+            }
+            if !library.note(for: topic.id).isEmpty {
+                Text("备注：\(library.note(for: topic.id))")
+                    .font(ShellTheme.Fonts.caption)
+                    .foregroundStyle(ShellTheme.warning)
+                    .lineLimit(3)
             }
         }
         .padding(14)
@@ -244,6 +327,12 @@ struct TopicDetailView: View {
     }
 
     @MainActor
+    private func loadOP() async {
+        guard opPost == nil else { return }
+        opPost = try? await app.api.posts(topicID: topicID, from: 0, size: 1).first
+    }
+
+    @MainActor
     private func toggleFavorite() async {
         guard auth.profile != nil else {
             alertMessage = "请先在「我的」登录，再收藏主题。"
@@ -278,6 +367,7 @@ struct TopicDetailView: View {
             let loadedPosts = try await postsRequest
             topic = loadedTopic
             posts = loadedPosts
+            library.recordHistory(loadedTopic)
         } catch {
             self.error = error.localizedDescription
         }
@@ -316,6 +406,8 @@ struct ReplyComposer: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(ShellTheme.separator, lineWidth: 0.5)
                     )
+                    .disabled(sending)
+                ComposerImageButton(text: $text)
                     .disabled(sending)
                 HStack {
                     Text("\(text.count) / 8000")
@@ -379,9 +471,12 @@ struct ReplyComposer: View {
 struct PostCard: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
 
     let post: NativePost
     let isHot: Bool
+    let topicTitle: String?
+    let onChanged: (() -> Void)?
 
     @State private var likeState: Int
     @State private var likeCount: Int
@@ -389,10 +484,14 @@ struct PostCard: View {
     @State private var busy = false
     @State private var alertMessage = ""
     @State private var showAlert = false
+    @State private var revealBlocked = false
+    @State private var showEdit = false
 
-    init(post: NativePost, isHot: Bool = false) {
+    init(post: NativePost, isHot: Bool = false, topicTitle: String? = nil, onChanged: (() -> Void)? = nil) {
         self.post = post
         self.isHot = isHot
+        self.topicTitle = topicTitle
+        self.onChanged = onChanged
         _likeState = State(initialValue: post.likeState ?? 0)
         _likeCount = State(initialValue: post.likeCount ?? 0)
         _dislikeCount = State(initialValue: post.dislikeCount ?? 0)
@@ -418,19 +517,23 @@ struct PostCard: View {
                 Spacer(minLength: 0)
             }
 
-            if let content = post.content, !content.isEmpty {
-                UBBContentView(source: content, markdown: post.contentType == 1)
-                    .textSelection(.enabled)
+            if isBlocked {
+                blockedNotice
             } else {
-                Text("（内容为空）")
-                    .font(ShellTheme.Fonts.footnote)
-                    .foregroundStyle(ShellTheme.secondaryText)
-            }
+                if let content = post.content, !content.isEmpty {
+                    UBBContentView(source: content, markdown: post.contentType == 1)
+                        .textSelection(.enabled)
+                } else {
+                    Text("（内容为空）")
+                        .font(ShellTheme.Fonts.footnote)
+                        .foregroundStyle(ShellTheme.secondaryText)
+                }
 
-            if post.isDeleted == true {
-                Text("该楼层已被删除")
-                    .font(ShellTheme.Fonts.caption)
-                    .foregroundStyle(ShellTheme.danger)
+                if post.isDeleted == true {
+                    Text("该楼层已被删除")
+                        .font(ShellTheme.Fonts.caption)
+                        .foregroundStyle(ShellTheme.danger)
+                }
             }
 
             HStack(spacing: 14) {
@@ -448,6 +551,14 @@ struct PostCard: View {
                         .foregroundStyle(likeState == 2 ? ShellTheme.danger : ShellTheme.secondaryText)
                 }
                 .disabled(busy)
+                if canEdit {
+                    Button {
+                        showEdit = true
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
+                            .foregroundStyle(ShellTheme.secondaryText)
+                    }
+                }
                 Spacer(minLength: 0)
                 if busy { ProgressView() }
             }
@@ -466,6 +577,46 @@ struct PostCard: View {
         } message: {
             Text(alertMessage)
         }
+        .sheet(isPresented: $showEdit) {
+            EditPostComposer(post: post, topicTitle: topicTitle) {
+                onChanged?()
+            }
+        }
+    }
+
+    private var canEdit: Bool {
+        guard let myID = auth.profile?.id, let postUser = post.userId else { return false }
+        return myID == postUser && post.isAnonymous != true
+    }
+
+    private var isBlocked: Bool {
+        guard !revealBlocked else { return false }
+        return library.isUserBlocked(post.userName) || library.isContentBlocked(post.content)
+    }
+
+    private var blockedNotice: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "eye.slash")
+            Text(blockReason)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+            Button("显示") {
+                revealBlocked = true
+            }
+            .font(ShellTheme.Fonts.caption.weight(.medium))
+            .foregroundStyle(ShellTheme.accent)
+        }
+        .font(ShellTheme.Fonts.footnote)
+        .foregroundStyle(ShellTheme.secondaryText)
+        .padding(10)
+        .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var blockReason: String {
+        if library.isUserBlocked(post.userName) {
+            return "已屏蔽用户 \(post.userName ?? "")"
+        }
+        return "命中屏蔽关键词"
     }
 
     private var floorTitle: String {

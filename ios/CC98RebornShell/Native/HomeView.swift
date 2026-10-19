@@ -41,6 +41,15 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("浏览")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        SearchView()
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                }
+            }
         }
         .task { await load() }
     }
