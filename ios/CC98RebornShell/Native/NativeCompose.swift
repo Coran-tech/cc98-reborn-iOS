@@ -80,6 +80,7 @@ struct NewTopicComposer: View {
                         .textFieldStyle(.roundedBorder)
                         .focused($focused)
 
+                    UBBFormatBar(text: $content)
                     TextEditor(text: $content)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 260)
@@ -225,6 +226,7 @@ struct EditPostComposer: View {
                             .textFieldStyle(.roundedBorder)
                     }
 
+                    UBBFormatBar(text: $content)
                     TextEditor(text: $content)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 260)
@@ -370,5 +372,46 @@ struct TopicNoteView: View {
             }
             .onAppear { text = library.note(for: topicID) }
         }
+    }
+}
+
+struct UBBFormatBar: View {
+    @Binding var text: String
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                format("B", prefix: "[b]", suffix: "[/b]", placeholder: "粗体", bold: true)
+                format("I", prefix: "[i]", suffix: "[/i]", placeholder: "斜体", italic: true)
+                format("U", prefix: "[u]", suffix: "[/u]", placeholder: "下划线", underline: true)
+                format("引用", prefix: "[quote]", suffix: "[/quote]", placeholder: "引用内容")
+                format("代码", prefix: "[code]", suffix: "[/code]", placeholder: "代码")
+                format("链接", prefix: "[url=链接]", suffix: "[/url]", placeholder: "链接文字")
+                format("颜色", prefix: "[color=red]", suffix: "[/color]", placeholder: "彩色文字")
+            }
+        }
+    }
+
+    private func format(
+        _ title: String,
+        prefix: String,
+        suffix: String,
+        placeholder: String,
+        bold: Bool = false,
+        italic: Bool = false,
+        underline: Bool = false
+    ) -> some View {
+        Button {
+            text += "\n\(prefix)\(placeholder)\(suffix)\n"
+        } label: {
+            Text(title)
+                .font(.system(size: 12, weight: bold ? .bold : .regular))
+                .underline(underline)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(ShellTheme.secondarySurface, in: Capsule())
+                .foregroundStyle(ShellTheme.primaryText)
+        }
+        .buttonStyle(.plain)
     }
 }

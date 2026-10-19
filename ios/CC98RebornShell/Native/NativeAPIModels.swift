@@ -86,6 +86,8 @@ struct NativeTopic: Decodable {
     let replyCount: Int?
     let hitCount: Int?
     let isAnonymous: Bool?
+    let isPosterOnly: Bool?
+    let allowedViewerState: Int?
     let state: Int?
     let type: Int?
     let topState: Int?
@@ -276,6 +278,18 @@ struct NativeVoteInfo: Decodable {
     let myRecord: NativeVoteRecord?
     let needVote: Bool?
     let voteUserCount: Int?
+}
+
+struct NativeFavoriteGroup: Identifiable, Decodable {
+    let id: Int
+    let name: String?
+    let count: Int?
+    let createTime: String?
+}
+
+struct NativeFavoriteGroupEnvelope: Decodable {
+    let errorCode: Int?
+    let data: [NativeFavoriteGroup]?
 }
 
 extension NativeBoard {

@@ -93,6 +93,8 @@ struct ProfileView: View {
                 NavigationLink("编辑资料") { ProfileSettingsView() }
                 NavigationLink("我的主题") { MyTopicsView() }
                 NavigationLink("我的回复") { MyPostsView() }
+                NavigationLink("我的关注") { FollowListView(kind: .followings) }
+                NavigationLink("我的粉丝") { FollowListView(kind: .fans) }
                 NavigationLink("我的收藏") { FavoritesView() }
                 NavigationLink("稍后再看") { ReadLaterView() }
                 NavigationLink("浏览历史") { HistoryView() }
