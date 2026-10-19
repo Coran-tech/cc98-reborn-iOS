@@ -516,6 +516,7 @@ final class CC98API {
         try await send("/topic/\(topicID)/post", method: "POST", body: body, contentType: "application/json", authenticated: true)
     }
 
+    @discardableResult
     func newTopic(
         boardID: Int,
         title: String,
@@ -525,7 +526,9 @@ final class CC98API {
         notifyPoster: Bool = false,
         type: Int = 0,
         tag1: Int? = nil,
-        tag2: Int? = nil
+        tag2: Int? = nil,
+        isVote: Bool = false,
+        voteInfo: NativeVoteDraft? = nil
     ) async throws {
         var payload: [String: Any] = [
             "content": content,
@@ -538,10 +541,42 @@ final class CC98API {
         ]
         if let tag1 { payload["tag1"] = tag1 }
         if let tag2 { payload["tag2"] = tag2 }
-        try await send(
-            "/board/\(boardID)/topic",
+        if isVote {
+            payload["isVote"] = true
+            if let voteInfo {
+                payload["voteInfo"] = [
+                    "voteItems": voteInfo.voteItems,
+                    "expiredDays": voteInfo.expiredDays,
+                    "maxVoteCount": voteInfo.maxVoteCount,
+                    "needVote": voteInfo.needVote
+                ]
+            }
+        }
+        let data = try await self.data(
+            path: "/board/\(boardID)/topic",
             method: "POST",
             body: try json(payload),
+            contentType: "application/json",
+            authenticated: true
+        )
+        let text = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return Int(text)
+    }
+
+    func notifyMentions(topicID: Int, names: [String]) async throws {
+        guard !names.isEmpty else { return }
+        let posts = try await posts(topicID: topicID, from: 0, size: 1)
+        guard let postID = posts.first?.id else { return }
+        let body = try JSONEncoder().encode(names)
+        try await send(
+            "/notification/at",
+            query: [
+                URLQueryItem(name: "topicid", value: String(topicID)),
+                URLQueryItem(name: "postid", value: String(postID))
+            ],
+            method: "POST",
+            body: body,
             contentType: "application/json",
             authenticated: true
         )

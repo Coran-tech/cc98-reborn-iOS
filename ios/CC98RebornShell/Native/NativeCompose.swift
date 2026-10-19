@@ -3,6 +3,26 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 
+enum NativePostingError {
+    static func message(_ raw: String) -> String {
+        let value = raw.lowercased()
+        if value.contains("board_minimum_post_count_request") { return "该版面有最小发帖数限制。" }
+        if value.contains("cannot_post_in_this_board") { return "你在该版面被禁言中。" }
+        if value.contains("cannot_post_anonymous") { return "匿名发言处罚未到期，无法匿名发帖。" }
+        if value.contains("wealth_not_enough_for_anonymous_topic") { return "财富值不足 10000，无法匿名发帖。" }
+        if value.contains("tag_id_error") { return "标签选择无效，请重新选择。" }
+        if value.contains("cannot_post_school_event") { return "没有权限发布校园活动类型。" }
+        if value.contains("last_post_in_10_seconds") || value.contains("request_too_fast") { return "发言过快，请稍后再试。" }
+        if value.contains("board_cannot_vote") { return "该版面无法发布投票。" }
+        if value.contains("vote_topic_cannot_be_anonymous") { return "投票帖不能匿名发表。" }
+        if value.contains("vote_item_error") || value.contains("max_vote_count_error") || value.contains("vote_expired_days_error") {
+            return "投票设置不合法，请检查选项、天数和最大投票数。"
+        }
+        if value.contains("cannot_entry_board") { return "没有进入该版面的权限。" }
+        return raw
+    }
+}
+
 struct ComposerImageButton: View {
     @EnvironmentObject private var app: NativeAppModel
     @Binding var text: String
@@ -124,6 +144,7 @@ struct NewTopicComposer: View {
     let boardID: Int
     let boardName: String
     var anonymousState: Int = 0
+    var isVote: Bool = false
     var onCreated: () -> Void
 
     @State private var title = ""
@@ -138,6 +159,11 @@ struct NewTopicComposer: View {
     @State private var tag1ID: Int? = nil
     @State private var tag2ID: Int? = nil
     @State private var boardMasters: [String] = []
+    @State private var voteItems = ["", ""]
+    @State private var expiredDays = 7
+    @State private var maxVoteCount = 1
+    @State private var needVote = false
+    @State private var draftStatus = ""
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
@@ -264,6 +290,53 @@ struct NewTopicComposer: View {
                         .font(ShellTheme.Fonts.caption)
                     }
 
+                    if isVote {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("投票设置")
+                                .font(ShellTheme.Fonts.footnote.weight(.semibold))
+                                .foregroundStyle(ShellTheme.primaryText)
+                            Stepper("有效天数：\(expiredDays)", value: $expiredDays, in: 1...1000)
+                                .font(ShellTheme.Fonts.footnote)
+                            Stepper(
+                                "最多可投：\(maxVoteCount)",
+                                value: $maxVoteCount,
+                                in: 1...max(1, voteItems.count)
+                            )
+                            .font(ShellTheme.Fonts.footnote)
+
+                            ForEach(voteItems.indices, id: \.self) { index in
+                                HStack {
+                                    TextField("选项 \(index + 1)", text: $voteItems[index])
+                                        .textFieldStyle(.roundedBorder)
+                                    if voteItems.count > 2 {
+                                        Button {
+                                            voteItems.remove(at: index)
+                                            maxVoteCount = min(maxVoteCount, max(1, voteItems.count))
+                                        } label: {
+                                            Image(systemName: "minus.circle")
+                                                .foregroundStyle(ShellTheme.danger)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if voteItems.count < 20 {
+                                Button {
+                                    voteItems.append("")
+                                } label: {
+                                    Label("添加选项", systemImage: "plus.circle")
+                                        .font(ShellTheme.Fonts.footnote)
+                                        .foregroundStyle(ShellTheme.accent)
+                                }
+                            }
+
+                            Toggle("投票后结果可见", isOn: $needVote)
+                                .font(ShellTheme.Fonts.footnote)
+                        }
+                        .padding(12)
+                        .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+                    }
+
                     HStack(spacing: 16) {
                         Button {
                             contentType = contentType == 1 ? 0 : 1
@@ -277,36 +350,70 @@ struct NewTopicComposer: View {
                         Button {
                             library.setDraft(content, for: bodyKey)
                             library.setDraft(title, for: titleKey)
+                            draftStatus = "草稿已保存"
                         } label: {
-                            Text("草稿")
+                            Text("保存草稿")
                                 .font(ShellTheme.Fonts.footnote)
                                 .foregroundStyle(ShellTheme.secondaryText)
                         }
                         .buttonStyle(.plain)
 
+                        Button {
+                            title = library.draft(for: titleKey)
+                            content = library.draft(for: bodyKey)
+                            selection = NSRange(location: (content as NSString).length, length: 0)
+                            draftStatus = "已恢复草稿"
+                        } label: {
+                            Text("恢复")
+                                .font(ShellTheme.Fonts.footnote)
+                                .foregroundStyle(ShellTheme.secondaryText)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            library.clearDraft(for: titleKey)
+                            library.clearDraft(for: bodyKey)
+                            draftStatus = "草稿已清除"
+                        } label: {
+                            Text("清除")
+                                .font(ShellTheme.Fonts.footnote)
+                                .foregroundStyle(ShellTheme.danger)
+                        }
+                        .buttonStyle(.plain)
+
                         Spacer()
+
+                        if !draftStatus.isEmpty {
+                            Text(draftStatus)
+                                .font(ShellTheme.Fonts.caption)
+                                .foregroundStyle(ShellTheme.secondaryText)
+                        }
                     }
 
                     Toggle("接收新回复通知", isOn: $notifyPoster)
                         .font(ShellTheme.Fonts.footnote)
 
-                    if effectiveAnonymousState == 1 {
-                        Text("本版强制匿名发帖")
-                            .font(ShellTheme.Fonts.footnote)
-                            .foregroundStyle(ShellTheme.secondaryText)
-                    } else if effectiveAnonymousState == 2 || effectiveAnonymousState == 3 {
-                        Toggle("匿名发布（消耗 10000 财富值）", isOn: $anonymous)
-                            .font(ShellTheme.Fonts.footnote)
-                    }
-
-                    Picker("帖子类型", selection: $postKind) {
-                        Text("普通帖").tag(0)
-                        Text("学术通知").tag(2)
-                        if canPostActivity {
-                            Text("校园活动").tag(1)
+                    if !isVote {
+                        if effectiveAnonymousState == 1 {
+                            Text("本版强制匿名发帖")
+                                .font(ShellTheme.Fonts.footnote)
+                                .foregroundStyle(ShellTheme.secondaryText)
+                        } else if effectiveAnonymousState == 2 || effectiveAnonymousState == 3 {
+                            Toggle("匿名发布（消耗 10000 财富值）", isOn: $anonymous)
+                                .font(ShellTheme.Fonts.footnote)
                         }
                     }
-                    .pickerStyle(.segmented)
+
+                    if !isVote {
+                        Picker("帖子类型", selection: $postKind) {
+                            Text("普通帖").tag(0)
+                            Text("学术通知").tag(2)
+                            if canPostActivity {
+                                Text("校园活动").tag(1)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -350,6 +457,7 @@ struct NewTopicComposer: View {
                 if title.isEmpty { title = library.draft(for: titleKey) }
                 if content.isEmpty { content = library.draft(for: bodyKey) }
                 anonymous = effectiveAnonymousState == 1
+                if isVote { postKind = 0; anonymous = false }
                 focused = true
                 Task {
                     if let detail = try? await app.api.board(id: boardID) {
@@ -369,6 +477,23 @@ struct NewTopicComposer: View {
                 library.setDraft(value, for: bodyKey)
             }
         }
+    }
+
+    private static func mentionedNames(in content: String) -> [String] {
+        var text = content.replacingOccurrences(
+            of: "(?is)\\[quote\\].*?\\[/quote\\]",
+            with: " ",
+            options: .regularExpression
+        )
+        guard let regex = try? NSRegularExpression(pattern: "@([^ \\n]{1,10})\\s") else { return [] }
+        let ns = text as NSString
+        var result: [String] = []
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let name = ns.substring(with: match.range(at: 1))
+            if !result.contains(name) { result.append(name) }
+            if result.count >= 10 { break }
+        }
+        return result
     }
 
     @MainActor
@@ -405,27 +530,61 @@ struct NewTopicComposer: View {
             errorMessage = "没有权限发布校园活动类型。"
             return
         }
+        if isVote {
+            if voteItems.count < 2 || voteItems.count > 20 {
+                errorMessage = "投票选项需为 2–20 项。"
+                return
+            }
+            if voteItems.contains(where: {
+                let value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                return value.isEmpty || value.count > 50
+            }) {
+                errorMessage = "投票选项不能为空，且每项不超过 50 字。"
+                return
+            }
+            if expiredDays < 1 || expiredDays > 1000 {
+                errorMessage = "投票有效天数需为 1–1000 天。"
+                return
+            }
+            if maxVoteCount < 1 || maxVoteCount > voteItems.count {
+                errorMessage = "最大投票数需为 1–\(voteItems.count)。"
+                return
+            }
+        }
         guard !sending else { return }
         sending = true
         errorMessage = nil
         do {
-            try await app.api.newTopic(
+            let topicID = try await app.api.newTopic(
                 boardID: boardID,
                 title: trimmedTitle,
                 content: content,
-                isAnonymous: effectiveAnonymousState == 1 || anonymous,
+                isAnonymous: !isVote && (effectiveAnonymousState == 1 || anonymous),
                 contentType: contentType,
                 notifyPoster: notifyPoster,
-                type: postKind,
+                type: isVote ? 0 : postKind,
                 tag1: tag1ID,
-                tag2: tag2ID
+                tag2: tag2ID,
+                isVote: isVote,
+                voteInfo: isVote ? NativeVoteDraft(
+                    voteItems: voteItems.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) },
+                    expiredDays: expiredDays,
+                    maxVoteCount: maxVoteCount,
+                    needVote: needVote
+                ) : nil
             )
+            if let topicID, !isVote {
+                let mentions = Self.mentionedNames(in: content)
+                if !mentions.isEmpty {
+                    try? await app.api.notifyMentions(topicID: topicID, names: mentions)
+                }
+            }
             library.clearDraft(for: titleKey)
             library.clearDraft(for: bodyKey)
             onCreated()
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = NativePostingError.message(error.localizedDescription)
         }
         sending = false
     }
