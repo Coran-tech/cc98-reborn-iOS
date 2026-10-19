@@ -268,6 +268,13 @@ struct NativeMyPostPage: Decodable {
     let count: Int?
 }
 
+struct NativeVoteDraft: Codable {
+    var voteItems: [String]
+    var expiredDays: Int
+    var maxVoteCount: Int
+    var needVote: Bool
+}
+
 struct NativeVoteItem: Identifiable, Decodable {
     let id: Int
     let description: String?

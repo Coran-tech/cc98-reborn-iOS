@@ -143,6 +143,7 @@ struct BoardTopicsView: View {
     @State private var hasMore = true
     @State private var error: String?
     @State private var showCompose = false
+    @State private var showVoteCompose = false
     @State private var bigPaperExpanded = true
     @State private var alertMessage = ""
     @State private var showAlert = false
@@ -215,6 +216,20 @@ struct BoardTopicsView: View {
                 }
                 .accessibilityLabel("版内搜索")
 
+                if resolvedBoard.canVote == true {
+                    Button {
+                        if auth.profile == nil {
+                            alertMessage = "请先在「我的」登录，再发表投票。"
+                            showAlert = true
+                        } else {
+                            showVoteCompose = true
+                        }
+                    } label: {
+                        Image(systemName: "chart.bar.doc.horizontal")
+                    }
+                    .accessibilityLabel("发表投票")
+                }
+
                 Button {
                     if auth.profile == nil {
                         alertMessage = "请先在「我的」登录，再发表主题。"
@@ -225,6 +240,16 @@ struct BoardTopicsView: View {
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
+            }
+        }
+        .sheet(isPresented: $showVoteCompose) {
+            NewTopicComposer(
+                boardID: resolvedBoard.id,
+                boardName: resolvedBoard.name,
+                anonymousState: 0,
+                isVote: true
+            ) {
+                Task { await load(reset: true) }
             }
         }
         .sheet(isPresented: $showCompose) {

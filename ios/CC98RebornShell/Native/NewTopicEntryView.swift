@@ -14,6 +14,7 @@ struct NewTopicEntryView: View {
     @State private var loading = false
     @State private var error: String? = nil
     @State private var selectedBoard: NativeBoard? = nil
+    @State private var isVote = false
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,14 @@ struct NewTopicEntryView: View {
                     })
                 } else {
                     List {
+                        Section {
+                            Picker("发布类型", selection: $isVote) {
+                                Text("主题").tag(false)
+                                Text("投票").tag(true)
+                            }
+                            .pickerStyle(.segmented)
+                        }
+
                         if let lastBoard {
                             Section("上次发帖") {
                                 Button {
@@ -43,7 +52,7 @@ struct NewTopicEntryView: View {
 
                         ForEach(filteredGroups) { group in
                             Section {
-                                ForEach(group.boards ?? []) { board in
+                                ForEach(boards(for: group)) { board in
                                     Button {
                                         selectedBoard = board
                                     } label: {
@@ -86,7 +95,8 @@ struct NewTopicEntryView: View {
                 NewTopicComposer(
                     boardID: board.id,
                     boardName: board.name,
-                    anonymousState: board.anonymousState ?? 0
+                    anonymousState: board.anonymousState ?? 0,
+                    isVote: isVote
                 ) {
                     lastBoardID = board.id
                     lastBoardName = board.name
@@ -100,7 +110,11 @@ struct NewTopicEntryView: View {
         guard lastBoardID != 0 else { return nil }
         return groups
             .flatMap { $0.boards ?? [] }
-            .first { $0.id == lastBoardID }
+            .first { $0.id == lastBoardID && (!isVote || $0.canVote == true) }
+    }
+
+    private func boards(for group: NativeBoardGroup) -> [NativeBoard] {
+        (group.boards ?? []).filter { !isVote || $0.canVote == true }
     }
 
     private var filteredGroups: [NativeBoardGroup] {
