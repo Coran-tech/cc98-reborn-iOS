@@ -487,11 +487,15 @@ enum UBBFirstImage {
                 continue
             }
             if let attributeGroup, attributeGroup <= regex.numberOfCaptureGroups {
-                let attribute = ns.substring(with: match.range(at: attributeGroup))
-                if attribute.trimmingCharacters(in: .whitespacesAndNewlines) == "1" {
-                    continue
+                let attributeRange = match.range(at: attributeGroup)
+                if attributeRange.location != NSNotFound {
+                    let attribute = ns.substring(with: attributeRange)
+                    if attribute.trimmingCharacters(in: .whitespacesAndNewlines) == "1" {
+                        continue
+                    }
                 }
             }
+            guard urlGroup <= regex.numberOfCaptureGroups else { continue }
             let range = match.range(at: urlGroup)
             guard range.location != NSNotFound else { continue }
             let raw = ns.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
