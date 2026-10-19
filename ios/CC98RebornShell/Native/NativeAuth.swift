@@ -145,8 +145,10 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
         if let activeAccountID, let current = tokens {
             try? store.save(current, accountID: activeAccountID)
         }
+        let previousID = activeAccountID
+        let previousTokens = tokens
+        let previousProfile = profile
         state = .signingIn
-        profile = nil
         do {
             tokens = stored
             activeAccountID = accountID
@@ -157,7 +159,11 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
             profile = user
             state = .signedIn
         } catch {
-            state = .unavailable(NativeAuthError.loginRequired.localizedDescription)
+            tokens = previousTokens
+            activeAccountID = previousID
+            profile = previousProfile
+            state = previousProfile == nil ? .signedOut : .signedIn
+            persistAccounts()
             throw map(error)
         }
     }
