@@ -107,28 +107,36 @@ struct NewTopicsView: View {
     }
 
     private var cardFeed: some View {
-        ScrollView {
-            HStack(alignment: .top, spacing: 12) {
-                LazyVStack(spacing: 12) {
-                    ForEach(evenTopics) { topic in
-                        cardLink(topic)
+        GeometryReader { geometry in
+            let columnWidth = min(260, max(120, (geometry.size.width - 44) / 2))
+            ScrollView {
+                HStack(alignment: .top, spacing: 12) {
+                    LazyVStack(spacing: 12) {
+                        ForEach(evenTopics) { topic in
+                            cardLink(topic)
+                        }
                     }
-                }
-                LazyVStack(spacing: 12) {
-                    ForEach(oddTopics) { topic in
-                        cardLink(topic)
-                    }
-                }
-            }
-            .padding(16)
+                    .frame(width: columnWidth)
 
-            if loading && hasMore {
-                ProgressView()
-                    .padding(.bottom, 20)
+                    LazyVStack(spacing: 12) {
+                        ForEach(oddTopics) { topic in
+                            cardLink(topic)
+                        }
+                    }
+                    .frame(width: columnWidth)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+
+                if loading && hasMore {
+                    ProgressView()
+                        .padding(.bottom, 20)
+                }
             }
+            .refreshable { await load(reset: true) }
         }
         .background(ShellTheme.pageBackground)
-        .refreshable { await load(reset: true) }
     }
 
     private func cardLink(_ topic: NativeTopicSummary) -> some View {
@@ -322,6 +330,7 @@ private struct NewTopicCard: View {
             RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner)
                 .stroke(ShellTheme.separator, lineWidth: 0.5)
         )
+        .clipped()
     }
 
     private var thumbnailPlaceholder: some View {
