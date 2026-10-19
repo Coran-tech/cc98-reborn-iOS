@@ -122,14 +122,14 @@ struct NewTopicsView: View {
                 HStack(alignment: .top, spacing: 12) {
                     LazyVStack(spacing: 12) {
                         ForEach(evenTopics) { topic in
-                            cardLink(topic)
+                            cardLink(topic, width: columnWidth)
                         }
                     }
                     .frame(width: columnWidth)
 
                     LazyVStack(spacing: 12) {
                         ForEach(oddTopics) { topic in
-                            cardLink(topic)
+                            cardLink(topic, width: columnWidth)
                         }
                     }
                     .frame(width: columnWidth)
@@ -157,14 +157,15 @@ struct NewTopicsView: View {
         .background(ShellTheme.pageBackground)
     }
 
-    private func cardLink(_ topic: NativeTopicSummary) -> some View {
+    private func cardLink(_ topic: NativeTopicSummary, width: CGFloat) -> some View {
         NavigationLink {
             TopicDetailView(topicID: topic.id, boardID: topic.boardId)
         } label: {
             NewTopicCard(
                 topic: topic,
                 thumbnail: thumbnails.images[topic.id],
-                boardName: resolvedBoardName(topic)
+                boardName: resolvedBoardName(topic),
+                width: width
             )
         }
         .buttonStyle(.plain)
@@ -229,18 +230,26 @@ struct NewTopicsView: View {
             hasMore = true
         }
         do {
+            let from = page * pageSize
+            guard from < 500 else {
+                hasMore = false
+                loading = false
+                return
+            }
+            let size = from > 480 ? 500 - from : pageSize
             let fetched = try await app.api.newTopics(
-                from: page * pageSize,
-                size: pageSize,
+                from: from,
+                size: size,
                 mediaOnly: mediaOnly
             )
             if reset {
                 topics = fetched
             } else {
-                topics.append(contentsOf: fetched)
+                let existing = Set(topics.map(\.id))
+                topics.append(contentsOf: fetched.filter { !existing.contains($0.id) })
             }
             page += 1
-            hasMore = fetched.count == pageSize
+            hasMore = fetched.count == size && from + size < 500
         } catch {
             self.error = error.localizedDescription
         }
@@ -277,6 +286,7 @@ private struct NewTopicCard: View {
     let topic: NativeTopicSummary
     let thumbnail: URL?
     let boardName: String?
+    let width: CGFloat
 
     var body: some View {
         VStack(spacing: 0) {
@@ -298,8 +308,7 @@ private struct NewTopicCard: View {
                         thumbnailPlaceholder
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 112)
+                .frame(width: width, height: 112)
                 .clipped()
                 .allowsHitTesting(false)
                 .accessibilityLabel("帖子图片缩略图")
@@ -350,7 +359,7 @@ private struct NewTopicCard: View {
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(width: width, alignment: .topLeading)
         .background(ShellTheme.surface)
         .clipShape(RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner))
         .contentShape(Rectangle())
