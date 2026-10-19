@@ -1095,6 +1095,18 @@ enum UBBBlockParser {
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    static func searchableText(_ raw: String) -> String {
+        let inlines = parseInline(raw)
+        var value = ""
+        for inline in inlines {
+            switch inline {
+            case let .text(attributed): value += String(attributed.characters)
+            case let .emotion(id): value += "[\(id)]"
+            }
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func readTag(_ source: String, at index: String.Index) -> Tag? {
         guard index < source.endIndex, source[index] == "[" else { return nil }
         guard let close = source[index...].firstIndex(of: "]") else { return nil }

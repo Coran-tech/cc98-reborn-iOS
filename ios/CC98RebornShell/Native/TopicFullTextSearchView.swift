@@ -1,5 +1,46 @@
 import SwiftUI
 
+struct SearchSnippetText: View {
+    let text: String
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        composed
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var composed: Text {
+        guard let regex = try? NSRegularExpression(
+            pattern: "\\[(cc98\\d{2}|ac\\d{2,4}|em\\d{2}|ms\\d{2}|tb\\d{2})\\]",
+            options: .caseInsensitive
+        ) else {
+            return Text(text)
+        }
+        let ns = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        guard !matches.isEmpty else { return Text(text) }
+
+        var result = Text("")
+        var cursor = 0
+        for match in matches {
+            if match.range.location > cursor {
+                result = result + Text(ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)))
+            }
+            let tag = ns.substring(with: match.range(at: 1)).lowercased()
+            if let image = UBBEmotion.image(tag, light: colorScheme == .dark, maxSide: 18) {
+                result = result + Text(Image(uiImage: image))
+            } else {
+                result = result + Text(ns.substring(with: match.range))
+            }
+            cursor = match.range.location + match.range.length
+        }
+        if cursor < ns.length {
+            result = result + Text(ns.substring(from: cursor))
+        }
+        return result
+    }
+}
+
 struct TopicFullTextSearchView: View {
     @EnvironmentObject private var app: NativeAppModel
     @Environment(\.dismiss) private var dismiss
@@ -81,7 +122,7 @@ struct TopicFullTextSearchView: View {
                                                 .font(.system(size: 10, weight: .semibold))
                                                 .foregroundStyle(ShellTheme.secondaryText)
                                         }
-                                        Text(hit.snippet)
+                                        SearchSnippetText(text: hit.snippet)
                                             .font(ShellTheme.Fonts.caption)
                                             .foregroundStyle(ShellTheme.secondaryText)
                                             .lineLimit(3)
@@ -158,7 +199,7 @@ struct TopicFullTextSearchView: View {
                 options: .regularExpression
             )
         }
-        let plain = UBBBlockParser.plainText(source)
+        let plain = UBBBlockParser.searchableText(source)
         let author = [post.userName, post.userId.map { "UID \($0)" }].compactMap { $0 }.joined(separator: " · ")
         let haystack = [source, plain, author].joined(separator: " ").lowercased()
         guard haystack.contains(keyword.lowercased()) else { return nil }

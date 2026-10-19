@@ -384,12 +384,57 @@ struct UBBFormatBar: View {
                 format("B", prefix: "[b]", suffix: "[/b]", placeholder: "粗体", bold: true)
                 format("I", prefix: "[i]", suffix: "[/i]", placeholder: "斜体", italic: true)
                 format("U", prefix: "[u]", suffix: "[/u]", placeholder: "下划线", underline: true)
+                format("S", prefix: "[del]", suffix: "[/del]", placeholder: "删除线")
+
+                Menu {
+                    ForEach([2, 3, 4, 5, 6], id: \.self) { size in
+                        Button("字号 \(size)") {
+                            wrap("[size=\(size)]", "[/size]", placeholder: "文字")
+                        }
+                    }
+                } label: {
+                    menuLabel("字号")
+                }
+
+                Menu {
+                    Button("红") { wrap("[color=red]", "[/color]", placeholder: "彩色文字") }
+                    Button("橙") { wrap("[color=orange]", "[/color]", placeholder: "彩色文字") }
+                    Button("蓝") { wrap("[color=blue]", "[/color]", placeholder: "彩色文字") }
+                    Button("绿") { wrap("[color=green]", "[/color]", placeholder: "彩色文字") }
+                    Button("紫") { wrap("[color=purple]", "[/color]", placeholder: "彩色文字") }
+                } label: {
+                    menuLabel("颜色")
+                }
+
+                Menu {
+                    Button("左对齐") { wrap("[align=left]", "[/align]", placeholder: "内容") }
+                    Button("居中") { wrap("[align=center]", "[/align]", placeholder: "内容") }
+                    Button("右对齐") { wrap("[align=right]", "[/align]", placeholder: "内容") }
+                } label: {
+                    menuLabel("对齐")
+                }
+
                 format("引用", prefix: "[quote]", suffix: "[/quote]", placeholder: "引用内容")
                 format("代码", prefix: "[code]", suffix: "[/code]", placeholder: "代码")
                 format("链接", prefix: "[url=链接]", suffix: "[/url]", placeholder: "链接文字")
-                format("颜色", prefix: "[color=red]", suffix: "[/color]", placeholder: "彩色文字")
+                format("列表", prefix: "[list]\n[*]", suffix: "\n[/list]", placeholder: "项目一\n[*]项目二")
+                format("表格", prefix: "[table]\n[tr][th]标题1[/th][th]标题2[/th][/tr]\n[tr][td]", suffix: "[/td][td]内容2[/td][/tr]\n[/table]", placeholder: "内容1")
+                format("分割线", prefix: "[hr]", suffix: "", placeholder: "")
             }
         }
+    }
+
+    private func menuLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(ShellTheme.secondarySurface, in: Capsule())
+            .foregroundStyle(ShellTheme.primaryText)
+    }
+
+    private func wrap(_ prefix: String, _ suffix: String, placeholder: String) {
+        text += "\n\(prefix)\(placeholder)\(suffix)\n"
     }
 
     private func format(
@@ -402,7 +447,7 @@ struct UBBFormatBar: View {
         underline: Bool = false
     ) -> some View {
         Button {
-            text += "\n\(prefix)\(placeholder)\(suffix)\n"
+            wrap(prefix, suffix, placeholder: placeholder)
         } label: {
             Text(title)
                 .font(.system(size: 12, weight: bold ? .bold : .regular))
