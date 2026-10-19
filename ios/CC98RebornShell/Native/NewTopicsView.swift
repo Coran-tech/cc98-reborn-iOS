@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NewTopicsView: View {
     @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var library: NativeLibrary
     @StateObject private var thumbnails = NewTopicThumbnailLoader()
 
     @AppStorage("native.newTopicsCardMode") private var cardMode = false
@@ -77,7 +78,7 @@ struct NewTopicsView: View {
 
     private var listFeed: some View {
         List {
-            ForEach(topics) { topic in
+            ForEach(visibleTopics) { topic in
                 NavigationLink {
                     TopicDetailView(topicID: topic.id, boardID: topic.boardId)
                 } label: {
@@ -174,12 +175,20 @@ struct NewTopicsView: View {
         }
     }
 
+    private var visibleTopics: [NativeTopicSummary] {
+        topics.filter { topic in
+            !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
+                && !library.isTitleBlocked(topic.title)
+                && !library.isUserBlocked(id: topic.userId, name: topic.userName)
+        }
+    }
+
     private var evenTopics: [NativeTopicSummary] {
-        topics.enumerated().compactMap { $0.offset.isMultiple(of: 2) ? $0.element : nil }
+        visibleTopics.enumerated().compactMap { $0.offset.isMultiple(of: 2) ? $0.element : nil }
     }
 
     private var oddTopics: [NativeTopicSummary] {
-        topics.enumerated().compactMap { $0.offset.isMultiple(of: 2) ? nil : $0.element }
+        visibleTopics.enumerated().compactMap { $0.offset.isMultiple(of: 2) ? nil : $0.element }
     }
 
     private func loadMoreIfNeeded(_ topic: NativeTopicSummary) {

@@ -76,6 +76,20 @@ struct NativeTraceRequest: Identifiable {
     let floor: Int?
 }
 
+private struct TopicBottomOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = .greatestFiniteMagnitude
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct TopicViewportHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct TopicDetailView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
@@ -116,6 +130,10 @@ struct TopicDetailView: View {
     @State private var traceRequest: NativeTraceRequest? = nil
     @State private var scrollToTopOnNextLoad = false
     @State private var didAutoResume: Bool
+    @State private var topicViewportHeight: CGFloat = 0
+    @State private var topicBottomY: CGFloat = .greatestFiniteMagnitude
+    @State private var topicMaxBottomY: CGFloat = 0
+    @State private var pullNextTriggered = false
 
     private let pageSize = 10
 
@@ -211,10 +229,47 @@ struct TopicDetailView: View {
                             .foregroundStyle(ShellTheme.danger)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
+                    if page < pageCount, posts.count >= pageSize {
+                        Text("上拉进入下一页")
+                            .font(ShellTheme.Fonts.caption)
+                            .foregroundStyle(ShellTheme.secondaryText)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 8)
+                    }
+                    Color.clear
+                        .frame(height: 1)
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: TopicBottomOffsetKey.self,
+                                    value: geo.frame(in: .named("topicScroll")).maxY
+                                )
+                            }
+                        )
                 }
             }
             .padding(16)
             .id("topic-top")
+            }
+            .coordinateSpace(name: "topicScroll")
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: TopicViewportHeightKey.self, value: geo.size.height)
+                }
+            )
+            .onPreferenceChange(TopicViewportHeightKey.self) { topicViewportHeight = $0 }
+            .onPreferenceChange(TopicBottomOffsetKey.self) { value in
+                topicBottomY = value
+                topicMaxBottomY = max(topicMaxBottomY, value)
+                if shouldPullNext {
+                    pullNextTriggered = true
+                    turnPage(1)
+                }
+            }
+            .onChange(of: page) { _, _ in
+                topicMaxBottomY = 0
+                topicBottomY = .greatestFiniteMagnitude
+                pullNextTriggered = false
             }
             .onChange(of: loading) { _, value in
                 if !value { scrollToTarget(proxy) }
@@ -401,13 +456,18 @@ struct TopicDetailView: View {
                         turnPage(-1)
                     } label: {
                         Label("上一页", systemImage: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(minWidth: 104, minHeight: 46)
+                            .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(page <= 1 ? ShellTheme.secondaryText : ShellTheme.accent)
                     }
+                    .buttonStyle(.plain)
                     .disabled(page <= 1 || loading)
 
                     Spacer(minLength: 0)
 
                     Text("第 \(page) / \(pageCount) 页")
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.footnote)
                         .foregroundStyle(ShellTheme.secondaryText)
                         .monospacedDigit()
 
@@ -417,13 +477,17 @@ struct TopicDetailView: View {
                         turnPage(1)
                     } label: {
                         Label("下一页", systemImage: "chevron.right")
+                            .font(.system(size: 15, weight: .semibold))
                             .labelStyle(.titleAndIcon)
+                            .frame(minWidth: 104, minHeight: 46)
+                            .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(page >= pageCount ? ShellTheme.secondaryText : ShellTheme.accent)
                     }
+                    .buttonStyle(.plain)
                     .disabled(page >= pageCount || loading)
                 }
-                .font(ShellTheme.Fonts.footnote)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 7)
+                .padding(.vertical, 8)
             }
 
             HStack {
@@ -482,6 +546,15 @@ struct TopicDetailView: View {
                 .fill(ShellTheme.separator)
                 .frame(height: 0.5)
         }
+    }
+
+    private var shouldPullNext: Bool {
+        guard page < pageCount, !loading, !pullNextTriggered, posts.count >= pageSize,
+              topicViewportHeight > 0,
+              topicMaxBottomY >= topicViewportHeight - 4 else {
+            return false
+        }
+        return topicBottomY < topicViewportHeight - 64
     }
 
     private func turnPage(_ delta: Int) {
@@ -1039,7 +1112,7 @@ struct PostCard: View {
 
     private var isBlocked: Bool {
         guard !revealBlocked else { return false }
-        return library.isUserBlocked(post.userName) || library.isContentBlocked(post.content)
+        return library.shouldBlock(post: post)
     }
 
     private var blockedNotice: some View {
@@ -1061,7 +1134,7 @@ struct PostCard: View {
     }
 
     private var blockReason: String {
-        if library.isUserBlocked(post.userName) {
+        if library.isUserBlocked(id: post.userId, name: post.userName) {
             return "已屏蔽用户 \(post.userName ?? "")"
         }
         return "命中屏蔽关键词"
