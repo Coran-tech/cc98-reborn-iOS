@@ -252,6 +252,13 @@ private struct TopicSummaryRow: View {
                         .background(ShellTheme.warning.opacity(0.15), in: Capsule())
                         .foregroundStyle(ShellTheme.warning)
                 }
+                if topic.isVote == true {
+                    Text("投票")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(ShellTheme.link.opacity(0.15), in: Capsule())
+                        .foregroundStyle(ShellTheme.link)
+                }
                 Text(topic.title ?? "主题 #\(topic.id)")
                     .font(ShellTheme.Fonts.body.weight(.medium))
                     .foregroundStyle(ShellTheme.primaryText)

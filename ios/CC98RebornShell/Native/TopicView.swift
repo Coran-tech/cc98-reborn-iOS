@@ -81,6 +81,10 @@ struct TopicDetailView: View {
     @State private var linkedBoard: NativeLinkedBoard? = nil
     @State private var linkedUser: NativeLinkedUser? = nil
     @State private var showNote = false
+    @State private var voteInfo: NativeVoteInfo? = nil
+    @State private var voteLoaded = false
+    @State private var signatures: [Int: String] = [:]
+    @State private var signatureChecked: Set<Int> = []
 
     private let pageSize = 10
 
@@ -96,9 +100,20 @@ struct TopicDetailView: View {
                 if let topic { header(topic) }
 
                 if let opPost {
-                    PostCard(post: opPost, topicTitle: topic?.title, onChanged: {
-                        Task { await load() }
-                    })
+                    PostCard(
+                        post: opPost,
+                        topicTitle: topic?.title,
+                        signature: opPost.userId.flatMap { signatures[$0] },
+                        onChanged: {
+                            Task { await load() }
+                        }
+                    )
+                }
+
+                if page == 1, let voteInfo {
+                    NativeVoteCard(topicID: topicID, info: voteInfo) {
+                        Task { await loadVote(force: true) }
+                    }
                 }
 
                 if page == 1, !hotReplyPosts.isEmpty { hotReplies }
@@ -114,9 +129,14 @@ struct TopicDetailView: View {
                     .frame(minHeight: 280)
                 } else {
                     ForEach(displayPosts) { post in
-                        PostCard(post: post, topicTitle: topic?.title, onChanged: {
-                            Task { await load() }
-                        })
+                        PostCard(
+                            post: post,
+                            topicTitle: topic?.title,
+                            signature: post.userId.flatMap { signatures[$0] },
+                            onChanged: {
+                                Task { await load() }
+                            }
+                        )
                     }
                     if let error {
                         Text(error)
@@ -246,7 +266,11 @@ struct TopicDetailView: View {
                     .foregroundStyle(ShellTheme.secondaryText)
             }
             ForEach(hotReplyPosts) { post in
-                PostCard(post: post, isHot: true)
+                PostCard(
+                    post: post,
+                    isHot: true,
+                    signature: post.userId.flatMap { signatures[$0] }
+                )
             }
         }
         .padding(.bottom, 4)
@@ -329,12 +353,39 @@ struct TopicDetailView: View {
         guard !hotLoaded else { return }
         hotLoaded = true
         hotPosts = (try? await app.api.hotPosts(topicID: topicID)) ?? []
+        await loadSignatures(for: hotPosts)
     }
 
     @MainActor
     private func loadOP() async {
         guard opPost == nil else { return }
         opPost = try? await app.api.posts(topicID: topicID, from: 0, size: 1).first
+        if let opPost { await loadSignatures(for: [opPost]) }
+    }
+
+    @MainActor
+    private func loadVote(force: Bool = false) async {
+        guard force || !voteLoaded else { return }
+        voteLoaded = true
+        voteInfo = try? await app.api.voteInfo(topicID: topicID)
+    }
+
+    @MainActor
+    private func loadSignatures(for posts: [NativePost]) async {
+        let ids = Set(posts.compactMap(\.userId)).filter { $0 > 0 && !signatureChecked.contains($0) }
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            signatureChecked.insert(id)
+            Task {
+                if let user = try? await app.api.user(id: id),
+                   let signature = user.signatureCode,
+                   !signature.isEmpty {
+                    await MainActor.run {
+                        signatures[id] = signature
+                    }
+                }
+            }
+        }
     }
 
     @MainActor
@@ -373,6 +424,10 @@ struct TopicDetailView: View {
             topic = loadedTopic
             posts = loadedPosts
             library.recordHistory(loadedTopic)
+            if loadedTopic.isVote == true {
+                await loadVote()
+            }
+            await loadSignatures(for: loadedPosts)
         } catch {
             self.error = error.localizedDescription
         }
@@ -483,6 +538,7 @@ struct PostCard: View {
     let post: NativePost
     let isHot: Bool
     let topicTitle: String?
+    let signature: String?
     let onChanged: (() -> Void)?
 
     @State private var likeState: Int
@@ -495,10 +551,17 @@ struct PostCard: View {
     @State private var showEdit = false
     @State private var showRating = false
 
-    init(post: NativePost, isHot: Bool = false, topicTitle: String? = nil, onChanged: (() -> Void)? = nil) {
+    init(
+        post: NativePost,
+        isHot: Bool = false,
+        topicTitle: String? = nil,
+        signature: String? = nil,
+        onChanged: (() -> Void)? = nil
+    ) {
         self.post = post
         self.isHot = isHot
         self.topicTitle = topicTitle
+        self.signature = signature
         self.onChanged = onChanged
         _likeState = State(initialValue: post.likeState ?? 0)
         _likeCount = State(initialValue: post.likeCount ?? 0)
@@ -508,7 +571,16 @@ struct PostCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                NativeAvatar(url: nil, name: post.userName, size: 28)
+                if let userID = post.userId, userID > 0 {
+                    NavigationLink {
+                        UserProfileView(userID: userID, userName: post.userName)
+                    } label: {
+                        NativeAvatar(url: nil, name: post.userName, size: 28)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    NativeAvatar(url: nil, name: post.userName, size: 28)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(post.isAnonymous == true ? "匿名" : (post.userName ?? "未知作者"))
@@ -542,6 +614,12 @@ struct PostCard: View {
                         .font(ShellTheme.Fonts.caption)
                         .foregroundStyle(ShellTheme.danger)
                 }
+            }
+
+            if !isBlocked, post.isAnonymous != true, let signature, !signature.isEmpty {
+                Divider().overlay(ShellTheme.separator)
+                UBBContentView(source: signature)
+                    .opacity(0.85)
             }
 
             HStack(spacing: 14) {

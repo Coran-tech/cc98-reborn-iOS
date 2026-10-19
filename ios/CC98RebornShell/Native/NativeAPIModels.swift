@@ -70,6 +70,7 @@ struct NativeTopicSummary: Identifiable, Decodable {
     let type: Int?
     let topState: Int?
     let bestState: Int?
+    let isVote: Bool?
     let likeCount: Int?
     let dislikeCount: Int?
 }
@@ -248,6 +249,32 @@ struct NativeMyPost: Identifiable, Decodable {
 struct NativeMyPostPage: Decodable {
     let data: [NativeMyPost]
     let count: Int?
+}
+
+struct NativeVoteItem: Identifiable, Decodable {
+    let id: Int
+    let description: String?
+    let count: Int?
+}
+
+struct NativeVoteRecord: Decodable {
+    let userId: Int?
+    let userName: String?
+    let items: [Int]?
+    let time: String?
+}
+
+struct NativeVoteInfo: Decodable {
+    let topicId: Int?
+    let voteItems: [NativeVoteItem]?
+    let voteRecords: [NativeVoteRecord]?
+    let expiredTime: String?
+    let isAvailable: Bool?
+    let maxVoteCount: Int?
+    let canVote: Bool?
+    let myRecord: NativeVoteRecord?
+    let needVote: Bool?
+    let voteUserCount: Int?
 }
 
 extension NativeBoard {
