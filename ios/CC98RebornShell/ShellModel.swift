@@ -20,7 +20,7 @@ enum ShellTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .browse: return "浏览"
+        case .browse: return "首页"
         case .boards: return "版面"
         case .messages: return "消息"
         case .me: return "我的"
