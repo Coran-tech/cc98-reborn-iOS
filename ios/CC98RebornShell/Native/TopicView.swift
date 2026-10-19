@@ -2,17 +2,29 @@ import SwiftUI
 
 struct TopicDetailView: View {
     @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var auth: NativeAuth
 
     let topicID: Int
     let boardID: Int?
 
-    @State private var topic: NativeTopic?
+    @State private var topic: NativeTopic? = nil
     @State private var posts: [NativePost] = []
-    @State private var page = 1
+    @State private var page: Int
     @State private var loading = false
-    @State private var error: String?
+    @State private var error: String? = nil
+    @State private var isFavorite = false
+    @State private var favoriteBusy = false
+    @State private var showReply = false
+    @State private var alertMessage = ""
+    @State private var showAlert = false
 
     private let pageSize = 10
+
+    init(topicID: Int, boardID: Int?, initialPage: Int = 1) {
+        self.topicID = topicID
+        self.boardID = boardID
+        _page = State(initialValue: max(1, initialPage))
+    }
 
     var body: some View {
         ScrollView {
@@ -46,8 +58,44 @@ struct TopicDetailView: View {
         .background(ShellTheme.pageBackground)
         .navigationTitle("主题")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button {
+                    Task { await toggleFavorite() }
+                } label: {
+                    Label(isFavorite ? "已收藏" : "收藏", systemImage: isFavorite ? "star.fill" : "star")
+                }
+                .disabled(favoriteBusy)
+                Spacer()
+                Button {
+                    openReply()
+                } label: {
+                    Label("回复", systemImage: "arrowshape.turn.up.left")
+                }
+                Spacer()
+                ShareLink(item: URL(string: "https://www.cc98.org/topic/\(topicID)")!) {
+                    Label("分享", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
         .refreshable { await load() }
         .task(id: page) { await load() }
+        .task { await loadFavorite() }
+        .sheet(isPresented: $showReply) {
+            ReplyComposer(topicID: topicID) {
+                Task {
+                    let nextPage = max(1, ((topic?.replyCount ?? 0) + 11) / pageSize)
+                    page = nextPage
+                    await load()
+                }
+            }
+        }
+        .alert("提示", isPresented: $showAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
     }
 
     private var pageCount: Int {
@@ -106,6 +154,44 @@ struct TopicDetailView: View {
         .padding(.vertical, 8)
     }
 
+    private func openReply() {
+        guard auth.profile != nil else {
+            alertMessage = "请先在「我的」登录，再参与回复。"
+            showAlert = true
+            return
+        }
+        showReply = true
+    }
+
+    @MainActor
+    private func loadFavorite() async {
+        guard auth.profile != nil else { return }
+        isFavorite = (try? await app.api.isFavorite(topicID: topicID)) ?? false
+    }
+
+    @MainActor
+    private func toggleFavorite() async {
+        guard auth.profile != nil else {
+            alertMessage = "请先在「我的」登录，再收藏主题。"
+            showAlert = true
+            return
+        }
+        guard !favoriteBusy else { return }
+        favoriteBusy = true
+        do {
+            if isFavorite {
+                try await app.api.removeFavorite(topicID: topicID)
+            } else {
+                try await app.api.addFavorite(topicID: topicID)
+            }
+            isFavorite.toggle()
+        } catch {
+            alertMessage = error.localizedDescription
+            showAlert = true
+        }
+        favoriteBusy = false
+    }
+
     @MainActor
     private func load() async {
         guard !loading else { return }
@@ -125,8 +211,116 @@ struct TopicDetailView: View {
     }
 }
 
+struct ReplyComposer: View {
+    @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var auth: NativeAuth
+    @Environment(\.dismiss) private var dismiss
+
+    let topicID: Int
+    var onSent: () -> Void
+
+    @State private var text = ""
+    @State private var sending = false
+    @State private var errorMessage: String? = nil
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 10) {
+                if auth.profile == nil {
+                    Text("请先在「我的」登录后再回复。")
+                        .font(ShellTheme.Fonts.footnote)
+                        .foregroundStyle(ShellTheme.danger)
+                }
+                TextEditor(text: $text)
+                    .focused($focused)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 240)
+                    .padding(8)
+                    .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(ShellTheme.separator, lineWidth: 0.5)
+                    )
+                    .disabled(sending)
+                HStack {
+                    Text("\(text.count) / 8000")
+                        .font(ShellTheme.Fonts.caption)
+                        .foregroundStyle(text.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
+                    Spacer()
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(ShellTheme.Fonts.caption)
+                            .foregroundStyle(ShellTheme.danger)
+                            .lineLimit(2)
+                    }
+                }
+            }
+            .padding(16)
+            .background(ShellTheme.pageBackground)
+            .navigationTitle("回复")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                        .disabled(sending)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("发送") {
+                        Task { await send() }
+                    }
+                    .disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear { focused = true }
+        }
+    }
+
+    @MainActor
+    private func send() async {
+        guard auth.profile != nil else {
+            errorMessage = "请先登录。"
+            return
+        }
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        guard value.count <= 8000 else {
+            errorMessage = "内容不能超过 8000 个字。"
+            return
+        }
+        guard !sending else { return }
+        sending = true
+        errorMessage = nil
+        do {
+            try await app.api.reply(topicID: topicID, content: value)
+            onSent()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        sending = false
+    }
+}
+
 struct PostCard: View {
+    @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var auth: NativeAuth
+
     let post: NativePost
+
+    @State private var likeState: Int
+    @State private var likeCount: Int
+    @State private var dislikeCount: Int
+    @State private var busy = false
+    @State private var alertMessage = ""
+    @State private var showAlert = false
+
+    init(post: NativePost) {
+        self.post = post
+        _likeState = State(initialValue: post.likeState ?? 0)
+        _likeCount = State(initialValue: post.likeCount ?? 0)
+        _dislikeCount = State(initialValue: post.dislikeCount ?? 0)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -163,12 +357,25 @@ struct PostCard: View {
             }
 
             HStack(spacing: 14) {
-                Label(NativeFormat.count(post.likeCount), systemImage: "hand.thumbsup")
-                Label(NativeFormat.count(post.dislikeCount), systemImage: "hand.thumbsdown")
+                Button {
+                    Task { await setLike(1) }
+                } label: {
+                    Label(NativeFormat.count(likeCount), systemImage: likeState == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+                        .foregroundStyle(likeState == 1 ? ShellTheme.accent : ShellTheme.secondaryText)
+                }
+                .disabled(busy)
+                Button {
+                    Task { await setLike(2) }
+                } label: {
+                    Label(NativeFormat.count(dislikeCount), systemImage: likeState == 2 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                        .foregroundStyle(likeState == 2 ? ShellTheme.danger : ShellTheme.secondaryText)
+                }
+                .disabled(busy)
                 Spacer(minLength: 0)
+                if busy { ProgressView() }
             }
             .font(ShellTheme.Fonts.caption)
-            .foregroundStyle(ShellTheme.secondaryText)
+            .buttonStyle(.plain)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -177,6 +384,11 @@ struct PostCard: View {
             RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner)
                 .stroke(ShellTheme.separator, lineWidth: 0.5)
         )
+        .alert("提示", isPresented: $showAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
     }
 
     private var floorTitle: String {
@@ -191,5 +403,28 @@ struct PostCard: View {
             .padding(.vertical, 2)
             .background(color.opacity(0.15), in: Capsule())
             .foregroundStyle(color)
+    }
+
+    @MainActor
+    private func setLike(_ target: Int) async {
+        guard auth.profile != nil else {
+            alertMessage = "请先在「我的」登录，再参与赞踩。"
+            showAlert = true
+            return
+        }
+        guard !busy else { return }
+        busy = true
+        do {
+            let next = likeState == target ? 0 : target
+            try await app.api.setLike(postID: post.id, state: next)
+            let state = try await app.api.likeState(postID: post.id)
+            likeState = state.likeState ?? next
+            likeCount = state.likeCount ?? likeCount
+            dislikeCount = state.dislikeCount ?? dislikeCount
+        } catch {
+            alertMessage = error.localizedDescription
+            showAlert = true
+        }
+        busy = false
     }
 }
