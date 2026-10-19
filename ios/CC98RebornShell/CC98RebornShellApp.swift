@@ -5,8 +5,9 @@ import Combine
 
 @main
 struct CC98RebornShellApp: App {
-    @StateObject private var model = ShellModel()
-    var body: some Scene { WindowGroup { ShellView(model: model) } }
+    var body: some Scene {
+        WindowGroup { NativeRootView() }
+    }
 }
 
 struct BrowserSurface: UIViewRepresentable {
