@@ -5,6 +5,13 @@ enum ShellMode: String { case original, enhanced
     var title: String { self == .original ? "原站模式" : "Reborn 验证" }
 }
 
+// The web page owns the forum session; the shell can only report what the
+// isolated-world receiver answers. Failure to read is never treated as
+// "signed out" (MOBILE_UI_SPEC.md 14.1).
+enum WebAccountState: Equatable {
+    case unknown, checking, unavailable, signedIn(String)
+}
+
 enum ShellAction: Identifiable {
     case reload, home, mode(ShellMode)
     var id: String { switch self { case .reload: return "reload"; case .home: return "home"; case .mode(let mode): return mode.rawValue } }
@@ -26,7 +33,7 @@ struct DiagnosticEntry: Identifiable {
 
 struct ShellSheet: Identifiable {
     let id = UUID()
-    enum Content { case diagnostics, safari(URL), share([Any]), popup(WKWebView) }
+    enum Content { case diagnostics, my, safari(URL), share([Any]), popup(WKWebView) }
     let content: Content
 }
 
@@ -50,6 +57,8 @@ final class ShellModel: ObservableObject {
     @Published var authStatus = "尚未绑定；请使用网页遮罩中的同账号绑定按钮"
     @Published var authBusy = false
     @Published var authBound = false
+    @Published var pageTitle = ""
+    @Published var webAccount: WebAccountState = .unknown
     let dataStore: WKWebsiteDataStore
     let assets: RebornAssets?
     let settings: LocalSettingsStore?
@@ -61,6 +70,7 @@ final class ShellModel: ObservableObject {
     private var popupWebView: WKWebView?
     private var lastRequestedURL = ShellPolicy.home
     private var observations: [NSKeyValueObservation] = []
+    private var accountProbeID = UUID()
     lazy var downloads = NativeDownloads(model: self)
     lazy var oauth = NativeOAuth(model: self)
 
@@ -141,6 +151,9 @@ final class ShellModel: ObservableObject {
         webView = browser
         viewID = UUID()
         canGoBack = false; canGoForward = false; isLoading = false; progress = 0
+        pageTitle = ""
+        webAccount = .unknown
+        accountProbeID = UUID()
         errorMessage = nil
         runtimeState = mode == .original ? "未启用增强" : "等待官方页面；尚未验证注入"
         observations = [
@@ -148,7 +161,8 @@ final class ShellModel: ObservableObject {
             browser.observe(\.estimatedProgress, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.progress = browser.estimatedProgress } },
             browser.observe(\.canGoBack, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.canGoBack = browser.canGoBack } },
             browser.observe(\.canGoForward, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.canGoForward = browser.canGoForward } },
-            browser.observe(\.isLoading, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.isLoading = browser.isLoading } }
+            browser.observe(\.isLoading, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.isLoading = browser.isLoading } },
+            browser.observe(\.title, options: [.new]) { [weak self] browser, _ in Task { @MainActor in guard browser === self?.webView else { return }; self?.pageTitle = browser.title ?? "" } }
         ]
         configureScripts(for: url, browser: browser)
         record("session.created", details: ["mode": mode.rawValue])
@@ -192,6 +206,7 @@ final class ShellModel: ObservableObject {
     func update(_ browser: WKWebView) {
         guard browser === webView else { return }
         host = browser.url?.host ?? (isUITesting ? "本地测试" : "www.cc98.org")
+        pageTitle = browser.title ?? pageTitle
         canGoBack = browser.canGoBack
         canGoForward = browser.canGoForward
         isLoading = browser.isLoading
@@ -256,6 +271,7 @@ final class ShellModel: ObservableObject {
 
     func notifyBindingChanges(_ changes: [String: Any]) {
         authBound = settings?.binding != nil
+        if mode == .enhanced { refreshWebAccount() }
         guard !changes.isEmpty, mode == .enhanced, let browser = webView, ShellPolicy.isForum(browser.url) else { return }
         browser.callAsyncJavaScript("globalThis.__CC98IOS__?.receiveStorageChanges(changes, 'local');", arguments: ["changes": changes], in: nil, in: .world(name: ShellPolicy.worldName), completionHandler: { [weak self] result in
             if case .failure = result { self?.record("auth.notification.failed") }
@@ -265,6 +281,58 @@ final class ShellModel: ObservableObject {
     func retryBinding() { oauth.login(expectedAccount: nil) { [weak self] result in
         if result["ok"] as? Bool != true { self?.authStatus = result["error"] as? String ?? OAuthFailure.unavailable.message }
     } }
+
+    func refreshWebAccountIfNeeded() {
+        if case .unknown = webAccount { refreshWebAccount() }
+    }
+
+    // Reads the account through the existing isolated-world receiver only; no
+    // cookie or token enters Swift. A timeout or missing receiver is reported
+    // as "unavailable", never as a signed-out state.
+    func refreshWebAccount() {
+        guard mode == .enhanced, !isUITesting, let browser = webView, ShellPolicy.isForum(browser.url) else {
+            webAccount = .unknown
+            return
+        }
+        let probe = UUID()
+        accountProbeID = probe
+        webAccount = .checking
+        var answered = false
+        let complete: (WebAccountState) -> Void = { [weak self] state in
+            guard let self else { return }
+            Task { @MainActor in
+                guard self.accountProbeID == probe else { return }
+                self.webAccount = state
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            guard !answered else { return }
+            answered = true
+            complete(.unavailable)
+        }
+        browser.callAsyncJavaScript(
+            "return await globalThis.__CC98IOS__?.dispatchMessage({type:'CC98_REBORN_GET_CURRENT_WEB_ACCOUNT'});",
+            arguments: [:], in: nil, in: .world(name: ShellPolicy.worldName)
+        ) { result in
+            guard !answered else { return }
+            answered = true
+            guard case .success(let raw) = result,
+                  let response = raw as? [String: Any],
+                  response["ok"] as? Bool == true,
+                  let account = response["account"] as? [String: Any],
+                  let id = OAuthProtocol.userID(account["userId"]) else {
+                complete(.unavailable)
+                return
+            }
+            complete(.signedIn(id))
+        }
+    }
+
+    func switchMode(_ mode: ShellMode) {
+        guard mode != self.mode else { return }
+        sheet = nil
+        perform(.mode(mode))
+    }
 
     func confirmDownload(url: URL, browser: WKWebView, completion: @escaping (Bool) -> Void) {
         NativePrompt.confirm(on: browser, title: "下载文件", message: "将从 \(url.host ?? "网页") 下载到临时目录，完成后可分享或存储到“文件”。", completion: completion)

@@ -17,80 +17,178 @@ struct BrowserSurface: UIViewRepresentable {
 
 struct ShellView: View {
     @ObservedObject var model: ShellModel
-    private let accent = Color(red: 0.05, green: 0.38, blue: 0.31)
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: model.mode == .original ? "globe" : "sparkles").foregroundStyle(accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.mode.title).font(.headline).accessibilityIdentifier("modeLabel")
-                    Text(model.host).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer()
-                Text("开发验证").font(.caption.weight(.medium)).padding(.horizontal, 9).padding(.vertical, 5)
-                    .background(accent.opacity(0.09), in: Capsule()).foregroundStyle(accent)
-                Button { model.sheet = ShellSheet(content: .diagnostics) } label: { Image(systemName: "info.circle").frame(width: 36, height: 36) }
-                    .accessibilityLabel("状态与诊断").accessibilityIdentifier("diagnosticsButton")
-            }.padding(.horizontal, 16).padding(.vertical, 8).background(.bar)
-
-            if model.isLoading { ProgressView(value: model.progress).tint(accent).accessibilityLabel("页面加载进度") }
-            if let error = model.errorMessage {
-                VStack(alignment: .leading, spacing: 9) {
-                    Label(error, systemImage: "exclamationmark.triangle").font(.subheadline).fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("networkError")
-                    HStack {
-                        Button("重试") { model.request(.reload) }.accessibilityIdentifier("retryButton")
-                        if model.mode == .enhanced {
-                            Button("恢复原站") { model.request(.mode(.original)) }.accessibilityIdentifier("restoreOriginalButton")
-                        }
-                    }.buttonStyle(.bordered)
-                }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Color.orange.opacity(0.12))
+            header
+            if model.isLoading {
+                ProgressView(value: model.progress)
+                    .tint(ShellTheme.accent)
+                    .accessibilityLabel("页面加载进度")
             }
-            if model.mode == .enhanced {
-                Text("增强需同账号 OpenID 绑定与可信水印。授权在系统窗口完成；随时可切回原站。")
-                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading).background(accent.opacity(0.04))
-                    .accessibilityIdentifier("enhancedNotice")
-            }
+            if let error = model.errorMessage { errorCard(error) }
+            if model.mode == .enhanced { enhancedNotice }
             if let browser = model.webView { BrowserSurface(browser: browser).id(model.viewID) }
             else { ContentUnavailableView("网页尚未创建", systemImage: "globe", description: Text("请关闭并重新打开 App。")) }
-
-            HStack(spacing: 2) {
-                Button { model.webView?.goBack() } label: { Image(systemName: "chevron.left").frame(maxWidth: .infinity, minHeight: 44) }
-                    .disabled(!model.canGoBack).accessibilityLabel("后退").accessibilityIdentifier("backButton")
-                Button { model.webView?.goForward() } label: { Image(systemName: "chevron.right").frame(maxWidth: .infinity, minHeight: 44) }
-                    .disabled(!model.canGoForward).accessibilityLabel("前进")
-                Button {
-                    if model.isLoading { model.stopLoading() }
-                    else { model.request(.reload) }
-                } label: { Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise").frame(maxWidth: .infinity, minHeight: 44) }
-                    .accessibilityLabel(model.isLoading ? "停止加载" : "重新加载").accessibilityIdentifier("reloadButton")
-                Button { model.request(.mode(model.mode == .original ? .enhanced : .original)) } label: {
-                    VStack(spacing: 2) { Image(systemName: "rectangle.on.rectangle"); Text(model.mode == .original ? "试用增强" : "恢复原站").font(.caption2) }
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }.accessibilityIdentifier("modeToggleButton")
-                Menu {
-                    Button("返回 CC98 首页", systemImage: "house") { model.request(.home) }
-                    Button("分享当前地址", systemImage: "square.and.arrow.up") {
-                        if let url = model.webView?.url { try? model.share([url]) }
-                    }.disabled(!ShellPolicy.isWebURL(model.webView?.url))
-                    Button("状态、下载与诊断", systemImage: "list.bullet.rectangle") { model.sheet = ShellSheet(content: .diagnostics) }
-                } label: { Image(systemName: "ellipsis").frame(maxWidth: .infinity, minHeight: 44) }.accessibilityLabel("更多")
-            }.padding(.horizontal, 8).padding(.vertical, 3).background(.bar).tint(accent)
+            bottomBar
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(ShellTheme.pageBackground)
         .alert(item: $model.pendingAction) { action in
             Alert(title: Text("先确认未提交内容"), message: Text(action.detail), primaryButton: .destructive(Text("继续"), action: { model.perform(action) }), secondaryButton: .cancel(Text("取消")))
         }
         .sheet(item: $model.sheet, onDismiss: { model.sheetDismissed() }) { sheet in
             switch sheet.content {
+            case .my: MyView(model: model)
             case .diagnostics: DiagnosticsView(model: model)
             case .safari(let url): SafariSurface(url: url)
             case .share(let items): ShareSurface(items: items)
             case .popup(let browser): PopupView(model: model, browser: browser)
             }
         }
+    }
+
+    @MainActor
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: model.mode == .original ? "globe" : "sparkles")
+                .font(.title3)
+                .foregroundStyle(ShellTheme.accent)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.pageTitle.isEmpty ? "CC98" : model.pageTitle)
+                    .font(ShellTheme.Fonts.navigationTitle)
+                    .foregroundStyle(ShellTheme.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .accessibilityIdentifier("pageTitle")
+                Text(model.mode.title)
+                    .font(ShellTheme.Fonts.caption)
+                    .foregroundStyle(ShellTheme.secondaryText)
+                    .accessibilityIdentifier("modeLabel")
+            }
+            Spacer(minLength: 8)
+            Button { model.sheet = ShellSheet(content: .my) } label: {
+                Image(systemName: "person.crop.circle")
+                    .font(.title3)
+                    .frame(width: ShellTheme.Metrics.touch, height: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("我的")
+            .accessibilityIdentifier("myButton")
+            Button { model.sheet = ShellSheet(content: .diagnostics) } label: {
+                Image(systemName: "info.circle")
+                    .font(.title3)
+                    .frame(width: ShellTheme.Metrics.touch, height: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("状态与诊断")
+            .accessibilityIdentifier("diagnosticsButton")
+        }
+        .padding(.horizontal, ShellTheme.Metrics.margin)
+        .background(ShellTheme.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ShellTheme.separator).frame(height: 0.5)
+        }
+        .tint(ShellTheme.accent)
+    }
+
+    @MainActor
+    private func errorCard(_ error: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .font(ShellTheme.Fonts.footnote)
+                .foregroundStyle(ShellTheme.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("networkError")
+            HStack(spacing: 10) {
+                Button("重试") { model.request(.reload) }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("retryButton")
+                if model.mode == .enhanced {
+                    Button("恢复原站") { model.request(.mode(.original)) }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("restoreOriginalButton")
+                }
+            }
+            .font(ShellTheme.Fonts.caption)
+            .tint(ShellTheme.accent)
+        }
+        .padding(ShellTheme.Metrics.margin)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ShellTheme.warning.opacity(0.12))
+    }
+
+    @MainActor
+    private var enhancedNotice: some View {
+        Text("增强模式会核对同账号 OpenID 绑定；可在“我的”切回原站。")
+            .font(ShellTheme.Fonts.caption)
+            .foregroundStyle(ShellTheme.secondaryText)
+            .padding(.horizontal, ShellTheme.Metrics.margin)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ShellTheme.accentSoft)
+            .accessibilityIdentifier("enhancedNotice")
+    }
+
+    @MainActor
+    private var bottomBar: some View {
+        HStack(spacing: 0) {
+            Button { model.webView?.goBack() } label: {
+                Image(systemName: "chevron.left")
+                    .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .disabled(!model.canGoBack)
+            .accessibilityLabel("后退")
+            .accessibilityIdentifier("backButton")
+            Button { model.webView?.goForward() } label: {
+                Image(systemName: "chevron.right")
+                    .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .disabled(!model.canGoForward)
+            .accessibilityLabel("前进")
+            .accessibilityIdentifier("forwardButton")
+            Button {
+                if model.isLoading { model.stopLoading() } else { model.request(.reload) }
+            } label: {
+                Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
+                    .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel(model.isLoading ? "停止加载" : "重新加载")
+            .accessibilityIdentifier("reloadButton")
+            Button {
+                model.request(.mode(model.mode == .original ? .enhanced : .original))
+            } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: model.mode == .original ? "sparkles" : "globe")
+                    Text(model.mode == .original ? "增强" : "原站")
+                        .font(ShellTheme.Fonts.caption)
+                }
+                .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel(model.mode == .original ? "切换到增强模式" : "恢复原站模式")
+            .accessibilityIdentifier("modeToggleButton")
+            Menu {
+                Button("返回 CC98 首页", systemImage: "house") { model.request(.home) }
+                Button("分享当前地址", systemImage: "square.and.arrow.up") {
+                    if let url = model.webView?.url { try? model.share([url]) }
+                }
+                .disabled(!ShellPolicy.isWebURL(model.webView?.url))
+                Divider()
+                Button("我的与设置", systemImage: "person.crop.circle") { model.sheet = ShellSheet(content: .my) }
+                Button("状态与诊断", systemImage: "list.bullet.rectangle") { model.sheet = ShellSheet(content: .diagnostics) }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("更多")
+        }
+        .font(.system(size: 20))
+        .foregroundStyle(ShellTheme.primaryText)
+        .padding(.horizontal, 8)
+        .background(ShellTheme.surface)
+        .overlay(alignment: .top) {
+            Rectangle().fill(ShellTheme.separator).frame(height: 0.5)
+        }
+        .tint(ShellTheme.accent)
     }
 }
 
@@ -103,6 +201,7 @@ private struct DiagnosticsView: View {
             List {
                 Section("当前状态") {
                     LabeledContent("模式", value: model.mode.title)
+                    LabeledContent("当前地址", value: model.host)
                     LabeledContent("本地 Reborn", value: model.extensionVersion)
                     Text(model.status)
                     Text(model.runtimeState)
