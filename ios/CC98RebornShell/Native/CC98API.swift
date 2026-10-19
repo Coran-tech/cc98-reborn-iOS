@@ -228,6 +228,20 @@ final class CC98API {
         )
     }
 
+    func voteInfo(topicID: Int) async throws -> NativeVoteInfo {
+        try await get("/topic/\(topicID)/vote", authenticated: false)
+    }
+
+    func castVote(topicID: Int, items: [Int]) async throws {
+        try await send(
+            "/topic/\(topicID)/vote",
+            method: "POST",
+            body: try json(["items": items]),
+            contentType: "application/json",
+            authenticated: true
+        )
+    }
+
     // MARK: Messages
 
     func messageCounts() async throws -> NativeMessageCounts {
