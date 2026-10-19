@@ -310,7 +310,8 @@ struct MyPostsView: View {
                             TopicDetailView(
                                 topicID: item.topicId ?? 0,
                                 boardID: item.boardId,
-                                initialPage: pageForFloor(item.floor)
+                                initialPage: pageForFloor(item.floor),
+                                initialFloor: item.floor
                             )
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {

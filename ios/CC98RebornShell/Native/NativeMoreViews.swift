@@ -770,6 +770,7 @@ struct SettingsView: View {
     @EnvironmentObject private var library: NativeLibrary
     @AppStorage("native.appearance") private var appearance = "system"
     @AppStorage("native.replyRebornTail") private var replyTail = true
+    @AppStorage("native.saveBrowseProgress") private var saveBrowseProgress = false
 
     var body: some View {
         Form {
@@ -784,6 +785,13 @@ struct SettingsView: View {
 
             Section("回复") {
                 Toggle("附加 CC98 Reborn 小尾巴", isOn: $replyTail)
+            }
+
+            Section("浏览") {
+                Toggle("保存浏览进度", isOn: $saveBrowseProgress)
+            } footer: {
+                Text("开启后再次进入主题会回到上次页/楼层；关闭时默认从 1 楼开始。")
+                    .font(ShellTheme.Fonts.caption)
             }
 
             Section("我的内容") {

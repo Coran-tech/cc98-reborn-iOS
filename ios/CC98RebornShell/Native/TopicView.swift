@@ -114,6 +114,7 @@ struct TopicDetailView: View {
     @State private var scrollNonce = 0
     @State private var showFloorJump = false
     @State private var traceRequest: NativeTraceRequest? = nil
+    @AppStorage("native.saveBrowseProgress") private var saveBrowseProgress = false
     @State private var scrollToTopOnNextLoad = false
     @State private var didAutoResume: Bool
     @State private var atTopicBottom = false
@@ -281,7 +282,7 @@ struct TopicDetailView: View {
         .task { await loadFavorite() }
         .task { await loadHot() }
         .onDisappear {
-            if let topic {
+            if saveBrowseProgress, let topic {
                 library.recordPosition(topicID: topicID, page: page, floor: posts.first?.floor)
             }
         }
@@ -701,7 +702,7 @@ struct TopicDetailView: View {
                 }
             }
             library.recordHistory(loadedTopic)
-            if page == 1, !didAutoResume,
+            if page == 1, saveBrowseProgress, !didAutoResume,
                let saved = library.lastPosition(for: topicID),
                saved.page > 1 || (saved.floor ?? 1) > 1 {
                 didAutoResume = true
@@ -712,7 +713,7 @@ struct TopicDetailView: View {
                     return
                 }
             }
-            if page > 1 {
+            if saveBrowseProgress, page > 1 {
                 library.recordPosition(topicID: topicID, page: page, floor: loadedPosts.first?.floor)
             }
             if loadedTopic.isVote == true {
