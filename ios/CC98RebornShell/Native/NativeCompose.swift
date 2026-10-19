@@ -19,8 +19,9 @@ struct ComposerImageButton: View {
                 .foregroundStyle(ShellTheme.accent)
         }
         .disabled(uploading)
-        .onChange(of: item?.itemIdentifier) { _, _ in
-            Task { await upload(item) }
+        .onChange(of: item) { _, newItem in
+            guard let newItem else { return }
+            Task { await upload(newItem) }
         }
         .alert("图片上传失败", isPresented: $showError) {
             Button("好", role: .cancel) {}
@@ -30,10 +31,12 @@ struct ComposerImageButton: View {
     }
 
     @MainActor
-    private func upload(_ selection: PhotosPickerItem?) async {
-        guard let selection else { return }
+    private func upload(_ selection: PhotosPickerItem) async {
         uploading = true
-        defer { uploading = false }
+        defer {
+            uploading = false
+            item = nil
+        }
         do {
             guard let data = try await selection.loadTransferable(type: Data.self) else {
                 throw NSError(domain: "CC98Reborn", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法读取所选图片。"])
@@ -41,7 +44,6 @@ struct ComposerImageButton: View {
             let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) ?? data
             let url = try await app.api.uploadImage(jpeg)
             text += "\n[img]\(url)[/img]\n"
-            item = nil
         } catch {
             errorMessage = error.localizedDescription
             showError = true
