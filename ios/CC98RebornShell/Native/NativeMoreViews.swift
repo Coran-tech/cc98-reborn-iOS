@@ -864,6 +864,13 @@ struct UserProfileView: View {
                                         .font(ShellTheme.Fonts.footnote)
                                         .foregroundStyle(ShellTheme.secondaryText)
                                 }
+                                if let intro = user.introduction, !intro.isEmpty {
+                                    Text(intro)
+                                        .font(ShellTheme.Fonts.footnote)
+                                        .foregroundStyle(ShellTheme.secondaryText)
+                                        .lineLimit(3)
+                                        .padding(.top, 1)
+                                }
                             }
                         }
                         HStack(spacing: 10) {
@@ -875,10 +882,9 @@ struct UserProfileView: View {
                         }
                     }
 
-                    if let intro = user.introduction, !intro.isEmpty {
-                        Section("个人简介") {
-                            Text(intro)
-                                .font(ShellTheme.Fonts.footnote)
+                    if let signature = user.signatureCode, !signature.isEmpty {
+                        Section("签名档") {
+                            UBBContentView(source: signature)
                         }
                     }
 

@@ -193,6 +193,9 @@ struct MyTopicsView: View {
     @State private var error: String? = nil
     @State private var page = 0
     @State private var hasMore = true
+    @State private var linkedTopic: NativeLinkedTopic? = nil
+    @State private var linkedBoard: NativeLinkedBoard? = nil
+    @State private var linkedUser: NativeLinkedUser? = nil
 
     private let pageSize = 10
 
@@ -253,6 +256,30 @@ struct MyTopicsView: View {
         }
         .background(ShellTheme.pageBackground)
         .task { await load(reset: true) }
+        .environment(\.openURL, OpenURLAction { url in
+            if let topic = NativeLinkedTopic(url: url) {
+                linkedTopic = topic
+                return .handled
+            }
+            if let board = NativeLinkedBoard(url: url) {
+                linkedBoard = board
+                return .handled
+            }
+            if let user = NativeLinkedUser(url: url) {
+                linkedUser = user
+                return .handled
+            }
+            return .systemAction
+        })
+        .navigationDestination(item: $linkedTopic) { link in
+            TopicDetailView(topicID: link.id, boardID: nil, initialPage: link.page, initialFloor: link.floor)
+        }
+        .navigationDestination(item: $linkedBoard) { link in
+            BoardTopicsView(board: NativeBoard.placeholder(id: link.id))
+        }
+        .navigationDestination(item: $linkedUser) { link in
+            UserProfileView(userID: link.userID, userName: link.userName)
+        }
     }
 
     @MainActor
@@ -286,6 +313,9 @@ struct MyPostsView: View {
     @State private var error: String? = nil
     @State private var page = 0
     @State private var hasMore = true
+    @State private var linkedTopic: NativeLinkedTopic? = nil
+    @State private var linkedBoard: NativeLinkedBoard? = nil
+    @State private var linkedUser: NativeLinkedUser? = nil
 
     private let pageSize = 10
 
@@ -356,6 +386,30 @@ struct MyPostsView: View {
         }
         .background(ShellTheme.pageBackground)
         .task { await load(reset: true) }
+        .environment(\.openURL, OpenURLAction { url in
+            if let topic = NativeLinkedTopic(url: url) {
+                linkedTopic = topic
+                return .handled
+            }
+            if let board = NativeLinkedBoard(url: url) {
+                linkedBoard = board
+                return .handled
+            }
+            if let user = NativeLinkedUser(url: url) {
+                linkedUser = user
+                return .handled
+            }
+            return .systemAction
+        })
+        .navigationDestination(item: $linkedTopic) { link in
+            TopicDetailView(topicID: link.id, boardID: nil, initialPage: link.page, initialFloor: link.floor)
+        }
+        .navigationDestination(item: $linkedBoard) { link in
+            BoardTopicsView(board: NativeBoard.placeholder(id: link.id))
+        }
+        .navigationDestination(item: $linkedUser) { link in
+            UserProfileView(userID: link.userID, userName: link.userName)
+        }
     }
 
     private func pageForFloor(_ floor: Int?) -> Int {
