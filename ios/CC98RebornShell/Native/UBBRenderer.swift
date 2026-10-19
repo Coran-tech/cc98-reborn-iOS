@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import Foundation
+import ImageIO
 
 // Block-level UBB renderer for native topic posts. It handles the tags that
 // appear in real CC98 content: inline emphasis/color/links, quotes, code,
@@ -89,6 +90,7 @@ struct UBBBlocksView: View {
                 UBBBlockView(block: blocks[index])
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -233,6 +235,9 @@ struct UBBImage: View {
 
     @Environment(\.ubbGallery) private var gallery
     @State private var showViewer = false
+    @State private var image: UIImage? = nil
+    @State private var imageFailed = false
+    private static let imageCache = NSCache<NSURL, UIImage>()
 
     private var resolvedGallery: [URL] {
         guard let url else { return gallery }
@@ -261,28 +266,17 @@ struct UBBImage: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(ShellTheme.separator, lineWidth: 0.5)
                     )
+                } else if let image {
+                    constrainedImage(image)
+                } else if imageFailed {
+                    failure
                 } else {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case let .success(image):
-                            image
-                                .resizable()
-                                .scaledToFit()
-                        case .failure:
-                            failure
-                        case .empty:
-                            ProgressView()
-                                .frame(maxWidth: .infinity, minHeight: 120)
-                        @unknown default:
-                            failure
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(ShellTheme.separator, lineWidth: 0.5))
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 120)
                 }
             }
             .contentShape(Rectangle())
+            .task(id: url) { await loadImage() }
             .onTapGesture { showViewer = true }
             .accessibilityLabel(alt?.isEmpty == false ? alt! : "图片")
             .accessibilityHint(hidden ? "查看隐藏图片" : "查看大图")
@@ -292,6 +286,55 @@ struct UBBImage: View {
         } else {
             failure
         }
+    }
+
+    private func constrainedImage(_ image: UIImage) -> some View {
+        let ratio = max(0.05, image.size.width / max(1, image.size.height))
+        return GeometryReader { proxy in
+            let width = max(1, proxy.size.width)
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: width, height: max(1, width / ratio))
+        }
+        .aspectRatio(ratio, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(ShellTheme.separator, lineWidth: 0.5))
+    }
+
+    @MainActor
+    private func loadImage() async {
+        guard !hidden, image == nil, !imageFailed, let url else { return }
+        if let cached = Self.imageCache.object(forKey: url as NSURL) {
+            image = cached
+            return
+        }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+                throw URLError(.badServerResponse)
+            }
+            guard let decoded = Self.decode(data) else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            Self.imageCache.setObject(decoded, forKey: url as NSURL)
+            image = decoded
+        } catch {
+            imageFailed = true
+        }
+    }
+
+    private static func decode(_ data: Data) -> UIImage? {
+        if let image = UIImage(data: data) {
+            return image
+        }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 
     private var failure: some View {
