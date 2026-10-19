@@ -1,0 +1,701 @@
+import SwiftUI
+import UIKit
+
+// Block-level UBB renderer for native topic posts. It handles the tags that
+// appear in real CC98 content: inline emphasis/color/links, quotes, code,
+// images, emotions, lists, tables, alignment and media placeholders.
+enum UBBAlignment {
+    case leading, center, trailing
+
+    var textAlignment: TextAlignment {
+        switch self {
+        case .leading: return .leading
+        case .center: return .center
+        case .trailing: return .trailing
+        }
+    }
+
+    var frameAlignment: Alignment {
+        switch self {
+        case .leading: return .leading
+        case .center: return .center
+        case .trailing: return .trailing
+        }
+    }
+}
+
+enum UBBInline {
+    case text(AttributedString)
+    case emotion(String)
+}
+
+indirect enum UBBBlock {
+    case text([UBBInline], UBBAlignment)
+    case image(URL?, String?)
+    case quote([UBBBlock])
+    case code(String)
+    case divider
+    case list([String])
+    case table([[String]])
+    case media(String, URL?)
+}
+
+struct UBBContentView: View {
+    let source: String
+    var markdown: Bool = false
+
+    var body: some View {
+        UBBBlocksView(blocks: UBBBlockParser.parse(source, markdown: markdown))
+    }
+}
+
+struct UBBBlocksView: View {
+    let blocks: [UBBBlock]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(blocks.indices, id: \.self) { index in
+                UBBBlockView(block: blocks[index])
+            }
+        }
+    }
+}
+
+struct UBBBlockView: View {
+    let block: UBBBlock
+
+    @ViewBuilder
+    var body: some View {
+        switch block {
+        case let .text(inlines, alignment):
+            UBBInlineText(inlines: inlines)
+                .multilineTextAlignment(alignment.textAlignment)
+                .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
+        case let .image(url, alt):
+            UBBImage(url: url, alt: alt)
+        case let .quote(blocks):
+            HStack(alignment: .top, spacing: 10) {
+                Rectangle()
+                    .fill(ShellTheme.accent.opacity(0.4))
+                    .frame(width: 3)
+                AnyView(UBBBlocksView(blocks: blocks))
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+        case let .code(text):
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(text)
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundStyle(ShellTheme.primaryText)
+                    .padding(10)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+        case .divider:
+            Divider().overlay(ShellTheme.separator)
+        case let .list(items):
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(items.indices, id: \.self) { index in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•").foregroundStyle(ShellTheme.accent)
+                        Text(items[index])
+                            .font(ShellTheme.Fonts.body)
+                            .foregroundStyle(ShellTheme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        case let .table(rows):
+            ScrollView(.horizontal, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(rows.indices, id: \.self) { rowIndex in
+                        HStack(spacing: 0) {
+                            ForEach(rows[rowIndex].indices, id: \.self) { cellIndex in
+                                Text(rows[rowIndex][cellIndex])
+                                    .font(ShellTheme.Fonts.footnote)
+                                    .foregroundStyle(ShellTheme.primaryText)
+                                    .frame(minWidth: 80, alignment: .leading)
+                                    .padding(6)
+                            }
+                        }
+                        .background(rowIndex == 0 ? ShellTheme.secondarySurface : ShellTheme.surface)
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(ShellTheme.separator, lineWidth: 0.5))
+        case let .media(title, url):
+            if let url {
+                Link(destination: url) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.rectangle")
+                        Text(title.isEmpty ? url.absoluteString : title)
+                            .lineLimit(2)
+                    }
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.link)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+                }
+            } else if !title.isEmpty {
+                Text(title)
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.secondaryText)
+            }
+        }
+    }
+}
+
+struct UBBInlineText: View {
+    let inlines: [UBBInline]
+
+    var body: some View {
+        composed
+            .font(ShellTheme.Fonts.body)
+            .foregroundStyle(ShellTheme.primaryText)
+            .lineSpacing(3)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+
+    private var composed: Text {
+        inlines.reduce(Text("")) { result, inline in
+            switch inline {
+            case let .text(attributed):
+                return result + Text(attributed)
+            case let .emotion(id):
+                if let image = UBBEmotion.image(id) {
+                    return result + Text(Image(uiImage: image))
+                }
+                return result + Text("🙂")
+            }
+        }
+    }
+}
+
+struct UBBImage: View {
+    let url: URL?
+    let alt: String?
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        if let url {
+            Button {
+                openURL(url)
+            } label: {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    case .failure:
+                        failure
+                    case .empty:
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: 120)
+                    @unknown default:
+                        failure
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(ShellTheme.separator, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(alt?.isEmpty == false ? alt! : "图片")
+            .accessibilityHint("在浏览器中打开原图")
+        } else {
+            failure
+        }
+    }
+
+    private var failure: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "photo")
+                .font(.title3)
+                .foregroundStyle(ShellTheme.secondaryText)
+            Text(alt?.isEmpty == false ? alt! : "图片无法显示")
+                .font(ShellTheme.Fonts.caption)
+                .foregroundStyle(ShellTheme.secondaryText)
+            if let url {
+                Link("打开原图", destination: url)
+                    .font(ShellTheme.Fonts.caption)
+                    .foregroundStyle(ShellTheme.link)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+enum UBBEmotion {
+    private static let cache = NSCache<NSString, UIImage>()
+
+    static func image(_ id: String) -> UIImage? {
+        guard id.count > 2, let number = Int(id.dropFirst(2)) else { return nil }
+        let valid = (1...54).contains(number) || (1001...1040).contains(number) || (2001...2055).contains(number)
+        guard valid else { return nil }
+        let name = number < 100 ? String(format: "%02d", number) : String(number)
+        if let cached = cache.object(forKey: name as NSString) { return cached }
+        guard let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Reborn/images/ac"),
+              let image = UIImage(contentsOfFile: url.path) else { return nil }
+        let scaled = resize(image, to: CGSize(width: 20, height: 20))
+        cache.setObject(scaled, forKey: name as NSString)
+        return scaled
+    }
+
+    private static func resize(_ image: UIImage, to size: CGSize) -> UIImage {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 2
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+}
+
+enum UBBBlockParser {
+    private struct Tag {
+        let name: String
+        let value: String?
+        let closing: Bool
+        let range: Range<String.Index>
+    }
+
+    private static let blockTags: Set<String> = [
+        "quote", "code", "math", "md", "no-ubb", "list", "table",
+        "align", "center", "left", "right", "bili", "audio", "video",
+        "img", "hr", "line"
+    ]
+
+    private static let nestedTags: Set<String> = ["quote", "code", "math", "md", "no-ubb", "list", "table", "align", "center", "left", "right"]
+
+    static func parse(_ source: String, markdown: Bool) -> [UBBBlock] {
+        let text = decodeEntities(source)
+        if markdown, !looksLikeUBB(text), let attributed = try? AttributedString(markdown: text) {
+            return [.text([.text(attributed)], .leading)]
+        }
+        return parseBlocks(text)
+    }
+
+    // MARK: Blocks
+
+    private static func parseBlocks(_ source: String) -> [UBBBlock] {
+        var blocks: [UBBBlock] = []
+        var pending = ""
+        var index = source.startIndex
+
+        while index < source.endIndex {
+            guard source[index] == "[", let tag = readTag(source, at: index) else {
+                pending.append(source[index])
+                index = source.index(after: index)
+                continue
+            }
+
+            guard !tag.closing else {
+                pending += source[index..<tag.range.upperBound]
+                index = tag.range.upperBound
+                continue
+            }
+
+            guard blockTags.contains(tag.name) else {
+                pending += source[index..<tag.range.upperBound]
+                index = tag.range.upperBound
+                continue
+            }
+
+            if !pending.isEmpty {
+                appendText(pending, to: &blocks)
+                pending = ""
+            }
+
+            if tag.name == "hr" || tag.name == "line" {
+                blocks.append(.divider)
+                index = tag.range.upperBound
+                continue
+            }
+
+            if tag.name == "img" {
+                if let close = findClose("img", in: source, after: tag.range.upperBound) {
+                    let content = String(source[tag.range.upperBound..<close.lowerBound])
+                    let rawURL = (tag.value.flatMap { isRemoteURL($0) ? $0 : nil }) ?? content
+                    let alt = tag.value.flatMap { isRemoteURL($0) ? nil : ($0 == "1" ? nil : $0) }
+                    blocks.append(.image(resolveURL(rawURL), alt))
+                    index = close.upperBound
+                } else {
+                    blocks.append(.image(tag.value.flatMap(resolveURL), nil))
+                    index = tag.range.upperBound
+                }
+                continue
+            }
+
+            guard let close = findClose(tag.name, in: source, after: tag.range.upperBound) else {
+                pending += source[index..<tag.range.upperBound]
+                index = tag.range.upperBound
+                continue
+            }
+
+            let content = String(source[tag.range.upperBound..<close.lowerBound])
+            switch tag.name {
+            case "quote":
+                blocks.append(.quote(parseBlocks(content)))
+            case "code":
+                blocks.append(.code(trimNewlines(content)))
+            case "math":
+                blocks.append(.code(trimNewlines(content)))
+            case "md":
+                if let attributed = try? AttributedString(markdown: content) {
+                    blocks.append(.text([.text(attributed)], .leading))
+                } else {
+                    appendText(content, to: &blocks)
+                }
+            case "no-ubb":
+                blocks.append(.text([.text(AttributedString(cleanText(content)))], .leading))
+            case "list":
+                blocks.append(.list(parseList(content)))
+            case "table":
+                blocks.append(.table(parseTable(content)))
+            case "align", "center", "left", "right":
+                let alignment: UBBAlignment = tag.name == "center" ? .center : tag.name == "right" ? .trailing : .leading
+                blocks.append(.text(parseInline(content), alignment))
+            case "bili":
+                let identifier = trimNewlines(content).trimmingCharacters(in: .whitespacesAndNewlines)
+                let biliURL = identifier.hasPrefix("http")
+                    ? URL(string: identifier)
+                    : URL(string: "https://www.bilibili.com/video/" + identifier)
+                blocks.append(.media("Bilibili 视频", biliURL))
+            case "audio", "video":
+                blocks.append(.media(trimNewlines(content), resolveURL(content)))
+            default:
+                appendText(content, to: &blocks)
+            }
+            index = close.upperBound
+        }
+
+        if !pending.isEmpty {
+            appendText(pending, to: &blocks)
+        }
+        return blocks
+    }
+
+    private static func appendText(_ raw: String, to blocks: inout [UBBBlock]) {
+        let trimmed = trimNewlines(raw)
+        guard !trimmed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let inlines = parseInline(trimmed)
+        if !inlines.isEmpty {
+            blocks.append(.text(inlines, .leading))
+        }
+    }
+
+    // MARK: Inline
+
+    private static func parseInline(_ source: String) -> [UBBInline] {
+        var parser = InlineParser()
+        return parser.parse(source)
+    }
+
+    private struct InlineParser {
+        private var bold = 0
+        private var italic = 0
+        private var underline = 0
+        private var strike = 0
+        private var code = 0
+        private var link: URL?
+        private var color: Color?
+        private var size: CGFloat?
+        private var result: [UBBInline] = []
+        private var buffer = AttributedString()
+
+        mutating func parse(_ source: String) -> [UBBInline] {
+            var index = source.startIndex
+            var cursor = index
+            while index < source.endIndex {
+                guard source[index] == "[", let tag = UBBBlockParser.readTag(source, at: index) else {
+                    index = source.index(after: index)
+                    continue
+                }
+                if tag.range.lowerBound > cursor {
+                    append(String(source[cursor..<tag.range.lowerBound]))
+                }
+                handle(tag)
+                cursor = tag.range.upperBound
+                index = tag.range.upperBound
+            }
+            if cursor < source.endIndex {
+                append(String(source[cursor...]))
+            }
+            flush()
+            return result
+        }
+
+        private mutating func handle(_ tag: UBBBlockParser.Tag) {
+            switch tag.name {
+            case "b": bold = max(0, bold + (tag.closing ? -1 : 1))
+            case "i", "em": italic = max(0, italic + (tag.closing ? -1 : 1))
+            case "u": underline = max(0, underline + (tag.closing ? -1 : 1))
+            case "del": strike = max(0, strike + (tag.closing ? -1 : 1))
+            case "code": code = max(0, code + (tag.closing ? -1 : 1))
+            case "url", "email":
+                if tag.closing {
+                    link = nil
+                } else if let value = tag.value {
+                    link = tag.name == "email" ? URL(string: "mailto:" + value) : UBBBlockParser.resolveURL(value)
+                }
+            case "color":
+                if tag.closing {
+                    color = nil
+                } else if let value = tag.value {
+                    color = UBBBlockParser.colorFrom(value)
+                }
+            case "size":
+                if tag.closing {
+                    size = nil
+                } else if let value = tag.value, let number = Int(value) {
+                    size = UBBBlockParser.fontSize(number)
+                }
+            case "br":
+                append("\n")
+            case "hr", "line":
+                append("\n———\n")
+            case "img":
+                flush()
+                result.append(.text(AttributedString("［图片］")))
+            default:
+                if tag.name.hasPrefix("ac"), tag.name.count > 2,
+                   tag.name.dropFirst(2).allSatisfy({ $0.isNumber }) {
+                    flush()
+                    result.append(.emotion(tag.name))
+                }
+            }
+        }
+
+        private mutating func append(_ raw: String) {
+            let text = UBBBlockParser.cleanText(raw)
+            guard !text.isEmpty else { return }
+            var container = AttributeContainer()
+            var font = Font.body
+            if let size { font = .system(size: size) }
+            if bold > 0 { font = font.bold() }
+            if italic > 0 { font = font.italic() }
+            if code > 0 { font = .system(size: size ?? 15, design: .monospaced) }
+            if bold > 0 || italic > 0 || code > 0 || size != nil { container.font = font }
+            if underline > 0 { container.underlineStyle = Text.LineStyle.single }
+            if strike > 0 { container.strikethroughStyle = Text.LineStyle.single }
+            if let link { container.link = link }
+            if let color { container.foregroundColor = color }
+            var run = AttributedString(text)
+            run.setAttributes(container)
+            buffer.append(run)
+        }
+
+        private mutating func flush() {
+            guard !buffer.characters.isEmpty else { return }
+            result.append(.text(buffer))
+            buffer = AttributedString()
+        }
+    }
+
+    // MARK: Lists, tables, media
+
+    private static func parseList(_ content: String) -> [String] {
+        let sentinel = "\u{1F}"
+        let replaced = content.replacingOccurrences(of: "[*]", with: sentinel, options: .caseInsensitive)
+        let parts = replaced.split(separator: Character(sentinel))
+        if parts.count > 1 {
+            return parts.map { plainText(String($0)) }.filter { !$0.isEmpty }
+        }
+        return content.split(separator: "\n").map { plainText(String($0)) }.filter { !$0.isEmpty }
+    }
+
+    private static func parseTable(_ content: String) -> [[String]] {
+        guard let rowRegex = try? NSRegularExpression(pattern: "(?is)\\[tr\\](.*?)\\[/tr\\]"),
+              let cellRegex = try? NSRegularExpression(pattern: "(?is)\\[(td|th)(?:=[^\\]]*)?\\](.*?)\\[/\\1\\]") else {
+            return [[plainText(content)]]
+        }
+        let ns = content as NSString
+        var rows: [[String]] = []
+        for rowMatch in rowRegex.matches(in: content, range: NSRange(location: 0, length: ns.length)) {
+            let rowText = ns.substring(with: rowMatch.range(at: 1))
+            let rowNS = rowText as NSString
+            let cells = cellRegex.matches(in: rowText, range: NSRange(location: 0, length: rowNS.length)).map {
+                plainText(rowNS.substring(with: $0.range(at: 2)))
+            }
+            if !cells.isEmpty { rows.append(cells) }
+        }
+        if rows.isEmpty {
+            return content.split(separator: "\n").map { [plainText(String($0))] }
+        }
+        return rows
+    }
+
+    // MARK: Helpers
+
+    private static func plainText(_ raw: String) -> String {
+        let inlines = parseInline(raw)
+        var value = ""
+        for inline in inlines {
+            switch inline {
+            case let .text(attributed): value += String(attributed.characters)
+            case .emotion: value += "🙂"
+            }
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func readTag(_ source: String, at index: String.Index) -> Tag? {
+        guard index < source.endIndex, source[index] == "[" else { return nil }
+        guard let close = source[index...].firstIndex(of: "]") else { return nil }
+        var inner = String(source[source.index(after: index)..<close]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !inner.isEmpty, inner.count <= 200 else { return nil }
+        var closing = false
+        if inner.hasPrefix("/") {
+            closing = true
+            inner.removeFirst()
+            inner = inner.trimmingCharacters(in: .whitespaces)
+        }
+        let parts = inner.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let first = parts.first else { return nil }
+        let name = String(first).trimmingCharacters(in: .whitespaces).lowercased()
+        guard !name.isEmpty, name.count <= 40, name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "*" || $0 == "-" || $0 == "_" }) else {
+            return nil
+        }
+        let value = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : nil
+        return Tag(name: name, value: value, closing: closing, range: index..<source.index(after: close))
+    }
+
+    private static func findClose(_ name: String, in source: String, after start: String.Index) -> Range<String.Index>? {
+        var index = start
+        var depth = 1
+        while index < source.endIndex {
+            guard source[index] == "[", let tag = readTag(source, at: index) else {
+                index = source.index(after: index)
+                continue
+            }
+            if tag.name == name {
+                if tag.closing {
+                    depth -= 1
+                    if depth == 0 { return tag.range }
+                } else if nestedTags.contains(name) {
+                    depth += 1
+                }
+            }
+            index = tag.range.upperBound
+        }
+        return nil
+    }
+
+    private static func looksLikeUBB(_ text: String) -> Bool {
+        text.range(
+            of: "(?i)\\[/?\\s*(b|i|u|del|quote|code|img|url|email|color|size|font|align|center|left|right|list|table|ac\\d{2,4})\\b",
+            options: .regularExpression
+        ) != nil
+    }
+
+    private static func isRemoteURL(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") || trimmed.hasPrefix("//") || trimmed.hasPrefix("/")
+    }
+
+    static func resolveURL(_ raw: String) -> URL? {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("//") { value = "https:" + value }
+        if value.hasPrefix("/") { value = "https://www.cc98.org" + value }
+        if !value.contains("://") { value = "https://www.cc98.org/" + value }
+        guard let url = URL(string: value), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        return url
+    }
+
+    private static func colorFrom(_ raw: String) -> Color? {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch value {
+        case "red": return .red
+        case "orange": return .orange
+        case "yellow": return .yellow
+        case "green": return .green
+        case "blue": return .blue
+        case "purple": return .purple
+        case "gray", "grey": return .gray
+        case "white": return .white
+        case "black": return .black
+        default: return Color(ubbColor: value)
+        }
+    }
+
+    private static func fontSize(_ number: Int) -> CGFloat {
+        let sizes: [CGFloat] = [12, 14, 17, 20, 23, 26, 30]
+        return sizes[min(max(number - 1, 0), sizes.count - 1)]
+    }
+
+    private static func trimNewlines(_ value: String) -> String {
+        value.trimmingCharacters(in: CharacterSet.newlines)
+    }
+
+    static func decodeEntities(_ source: String) -> String {
+        var value = decodeNumericEntities(source)
+        value = value
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&#39;", with: "'")
+        return value
+    }
+
+    private static func decodeNumericEntities(_ source: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: "&#(x?)([0-9A-Fa-f]{1,7});") else { return source }
+        let ns = source as NSString
+        var result = ""
+        var cursor = 0
+        for match in regex.matches(in: source, range: NSRange(location: 0, length: ns.length)) {
+            if match.range.location > cursor {
+                result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            }
+            let hexadecimal = ns.substring(with: match.range(at: 1)).lowercased() == "x"
+            let digits = ns.substring(with: match.range(at: 2))
+            if let code = UInt32(digits, radix: hexadecimal ? 16 : 10), let scalar = UnicodeScalar(code) {
+                result.unicodeScalars.append(scalar)
+            }
+            cursor = match.range.location + match.range.length
+        }
+        if cursor < ns.length { result += ns.substring(from: cursor) }
+        return result
+    }
+
+    static func cleanText(_ raw: String) -> String {
+        var value = decodeEntities(raw)
+        value = value.replacingOccurrences(of: "(?i)<br\\s*/?>", with: "\n", options: .regularExpression)
+        value = value.replacingOccurrences(of: "(?i)</p\\s*>", with: "\n", options: .regularExpression)
+        value = value.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        return value
+    }
+}
+
+private extension Color {
+    init?(ubbColor raw: String) {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("#") { value.removeFirst() }
+        guard value.count == 6 || value.count == 3, let number = UInt32(value, radix: 16) else { return nil }
+        let red: UInt32
+        let green: UInt32
+        let blue: UInt32
+        if value.count == 6 {
+            red = (number >> 16) & 0xFF
+            green = (number >> 8) & 0xFF
+            blue = number & 0xFF
+        } else {
+            let r = (number >> 8) & 0xF
+            let g = (number >> 4) & 0xF
+            let b = number & 0xF
+            red = r * 17; green = g * 17; blue = b * 17
+        }
+        self.init(.sRGB, red: Double(red) / 255, green: Double(green) / 255, blue: Double(blue) / 255, opacity: 1)
+    }
+}
