@@ -529,7 +529,7 @@ final class CC98API {
         tag2: Int? = nil,
         isVote: Bool = false,
         voteInfo: NativeVoteDraft? = nil
-    ) async throws {
+    ) async throws -> Int? {
         var payload: [String: Any] = [
             "content": content,
             "contentType": contentType,
