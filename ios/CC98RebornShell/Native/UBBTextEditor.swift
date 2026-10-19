@@ -65,6 +65,12 @@ struct UBBTextEditor: UIViewRepresentable {
         }
     }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? uiView.bounds.width
+        let contentHeight = uiView.contentSize.height + uiView.textContainerInset.top + uiView.textContainerInset.bottom
+        return CGSize(width: width, height: max(minHeight, contentHeight))
+    }
+
     private func clamped(_ range: NSRange, in text: String) -> NSRange {
         let length = (text as NSString).length
         let location = min(max(0, range.location), length)

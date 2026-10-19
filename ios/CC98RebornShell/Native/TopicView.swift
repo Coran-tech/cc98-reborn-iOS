@@ -787,6 +787,7 @@ struct ReplyComposer: View {
                 }
                 UBBFormatBar(text: $text, selection: $selection)
                 UBBTextEditor(text: $text, selection: $selection, minHeight: 240)
+                    .frame(minHeight: 240)
                     .padding(4)
                     .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(
