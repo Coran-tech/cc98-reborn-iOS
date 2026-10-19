@@ -114,7 +114,8 @@ struct TopicDetailView: View {
     @State private var scrollNonce = 0
     @State private var showFloorJump = false
     @State private var traceRequest: NativeTraceRequest? = nil
-    @State private var savedPosition: NativeReadPosition? = nil
+    @State private var scrollToTopOnNextLoad = false
+    @State private var didAutoResume: Bool
 
     private let pageSize = 10
 
@@ -124,6 +125,7 @@ struct TopicDetailView: View {
         let resolvedPage = initialFloor.map { max(1, ($0 + 9) / 10) } ?? max(1, initialPage)
         _page = State(initialValue: resolvedPage)
         _targetFloor = State(initialValue: initialFloor)
+        _didAutoResume = State(initialValue: initialPage != 1 || initialFloor != nil)
     }
 
     var body: some View {
@@ -142,25 +144,6 @@ struct TopicDetailView: View {
                     .foregroundStyle(ShellTheme.warning)
                     .padding(10)
                     .background(ShellTheme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                }
-
-                if page == 1, let savedPosition, savedPosition.page > 1 {
-                    HStack(spacing: 8) {
-                        Image(systemName: "bookmark")
-                            .foregroundStyle(ShellTheme.accent)
-                        Text("上次读到第 \(savedPosition.page) 页")
-                            .font(ShellTheme.Fonts.caption)
-                            .foregroundStyle(ShellTheme.secondaryText)
-                        Spacer(minLength: 0)
-                        Button("继续阅读") {
-                            let floor = savedPosition.floor ?? ((savedPosition.page - 1) * pageSize + 1)
-                            jumpToFloor(floor)
-                        }
-                        .font(ShellTheme.Fonts.caption.weight(.medium))
-                        .foregroundStyle(ShellTheme.accent)
-                    }
-                    .padding(10)
-                    .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
                 }
 
                 if page == 1, let opPost {
@@ -228,10 +211,10 @@ struct TopicDetailView: View {
                             .foregroundStyle(ShellTheme.danger)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
-                    if pageCount > 1 { pager }
                 }
             }
             .padding(16)
+            .id("topic-top")
             }
             .onChange(of: loading) { _, value in
                 if !value { scrollToTarget(proxy) }
@@ -247,55 +230,18 @@ struct TopicDetailView: View {
         .navigationTitle("主题")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            ToolbarItemGroup(placement: .bottomBar) {
-                Button {
-                    Task { await toggleFavorite() }
-                } label: {
-                    Label(isFavorite ? "已收藏" : "收藏", systemImage: isFavorite ? "star.fill" : "star")
-                }
-                .disabled(favoriteBusy)
-                Spacer()
-                Button {
-                    openReply()
-                } label: {
-                    Label("回复", systemImage: "arrowshape.turn.up.left")
-                }
-                Spacer()
-                Menu {
-                    if let topic {
-                        Button {
-                            library.toggleReadLater(topic)
-                        } label: {
-                            Label(
-                                library.isReadLater(topic.id) ? "取消稍后再看" : "稍后再看",
-                                systemImage: library.isReadLater(topic.id) ? "bookmark.slash" : "bookmark"
-                            )
-                        }
-                    }
-                    Button {
-                        showFloorJump = true
-                    } label: {
-                        Label("跳转楼层", systemImage: "number")
-                    }
-                    Button {
-                        showNote = true
-                    } label: {
-                        Label("主题备注", systemImage: "note.text")
-                    }
-                    ShareLink(item: URL(string: "https://www.cc98.org/topic/\(topicID)")!) {
-                        Label("分享", systemImage: "square.and.arrow.up")
-                    }
-                } label: {
-                    Label("更多", systemImage: "ellipsis.circle")
-                }
-            }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            bottomBars
         }
         .refreshable { await load() }
         .task(id: page) { await load() }
         .task { await loadFavorite() }
         .task { await loadHot() }
-        .task { savedPosition = library.lastPosition(for: topicID) }
+        .onDisappear {
+            if let topic {
+                library.recordPosition(topicID: topicID, page: page, floor: posts.first?.floor)
+            }
+        }
         .environment(\.openURL, OpenURLAction { url in
             if let topic = NativeLinkedTopic(url: url) {
                 linkedTopic = topic
@@ -447,25 +393,102 @@ struct TopicDetailView: View {
         )
     }
 
-    private var pager: some View {
-        HStack {
-            Button("上一页") {
-                if page > 1 { page -= 1 }
-            }
-            .disabled(page <= 1 || loading)
-            Spacer()
-            Text("第 \(page) / \(pageCount) 页")
+    private var bottomBars: some View {
+        VStack(spacing: 0) {
+            if pageCount > 1 {
+                HStack(spacing: 12) {
+                    Button {
+                        turnPage(-1)
+                    } label: {
+                        Label("上一页", systemImage: "chevron.left")
+                    }
+                    .disabled(page <= 1 || loading)
+
+                    Spacer(minLength: 0)
+
+                    Text("第 \(page) / \(pageCount) 页")
+                        .font(ShellTheme.Fonts.caption)
+                        .foregroundStyle(ShellTheme.secondaryText)
+                        .monospacedDigit()
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        turnPage(1)
+                    } label: {
+                        Label("下一页", systemImage: "chevron.right")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .disabled(page >= pageCount || loading)
+                }
                 .font(ShellTheme.Fonts.footnote)
-                .foregroundStyle(ShellTheme.secondaryText)
-            Spacer()
-            Button("下一页") {
-                if page < pageCount { page += 1 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 7)
             }
-            .disabled(page >= pageCount || loading)
+
+            HStack {
+                Button {
+                    Task { await toggleFavorite() }
+                } label: {
+                    Label(isFavorite ? "已收藏" : "收藏", systemImage: isFavorite ? "star.fill" : "star")
+                }
+                .disabled(favoriteBusy)
+
+                Spacer()
+
+                Button {
+                    openReply()
+                } label: {
+                    Label("回复", systemImage: "arrowshape.turn.up.left")
+                }
+
+                Spacer()
+
+                Menu {
+                    if let topic {
+                        Button {
+                            library.toggleReadLater(topic)
+                        } label: {
+                            Label(
+                                library.isReadLater(topic.id) ? "取消稍后再看" : "稍后再看",
+                                systemImage: library.isReadLater(topic.id) ? "bookmark.slash" : "bookmark"
+                            )
+                        }
+                    }
+                    Button {
+                        showFloorJump = true
+                    } label: {
+                        Label("跳转楼层", systemImage: "number")
+                    }
+                    Button {
+                        showNote = true
+                    } label: {
+                        Label("主题备注", systemImage: "note.text")
+                    }
+                    ShareLink(item: URL(string: "https://www.cc98.org/topic/\(topicID)")!) {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
+                } label: {
+                    Label("更多", systemImage: "ellipsis.circle")
+                }
+            }
+            .font(ShellTheme.Fonts.footnote)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
         }
-        .buttonStyle(.bordered)
-        .tint(ShellTheme.accent)
-        .padding(.vertical, 8)
+        .background(ShellTheme.surface)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(ShellTheme.separator)
+                .frame(height: 0.5)
+        }
+    }
+
+    private func turnPage(_ delta: Int) {
+        let target = page + delta
+        guard target >= 1, target <= pageCount else { return }
+        scrollToTopOnNextLoad = true
+        page = target
     }
 
     private func openReply(quoted: NativePost? = nil) {
@@ -530,21 +553,32 @@ struct TopicDetailView: View {
 
     @MainActor
     private func scrollToTarget(_ proxy: ScrollViewProxy) {
-        guard let targetFloor else { return }
-        var candidates: [NativePost] = []
-        if let opPost { candidates.append(opPost) }
-        candidates.append(contentsOf: posts)
-        guard let post = candidates.first(where: { $0.floor == targetFloor }) else { return }
-        withAnimation {
-            proxy.scrollTo(floorAnchor(post.id), anchor: .top)
-        }
-        highlightedPostID = post.id
-        self.targetFloor = nil
-        Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            if highlightedPostID == post.id {
-                highlightedPostID = nil
+        if let targetFloor {
+            var candidates: [NativePost] = []
+            if let opPost { candidates.append(opPost) }
+            candidates.append(contentsOf: posts)
+            if let post = candidates.first(where: { $0.floor == targetFloor }) {
+                withAnimation {
+                    proxy.scrollTo(floorAnchor(post.id), anchor: .top)
+                }
+                highlightedPostID = post.id
+                self.targetFloor = nil
+                scrollToTopOnNextLoad = false
+                Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    if highlightedPostID == post.id {
+                        highlightedPostID = nil
+                    }
+                }
             }
+            return
+        }
+
+        if scrollToTopOnNextLoad {
+            withAnimation {
+                proxy.scrollTo("topic-top", anchor: .top)
+            }
+            scrollToTopOnNextLoad = false
         }
     }
 
@@ -552,6 +586,7 @@ struct TopicDetailView: View {
         let maxFloor = max(1, (topic?.replyCount ?? 0) + 1)
         let clamped = min(max(1, floor), maxFloor)
         targetFloor = clamped
+        scrollToTopOnNextLoad = false
         let targetPage = max(1, (clamped + 9) / pageSize)
         if page != targetPage {
             page = targetPage
@@ -614,6 +649,17 @@ struct TopicDetailView: View {
                 }
             }
             library.recordHistory(loadedTopic)
+            if page == 1, !didAutoResume,
+               let saved = library.lastPosition(for: topicID),
+               saved.page > 1 || (saved.floor ?? 1) > 1 {
+                didAutoResume = true
+                targetFloor = saved.floor
+                if saved.page > 1 {
+                    loading = false
+                    page = saved.page
+                    return
+                }
+            }
             if page > 1 {
                 library.recordPosition(topicID: topicID, page: page, floor: loadedPosts.first?.floor)
             }
