@@ -228,7 +228,11 @@ struct BoardTopicsView: View {
             }
         }
         .sheet(isPresented: $showCompose) {
-            NewTopicComposer(boardID: resolvedBoard.id, boardName: resolvedBoard.name) {
+            NewTopicComposer(
+                boardID: resolvedBoard.id,
+                boardName: resolvedBoard.name,
+                anonymousState: resolvedBoard.anonymousState ?? 0
+            ) {
                 lastBoardID = resolvedBoard.id
                 lastBoardName = resolvedBoard.name
                 Task { await load(reset: true) }

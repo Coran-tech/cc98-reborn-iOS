@@ -83,7 +83,11 @@ struct NewTopicEntryView: View {
             }
             .task { await load() }
             .sheet(item: $selectedBoard) { board in
-                NewTopicComposer(boardID: board.id, boardName: board.name) {
+                NewTopicComposer(
+                    boardID: board.id,
+                    boardName: board.name,
+                    anonymousState: board.anonymousState ?? 0
+                ) {
                     lastBoardID = board.id
                     lastBoardName = board.name
                     onPublished()

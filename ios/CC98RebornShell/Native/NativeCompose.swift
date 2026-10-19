@@ -123,6 +123,7 @@ struct NewTopicComposer: View {
 
     let boardID: Int
     let boardName: String
+    var anonymousState: Int = 0
     var onCreated: () -> Void
 
     @State private var title = ""
@@ -132,12 +133,17 @@ struct NewTopicComposer: View {
     @State private var notifyPoster = true
     @State private var postKind = 0
     @State private var selection = NSRange(location: 0, length: 0)
+    @State private var boardAnonymousState: Int? = nil
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
 
     private var titleKey: String { "newtopic.title:\(boardID)" }
     private var bodyKey: String { "newtopic.body:\(boardID)" }
+
+    private var effectiveAnonymousState: Int {
+        boardAnonymousState ?? anonymousState
+    }
 
     var body: some View {
         NavigationStack {
@@ -218,8 +224,14 @@ struct NewTopicComposer: View {
                     Toggle("接收新回复通知", isOn: $notifyPoster)
                         .font(ShellTheme.Fonts.footnote)
 
-                    Toggle("匿名发布", isOn: $anonymous)
-                        .font(ShellTheme.Fonts.footnote)
+                    if effectiveAnonymousState == 1 {
+                        Text("本版强制匿名发帖")
+                            .font(ShellTheme.Fonts.footnote)
+                            .foregroundStyle(ShellTheme.secondaryText)
+                    } else if effectiveAnonymousState == 2 || effectiveAnonymousState == 3 {
+                        Toggle("匿名发布（消耗 10000 财富值）", isOn: $anonymous)
+                            .font(ShellTheme.Fonts.footnote)
+                    }
 
                     Picker("帖子类型", selection: $postKind) {
                         Text("普通帖").tag(0)
@@ -268,7 +280,14 @@ struct NewTopicComposer: View {
             .onAppear {
                 if title.isEmpty { title = library.draft(for: titleKey) }
                 if content.isEmpty { content = library.draft(for: bodyKey) }
+                anonymous = effectiveAnonymousState == 1
                 focused = true
+                Task {
+                    if let detail = try? await app.api.board(id: boardID) {
+                        boardAnonymousState = detail.anonymousState ?? 0
+                        anonymous = (detail.anonymousState ?? 0) == 1
+                    }
+                }
             }
             .onChange(of: title) { _, value in
                 library.setDraft(value, for: titleKey)
@@ -307,7 +326,7 @@ struct NewTopicComposer: View {
                 boardID: boardID,
                 title: trimmedTitle,
                 content: content,
-                isAnonymous: anonymous,
+                isAnonymous: effectiveAnonymousState == 1 || anonymous,
                 contentType: contentType,
                 notifyPoster: notifyPoster,
                 type: postKind
