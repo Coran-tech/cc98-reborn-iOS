@@ -137,6 +137,7 @@ struct BoardTopicsView: View {
     @AppStorage("native.lastBoardName") private var lastBoardName = ""
 
     @State private var topics: [NativeTopicSummary] = []
+    @State private var boardDetail: NativeBoard? = nil
     @State private var page = 0
     @State private var loading = false
     @State private var hasMore = true
@@ -162,7 +163,8 @@ struct BoardTopicsView: View {
                 NativeStateView(icon: "tray", title: "本版暂无主题", message: nil)
             } else {
                 List {
-                    if let bigPaper = board.bigPaper?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    if let bigPaper = (boardDetail?.bigPaper ?? board.bigPaper)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
                        !bigPaper.isEmpty {
                         Section {
                             DisclosureGroup(isExpanded: $bigPaperExpanded) {
@@ -203,11 +205,11 @@ struct BoardTopicsView: View {
                 .refreshable { await load(reset: true) }
             }
         }
-        .navigationTitle(board.name)
+        .navigationTitle(resolvedBoard.name)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 NavigationLink {
-                    SearchView(initialBoard: board)
+                    SearchView(initialBoard: resolvedBoard)
                 } label: {
                     Image(systemName: "magnifyingglass")
                 }
@@ -226,9 +228,9 @@ struct BoardTopicsView: View {
             }
         }
         .sheet(isPresented: $showCompose) {
-            NewTopicComposer(boardID: board.id, boardName: board.name) {
-                lastBoardID = board.id
-                lastBoardName = board.name
+            NewTopicComposer(boardID: resolvedBoard.id, boardName: resolvedBoard.name) {
+                lastBoardID = resolvedBoard.id
+                lastBoardName = resolvedBoard.name
                 Task { await load(reset: true) }
             }
         }
@@ -238,6 +240,18 @@ struct BoardTopicsView: View {
             Text(alertMessage)
         }
         .task { await load(reset: true) }
+        .task { await loadBoardDetail() }
+    }
+
+    private var resolvedBoard: NativeBoard {
+        boardDetail ?? board
+    }
+
+    @MainActor
+    private func loadBoardDetail() async {
+        if let detail = try? await app.api.board(id: board.id) {
+            boardDetail = detail
+        }
     }
 
     private var visibleTopics: [NativeTopicSummary] {

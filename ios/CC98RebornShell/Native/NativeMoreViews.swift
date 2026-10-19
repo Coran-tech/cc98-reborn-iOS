@@ -769,6 +769,7 @@ struct BlocklistView: View {
 struct SettingsView: View {
     @EnvironmentObject private var library: NativeLibrary
     @AppStorage("native.appearance") private var appearance = "system"
+    @AppStorage("native.replyRebornTail") private var replyTail = true
 
     var body: some View {
         Form {
@@ -779,6 +780,10 @@ struct SettingsView: View {
                     Text("深色").tag("dark")
                 }
                 .pickerStyle(.segmented)
+            }
+
+            Section("回复") {
+                Toggle("附加 CC98 Reborn 小尾巴", isOn: $replyTail)
             }
 
             Section("我的内容") {

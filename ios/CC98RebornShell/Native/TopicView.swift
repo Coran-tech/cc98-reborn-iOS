@@ -747,6 +747,16 @@ struct TopicDetailView: View {
     }
 }
 
+enum NativeReplyTail {
+    static let text = "[align=right]——来自「[url=https://www.cc98.org/topic/6521472][color=#eb2f96]C[/color][color=#de2f9d]C[/color][color=#d02fa3]9[/color][color=#c32faa]8[/color] [color=#b52fb0]R[/color][color=#a82eb7]e[/color][color=#9a2ebd]b[/color][color=#8d2ec4]o[/color][color=#7f2eca]r[/color][color=#722ed1]n[/color][/url] [color=#13c2c2]i[/color][color=#159de1]O[/color][color=#1677ff]S[/color]」[/align]"
+
+    static func appending(to content: String) -> String {
+        let value = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.contains("——来自「"), !value.contains("topic/6521472") else { return content }
+        return value + "\n\n" + text
+    }
+}
+
 struct ReplyComposer: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
@@ -756,6 +766,7 @@ struct ReplyComposer: View {
     let topicID: Int
     let quotedPost: NativePost?
     var onSent: () -> Void
+    @AppStorage("native.replyRebornTail") private var replyTail = true
 
     @State private var text: String
     @State private var sending = false
@@ -865,8 +876,9 @@ struct ReplyComposer: View {
             errorMessage = "请先登录。"
             return
         }
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
+        let base = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return }
+        let value = replyTail ? NativeReplyTail.appending(to: base) : base
         guard value.count <= 8000 else {
             errorMessage = "内容不能超过 8000 个字。"
             return
