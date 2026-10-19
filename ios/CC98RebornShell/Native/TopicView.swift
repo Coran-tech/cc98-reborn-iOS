@@ -750,6 +750,7 @@ struct ReplyComposer: View {
 
     @State private var text: String
     @State private var selection = NSRange(location: 0, length: 0)
+    @StateObject private var editor = UBBEditorController()
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
@@ -785,8 +786,8 @@ struct ReplyComposer: View {
                         .font(ShellTheme.Fonts.footnote)
                         .foregroundStyle(ShellTheme.danger)
                 }
-                UBBFormatBar(text: $text, selection: $selection)
-                UBBTextEditor(text: $text, selection: $selection, minHeight: 240)
+                UBBFormatBar(text: $text, selection: $selection, editor: editor)
+                UBBTextEditor(text: $text, selection: $selection, controller: editor, minHeight: 240)
                     .frame(minHeight: 240)
                     .padding(4)
                     .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -802,11 +803,11 @@ struct ReplyComposer: View {
                     }
                     .font(ShellTheme.Fonts.caption)
                 }
-                ComposerImageButton(text: $text, selection: $selection)
+                ComposerImageButton(text: $text, selection: $selection, editor: editor)
                     .disabled(sending)
-                ComposerEmoticonButton(text: $text, selection: $selection)
+                ComposerEmoticonButton(text: $text, selection: $selection, editor: editor)
                     .disabled(sending)
-                ComposerFileButton(text: $text, selection: $selection)
+                ComposerFileButton(text: $text, selection: $selection, editor: editor)
                     .disabled(sending)
                 HStack {
                     Text("\(text.count) / 8000")

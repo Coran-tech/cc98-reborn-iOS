@@ -57,6 +57,7 @@ enum EmoticonCatalog {
 struct EmoticonPicker: View {
     @Binding var text: String
     @Binding var selection: NSRange
+    let editor: UBBEditorController
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
@@ -153,7 +154,9 @@ struct EmoticonPicker: View {
     }
 
     private func insert(_ tag: String) {
-        UBBEditorInsertion.insert("[\(tag)]", text: &text, selection: &selection)
+        if !editor.insert("[\(tag)]") {
+            UBBEditorInsertion.insert("[\(tag)]", text: &text, selection: &selection)
+        }
         var tags = recentTags.filter { $0 != tag }
         tags.insert(tag, at: 0)
         recentRaw = tags.prefix(24).joined(separator: ",")
@@ -164,6 +167,7 @@ struct EmoticonPicker: View {
 struct ComposerEmoticonButton: View {
     @Binding var text: String
     @Binding var selection: NSRange
+    let editor: UBBEditorController
     @State private var showPicker = false
 
     var body: some View {
@@ -175,7 +179,7 @@ struct ComposerEmoticonButton: View {
                 .foregroundStyle(ShellTheme.accent)
         }
         .sheet(isPresented: $showPicker) {
-            EmoticonPicker(text: $text, selection: $selection)
+            EmoticonPicker(text: $text, selection: $selection, editor: editor)
         }
     }
 }
