@@ -48,7 +48,7 @@ struct MessagesView: View {
                         switch section {
                         case .reply, .at, .system:
                             NotificationListView(kind: section.kind ?? .reply)
-                                .id(refreshID)
+                                .id("\(section.rawValue)-\(refreshID)")
                         case .privateMessages:
                             PrivateMessageListView()
                         }
@@ -56,6 +56,7 @@ struct MessagesView: View {
                 }
                 .background(ShellTheme.pageBackground)
                 .navigationTitle("消息")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         if section != .privateMessages {
@@ -196,7 +197,7 @@ private struct NotificationListView: View {
                 .refreshable { await load(reset: true) }
             }
         }
-        .task { await load(reset: true) }
+        .task(id: kind) { await load(reset: true) }
     }
 
     @ViewBuilder

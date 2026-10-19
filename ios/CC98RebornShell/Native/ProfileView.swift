@@ -61,29 +61,33 @@ struct ProfileView: View {
                 .padding(.vertical, 4)
 
                 HStack(spacing: 10) {
-                    profileStat("发帖", NativeFormat.count(user.postCount))
+                    NavigationLink {
+                        MyActivityView()
+                    } label: {
+                        profileStat("发帖", NativeFormat.count(user.postCount))
+                    }
+                    .buttonStyle(.plain)
+
                     profileStat("威望", NativeFormat.count(user.prestige))
                     profileStat("风评", NativeFormat.count(user.popularity))
-                    profileStat("关注", NativeFormat.count(user.followCount))
-                    profileStat("粉丝", NativeFormat.count(user.fanCount))
-                }
-            }
 
-            Section("社交") {
-                NavigationLink {
-                    FollowListView(kind: .followings)
-                } label: {
-                    socialRow("关注", count: user.followCount, systemImage: "person.badge.plus")
-                }
-                NavigationLink {
-                    FollowListView(kind: .fans)
-                } label: {
-                    socialRow("粉丝", count: user.fanCount, systemImage: "person.2")
+                    NavigationLink {
+                        FollowListView(kind: .followings)
+                    } label: {
+                        profileStat("关注", NativeFormat.count(user.followCount))
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink {
+                        FollowListView(kind: .fans)
+                    } label: {
+                        profileStat("粉丝", NativeFormat.count(user.fanCount))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 
             Section("我的内容") {
-                NavigationLink("回复 + 发帖") { MyActivityView() }
                 NavigationLink("我的收藏") { FavoritesView() }
                 NavigationLink("稍后再看") { ReadLaterView() }
                 NavigationLink("浏览历史") { HistoryView() }
@@ -121,16 +125,6 @@ struct ProfileView: View {
         .background(ShellTheme.pageBackground)
     }
 
-    private func socialRow(_ title: String, count: Int?, systemImage: String) -> some View {
-        HStack {
-            Label(title, systemImage: systemImage)
-            Spacer(minLength: 0)
-            Text(NativeFormat.count(count))
-                .font(ShellTheme.Fonts.footnote)
-                .foregroundStyle(ShellTheme.secondaryText)
-        }
-    }
-
     private func profileStat(_ title: String, _ value: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
@@ -143,6 +137,7 @@ struct ProfileView: View {
                 .foregroundStyle(ShellTheme.secondaryText)
         }
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 
     private var appVersion: String {
