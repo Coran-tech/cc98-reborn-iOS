@@ -172,7 +172,8 @@ struct SearchView: View {
 
     private var filteredResults: [NativeTopicSummary] {
         results.filter { topic in
-            !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
+            !library.isTopicBlocked(topic.id)
+                && !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
                 && !library.isTitleBlocked(topic.title)
                 && !library.isUserBlocked(id: topic.userId, name: topic.userName)
         }
@@ -679,9 +680,18 @@ struct BlocklistView: View {
                 }
             }
 
+            if !library.blockedTopicIDs.isEmpty {
+                Section("屏蔽主题") {
+                    ForEach(library.blockedTopicIDs, id: \.self) { topicID in
+                        ruleRow("主题 #\(topicID)") {
+                            library.removeBlockedTopic(topicID)
+                        }
+                    }
+                }
+            }
+
             Section("数值条件") {
-                Picker("指标", selection: $metric) {
-                    Text("风评").tag("reputation")
+                Picker("指标", selection: $metric) {                    Text("风评").tag("reputation")
                     Text("赞").tag("like")
                     Text("踩").tag("dislike")
                     Text("赞踩总数").tag("total")

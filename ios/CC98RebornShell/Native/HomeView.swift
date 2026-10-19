@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var library: NativeLibrary
 
     @State private var home: NativeHome?
     @State private var hot: [NativeHotTopic] = []
@@ -79,17 +80,52 @@ struct HomeView: View {
                     .font(ShellTheme.Fonts.footnote)
                     .foregroundStyle(ShellTheme.secondaryText)
             } else {
-                ForEach(hot.indices, id: \.self) { index in
-                    let topic = hot[index]
+                ForEach(visibleHot.indices, id: \.self) { index in
+                    let topic = visibleHot[index]
                     NavigationLink {
                         TopicDetailView(topicID: topic.id, boardID: topic.boardId)
                     } label: {
                         HotTopicRow(rank: index + 1, topic: topic)
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        topicActions(topic)
+                    }
                 }
             }
         } header: {
             Text("今日十大")
+        }
+    }
+
+    private var visibleHot: [NativeHotTopic] {
+        hot.filter { topic in
+            !library.isTopicBlocked(topic.id)
+                && !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
+                && !library.isTitleBlocked(topic.title)
+                && !library.isUserBlocked(topic.authorName)
+        }
+    }
+
+    @ViewBuilder
+    private func topicActions(_ topic: NativeHotTopic) -> some View {
+        Button {
+            library.addReadLater(topicID: topic.id, title: topic.title, boardID: topic.boardId)
+        } label: {
+            Label("加入稍后再看", systemImage: "bookmark")
+        }
+
+        Button(role: .destructive) {
+            library.addBlockedTopic(topic.id)
+        } label: {
+            Label("屏蔽此帖", systemImage: "eye.slash")
+        }
+
+        if let author = topic.authorName, !author.isEmpty {
+            Button(role: .destructive) {
+                library.addBlockedUser(author)
+            } label: {
+                Label("屏蔽此人", systemImage: "person.crop.circle.badge.xmark")
+            }
         }
     }
 

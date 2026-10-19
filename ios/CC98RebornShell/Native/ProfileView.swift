@@ -83,6 +83,7 @@ struct ProfileView: View {
                     statButton("发帖", NativeFormat.count(user.postCount), destination: .activity)
                     statDivider
                     profileStat("威望", NativeFormat.count(user.prestige))
+                    statDivider
                     profileStat("风评", NativeFormat.count(user.popularity))
                     statDivider
                     statButton("关注", NativeFormat.count(user.followCount), destination: .followings)
