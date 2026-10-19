@@ -160,14 +160,7 @@ struct NativeAvatar: View {
     }
 
     private var localAnonymous: UIImage? {
-        guard let path = Bundle.main.path(
-            forResource: "anonymous",
-            ofType: "gif",
-            inDirectory: "Reborn/images/avatar"
-        ) else {
-            return nil
-        }
-        return UIImage(contentsOfFile: path)
+        avatarResource("anonymous", extension: "gif")
     }
 
     private var isDefaultAvatar: Bool {
@@ -179,10 +172,16 @@ struct NativeAvatar: View {
     private var localDefault: UIImage? {
         let file = (url?.lastPathComponent.removingPercentEncoding ?? "").lowercased()
         let isGirl = file.contains("girl") || file.contains("女性")
-        let resource = isGirl ? "default_avatar_girl" : "default_avatar_boy"
+        return avatarResource(isGirl ? "default_avatar_girl" : "default_avatar_boy", extension: "png")
+    }
+
+    private func avatarResource(_ name: String, extension ext: String) -> UIImage? {
+        if let url = Bundle.main.url(forResource: name, withExtension: ext) {
+            return UIImage(contentsOfFile: url.path)
+        }
         guard let path = Bundle.main.path(
-            forResource: resource,
-            ofType: "png",
+            forResource: name,
+            ofType: ext,
             inDirectory: "Reborn/images/avatar"
         ) else {
             return nil
