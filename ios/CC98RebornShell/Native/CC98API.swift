@@ -93,6 +93,12 @@ final class CC98API {
         ], authenticated: false)
     }
 
+    func firstTopicImage(topicID: Int) async throws -> URL? {
+        let posts = try await posts(topicID: topicID, from: 0, size: 1)
+        guard let content = posts.first?.content else { return nil }
+        return UBBFirstImage.first(in: content)
+    }
+
     func boardGroups() async throws -> [NativeBoardGroup] {
         let data = try await data(path: "/board/all", authenticated: false)
         if let groups = try? decoder.decode([NativeBoardGroup].self, from: data), !groups.isEmpty {

@@ -467,6 +467,59 @@ private struct ZoomableImage: View {
         baseOffset = .zero
     }
 }
+enum UBBFirstImage {
+    static func first(in source: String) -> URL? {
+        guard !source.isEmpty else { return nil }
+        let patterns: [(String, Int, Int?)] = [
+            ("\\[img(?:=([^\\]]*))?\\](.*?)\\[/img\\]", 2, 1),
+            ("!\\[[^\\]]*\\]\\(([^\\)]+)\\)", 1, nil),
+            ("(?i)<img[^>]+src=[\"']([^\"']+)[\"']", 1, nil)
+        ]
+
+        var earliest: (location: Int, raw: String)?
+        for (pattern, urlGroup, attributeGroup) in patterns {
+            guard let regex = try? NSRegularExpression(
+                pattern: pattern,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            ) else { continue }
+            let ns = source as NSString
+            guard let match = regex.firstMatch(in: source, range: NSRange(location: 0, length: ns.length)) else {
+                continue
+            }
+            if let attributeGroup, attributeGroup <= regex.numberOfCaptureGroups {
+                let attribute = ns.substring(with: match.range(at: attributeGroup))
+                if attribute.trimmingCharacters(in: .whitespacesAndNewlines) == "1" {
+                    continue
+                }
+            }
+            let range = match.range(at: urlGroup)
+            guard range.location != NSNotFound else { continue }
+            let raw = ns.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { continue }
+            if earliest == nil || match.range.location < earliest!.location {
+                earliest = (match.range.location, raw)
+            }
+        }
+
+        guard let raw = earliest?.raw else { return nil }
+        return resolve(raw)
+    }
+
+    private static func resolve(_ raw: String) -> URL? {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        if value.hasPrefix("//") { value = "https:" + value }
+        if value.hasPrefix("/") { value = "https://www.cc98.org" + value }
+        if !value.contains("://") { value = "https://www.cc98.org/" + value }
+        guard let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        return url
+    }
+}
+
 enum UBBEmotion {
     private struct Asset {
         let folder: String
