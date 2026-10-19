@@ -26,11 +26,9 @@ struct NativeRootView: View {
             BoardsView()
                 .tag(1)
                 .tabItem { Label("版面", systemImage: "square.grid.2x2") }
-            NewTopicEntryView {
-                selectedTab = 1
-            }
-            .tag(2)
-            .tabItem { Label("发帖", systemImage: "plus.circle.fill") }
+            NewTopicsView()
+                .tag(2)
+                .tabItem { Label("新帖", systemImage: "newspaper") }
             MessagesView()
                 .tag(3)
                 .tabItem { Label("消息", systemImage: "bubble.left.and.bubble.right") }

@@ -86,6 +86,13 @@ final class CC98API {
         try await get("/topic/hot-weekly")
     }
 
+    func newTopics(from: Int, size: Int = 20, mediaOnly: Bool = false) async throws -> [NativeTopicSummary] {
+        try await get(mediaOnly ? "/topic/new-media" : "/topic/new", query: [
+            URLQueryItem(name: "from", value: String(from)),
+            URLQueryItem(name: "size", value: String(size))
+        ], authenticated: false)
+    }
+
     func boardGroups() async throws -> [NativeBoardGroup] {
         let data = try await data(path: "/board/all", authenticated: false)
         if let groups = try? decoder.decode([NativeBoardGroup].self, from: data), !groups.isEmpty {
