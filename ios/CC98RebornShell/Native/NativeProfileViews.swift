@@ -23,7 +23,7 @@ struct ProfileSettingsView: View {
         Form {
             Section("头像") {
                 HStack(spacing: 14) {
-                    NativeAvatar(url: auth.profile?.avatarURL, name: auth.profile?.name, size: 64)
+                    NativeAvatar(url: auth.profile?.avatarURL ?? NativeAvatarURLs.defaultURL(gender: auth.profile?.gender), name: auth.profile?.name, size: 64)
                     VStack(alignment: .leading, spacing: 4) {
                         PhotosPicker(selection: $avatarItem, matching: .images) {
                             Label(uploadingAvatar ? "上传中…" : "更换头像", systemImage: "photo")

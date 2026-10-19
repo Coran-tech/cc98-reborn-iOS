@@ -317,7 +317,7 @@ private struct PrivateMessageListView: View {
 
     private func contactRow(_ contact: NativeRecentContact) -> some View {
         HStack(spacing: 10) {
-            NativeAvatar(url: avatarURL(users[contact.userId]?.portraitUrl), name: users[contact.userId]?.name, size: 38)
+            NativeAvatar(url: avatarURL(users[contact.userId]?.portraitUrl) ?? NativeAvatarURLs.defaultURL(gender: nil), name: users[contact.userId]?.name, size: 38)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(users[contact.userId]?.name ?? "用户 #\(contact.userId)")

@@ -100,6 +100,20 @@ struct LoginGateView: View {
     }
 }
 
+enum NativeAvatarURLs {
+    static let anonymousURL = URL(string: "https://www.cc98.org/static/images/%E5%BF%83%E7%81%B5%E5%A4%B4%E5%83%8F.gif")
+
+    static func defaultURL(gender: Int?) -> URL? {
+        let file = gender == 2 ? "default_avatar_girl.png" : "default_avatar_boy.png"
+        return URL(string: "https://www.cc98.org/static/images/" + file)
+    }
+
+    static func resolved(url: URL?, gender: Int?, anonymous: Bool = false) -> URL? {
+        if anonymous { return anonymousURL }
+        return url ?? defaultURL(gender: gender)
+    }
+}
+
 struct NativeAvatar: View {
     let url: URL?
     let name: String?

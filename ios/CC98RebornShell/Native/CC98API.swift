@@ -313,6 +313,22 @@ final class CC98API {
         )
     }
 
+    func clearLike(postID: Int) async throws {
+        do {
+            try await send("/post/\(postID)/like", method: "DELETE", authenticated: true)
+        } catch {
+            // Some deployments expose cancellation only through the state
+            // endpoint; try 0 as a fallback before surfacing the error.
+            try await send(
+                "/post/\(postID)/like",
+                method: "PUT",
+                body: Data("0".utf8),
+                contentType: "application/json",
+                authenticated: true
+            )
+        }
+    }
+
     func isFavorite(topicID: Int) async throws -> Bool {
         do {
             let data = try await self.data(path: "/topic/\(topicID)/isfavorite", authenticated: true)

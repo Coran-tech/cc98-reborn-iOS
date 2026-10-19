@@ -38,7 +38,7 @@ struct ProfileView: View {
         List {
             Section {
                 HStack(spacing: 14) {
-                    NativeAvatar(url: user.avatarURL, name: user.name, size: 56)
+                    NativeAvatar(url: user.avatarURL ?? NativeAvatarURLs.defaultURL(gender: user.gender), name: user.name, size: 56)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(user.name ?? "CC98 用户")
                             .font(.title3.weight(.semibold))
