@@ -16,16 +16,26 @@ struct NativeRootView: View {
     @StateObject private var app = NativeAppModel()
     @StateObject private var library = NativeLibrary()
     @AppStorage("native.appearance") private var appearance = "system"
+    @State private var selectedTab = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             HomeView()
+                .tag(0)
                 .tabItem { Label("浏览", systemImage: "list.bullet.rectangle") }
             BoardsView()
+                .tag(1)
                 .tabItem { Label("版面", systemImage: "square.grid.2x2") }
+            NewTopicEntryView {
+                selectedTab = 1
+            }
+            .tag(2)
+            .tabItem { Label("发帖", systemImage: "plus.circle.fill") }
             MessagesView()
+                .tag(3)
                 .tabItem { Label("消息", systemImage: "bubble.left.and.bubble.right") }
             ProfileView()
+                .tag(4)
                 .tabItem { Label("我的", systemImage: "person.crop.circle") }
         }
         .tint(ShellTheme.accent)

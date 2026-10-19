@@ -127,6 +127,9 @@ struct BoardTopicsView: View {
     @EnvironmentObject private var auth: NativeAuth
     let board: NativeBoard
 
+    @AppStorage("native.lastBoardID") private var lastBoardID = 0
+    @AppStorage("native.lastBoardName") private var lastBoardName = ""
+
     @State private var topics: [NativeTopicSummary] = []
     @State private var page = 0
     @State private var loading = false
@@ -196,6 +199,8 @@ struct BoardTopicsView: View {
         }
         .sheet(isPresented: $showCompose) {
             NewTopicComposer(boardID: board.id, boardName: board.name) {
+                lastBoardID = board.id
+                lastBoardName = board.name
                 Task { await load(reset: true) }
             }
         }
