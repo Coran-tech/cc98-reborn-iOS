@@ -108,7 +108,7 @@ struct NewTopicsView: View {
                 }
                 .font(ShellTheme.Fonts.footnote)
             } else if hasMore {
-                Button("加载更多") {
+                Button("点击继续加载") {
                     Task { await load(reset: false) }
                 }
                 .font(ShellTheme.Fonts.footnote)
@@ -153,7 +153,7 @@ struct NewTopicsView: View {
                     .font(ShellTheme.Fonts.footnote)
                     .padding(.bottom, 20)
                 } else if hasMore {
-                    Button("加载更多") {
+                    Button("点击继续加载") {
                         Task { await load(reset: false) }
                     }
                     .font(ShellTheme.Fonts.footnote)

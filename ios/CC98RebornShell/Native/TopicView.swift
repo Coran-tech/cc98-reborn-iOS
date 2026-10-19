@@ -227,7 +227,7 @@ struct TopicDetailView: View {
             .padding(16)
             .id("topic-top")
             .background(
-                ScrollBottomObserver(threshold: 64) {
+                ScrollBottomObserver(threshold: 100) {
                     handlePullNext()
                 }
             )
