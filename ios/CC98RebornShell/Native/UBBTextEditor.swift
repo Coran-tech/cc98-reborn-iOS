@@ -34,6 +34,7 @@ enum UBBEditorInsertion {
 struct UBBTextEditor: UIViewRepresentable {
     @Binding var text: String
     @Binding var selection: NSRange
+    let controller: UBBEditorController
     var minHeight: CGFloat = 260
 
     func makeCoordinator() -> Coordinator {
@@ -53,11 +54,13 @@ struct UBBTextEditor: UIViewRepresentable {
         textView.autocorrectionType = .yes
         textView.text = text
         textView.selectedRange = clamped(selection, in: text)
+        controller.attach(textView, text: $text, selection: $selection)
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.parent = self
+        controller.attach(textView, text: $text, selection: $selection)
         if textView.text != text {
             let previous = textView.selectedRange
             textView.text = text
@@ -95,6 +98,7 @@ struct UBBTextEditor: UIViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
+            parent.controller.noteSelection(textView.selectedRange)
             if parent.selection != textView.selectedRange {
                 parent.selection = textView.selectedRange
             }

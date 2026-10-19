@@ -27,6 +27,7 @@ struct ComposerImageButton: View {
     @EnvironmentObject private var app: NativeAppModel
     @Binding var text: String
     @Binding var selection: NSRange
+    let editor: UBBEditorController
 
     @State private var item: PhotosPickerItem?
     @State private var uploading = false
@@ -64,7 +65,9 @@ struct ComposerImageButton: View {
             }
             let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) ?? data
             let url = try await app.api.uploadImage(jpeg)
-            UBBEditorInsertion.insert("\n[img]\(url)[/img]\n", text: &text, selection: &selection)
+            if !editor.insert("\n[img]\(url)[/img]\n") {
+                UBBEditorInsertion.insert("\n[img]\(url)[/img]\n", text: &text, selection: &selection)
+            }
         } catch {
             errorMessage = error.localizedDescription
             showError = true
@@ -76,6 +79,7 @@ struct ComposerFileButton: View {
     @EnvironmentObject private var app: NativeAppModel
     @Binding var text: String
     @Binding var selection: NSRange
+    let editor: UBBEditorController
 
     @State private var showImporter = false
     @State private var uploading = false
@@ -127,7 +131,10 @@ struct ComposerFileButton: View {
             let mime = UTType(filenameExtension: ext)?.preferredMIMEType ?? "application/octet-stream"
             let remote = try await app.api.uploadAttachment(data, fileName: url.lastPathComponent, mimeType: mime)
             let tag = ext.isEmpty ? "file" : ext
-            UBBEditorInsertion.insert("\n[upload=\(tag)]\(remote)[/upload]\n", text: &text, selection: &selection)
+            let snippet = "\n[upload=\(tag)]\(remote)[/upload]\n"
+            if !editor.insert(snippet) {
+                UBBEditorInsertion.insert(snippet, text: &text, selection: &selection)
+            }
         } catch {
             errorMessage = error.localizedDescription
             showError = true
@@ -164,6 +171,7 @@ struct NewTopicComposer: View {
     @State private var maxVoteCount = 1
     @State private var needVote = false
     @State private var draftStatus = ""
+    @StateObject private var editor = UBBEditorController()
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
@@ -260,11 +268,11 @@ struct NewTopicComposer: View {
                         .focused($focused)
 
                     if contentType == 0 {
-                        UBBFormatBar(text: $content, selection: $selection)
+                        UBBFormatBar(text: $content, selection: $selection, editor: editor)
                     } else {
-                        MarkdownFormatBar(text: $content, selection: $selection)
+                        MarkdownFormatBar(text: $content, selection: $selection, editor: editor)
                     }
-                    UBBTextEditor(text: $content, selection: $selection, minHeight: 260)
+                    UBBTextEditor(text: $content, selection: $selection, controller: editor, minHeight: 260)
                         .frame(minHeight: 260)
                         .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -274,9 +282,9 @@ struct NewTopicComposer: View {
                         )
 
                     HStack {
-                        ComposerImageButton(text: $content, selection: $selection)
-                        ComposerEmoticonButton(text: $content, selection: $selection)
-                        ComposerFileButton(text: $content, selection: $selection)
+                        ComposerImageButton(text: $content, selection: $selection, editor: editor)
+                        ComposerEmoticonButton(text: $content, selection: $selection, editor: editor)
+                        ComposerFileButton(text: $content, selection: $selection, editor: editor)
                         Spacer()
                         Text("\(content.count) / 8000")
                             .font(ShellTheme.Fonts.caption)
@@ -604,6 +612,7 @@ struct EditPostComposer: View {
     @State private var title: String
     @State private var content: String
     @State private var selection = NSRange(location: 0, length: 0)
+    @StateObject private var editor = UBBEditorController()
     @State private var saving = false
     @State private var errorMessage: String? = nil
 
@@ -633,11 +642,11 @@ struct EditPostComposer: View {
                     }
 
                     if contentType == 0 {
-                        UBBFormatBar(text: $content, selection: $selection)
+                        UBBFormatBar(text: $content, selection: $selection, editor: editor)
                     } else {
-                        MarkdownFormatBar(text: $content, selection: $selection)
+                        MarkdownFormatBar(text: $content, selection: $selection, editor: editor)
                     }
-                    UBBTextEditor(text: $content, selection: $selection, minHeight: 260)
+                    UBBTextEditor(text: $content, selection: $selection, controller: editor, minHeight: 260)
                         .frame(minHeight: 260)
                         .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -647,9 +656,9 @@ struct EditPostComposer: View {
                         )
 
                     HStack {
-                        ComposerImageButton(text: $content, selection: $selection)
-                        ComposerEmoticonButton(text: $content, selection: $selection)
-                        ComposerFileButton(text: $content, selection: $selection)
+                        ComposerImageButton(text: $content, selection: $selection, editor: editor)
+                        ComposerEmoticonButton(text: $content, selection: $selection, editor: editor)
+                        ComposerFileButton(text: $content, selection: $selection, editor: editor)
                         Spacer()
                         Text("\(content.count) / 8000")
                             .font(ShellTheme.Fonts.caption)
@@ -788,6 +797,7 @@ struct TopicNoteView: View {
 struct MarkdownFormatBar: View {
     @Binding var text: String
     @Binding var selection: NSRange
+    @ObservedObject var editor: UBBEditorController
 
     var body: some View {
         VStack(spacing: 8) {
@@ -814,7 +824,9 @@ struct MarkdownFormatBar: View {
 
     private func button(_ title: String, prefix: String, suffix: String, bold: Bool = false) -> some View {
         Button {
-            UBBEditorInsertion.wrap(prefix, suffix, text: &text, selection: &selection)
+            if !editor.wrap(prefix, suffix) {
+                UBBEditorInsertion.wrap(prefix, suffix, text: &text, selection: &selection)
+            }
         } label: {
             Text(title)
                 .font(.system(size: 12, weight: bold ? .bold : .regular))
@@ -830,6 +842,7 @@ struct MarkdownFormatBar: View {
 struct UBBFormatBar: View {
     @Binding var text: String
     @Binding var selection: NSRange
+    @ObservedObject var editor: UBBEditorController
 
     var body: some View {
         VStack(spacing: 8) {
@@ -893,7 +906,9 @@ struct UBBFormatBar: View {
     }
 
     private func wrap(_ prefix: String, _ suffix: String, placeholder: String) {
-        UBBEditorInsertion.wrap(prefix, suffix, text: &text, selection: &selection)
+        if !editor.wrap(prefix, suffix) {
+            UBBEditorInsertion.wrap(prefix, suffix, text: &text, selection: &selection)
+        }
     }
 
     private func format(
