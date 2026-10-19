@@ -256,7 +256,8 @@ struct BoardTopicsView: View {
 
     private var visibleTopics: [NativeTopicSummary] {
         topics.filter { topic in
-            !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
+            !library.isTopicBlocked(topic.id)
+                && !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
                 && !library.isTitleBlocked(topic.title)
                 && !library.isUserBlocked(id: topic.userId, name: topic.userName)
         }

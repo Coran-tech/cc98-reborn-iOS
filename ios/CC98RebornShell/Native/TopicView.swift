@@ -117,9 +117,6 @@ struct TopicDetailView: View {
     @AppStorage("native.saveBrowseProgress") private var saveBrowseProgress = false
     @State private var scrollToTopOnNextLoad = false
     @State private var didAutoResume: Bool
-    @State private var atTopicBottom = false
-    @State private var dragStartedAtBottom = false
-    @State private var draggingTopic = false
     @State private var pullNextTriggered = false
 
     private let pageSize = 10
@@ -225,39 +222,17 @@ struct TopicDetailView: View {
                     }
                     Color.clear
                         .frame(height: 1)
-                        .onAppear { atTopicBottom = true }
-                        .onDisappear { atTopicBottom = false }
                 }
             }
             .padding(16)
             .id("topic-top")
-            }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 24)
-                    .onChanged { _ in
-                        if !draggingTopic {
-                            draggingTopic = true
-                            dragStartedAtBottom = atTopicBottom
-                        }
-                    }
-                    .onEnded { value in
-                        let shouldTurn = dragStartedAtBottom
-                            && atTopicBottom
-                            && !pullNextTriggered
-                            && page < pageCount
-                            && !loading
-                            && posts.count >= pageSize
-                            && value.translation.height < -64
-                        draggingTopic = false
-                        dragStartedAtBottom = false
-                        if shouldTurn {
-                            pullNextTriggered = true
-                            turnPage(1)
-                        }
-                    }
+            .background(
+                ScrollBottomObserver(threshold: 64) {
+                    handlePullNext()
+                }
             )
+            }
             .onChange(of: page) { _, _ in
-                atTopicBottom = false
                 pullNextTriggered = false
             }
             .onChange(of: loading) { _, value in
@@ -535,6 +510,17 @@ struct TopicDetailView: View {
                 .fill(ShellTheme.separator)
                 .frame(height: 0.5)
         }
+    }
+
+    private func handlePullNext() {
+        guard page < pageCount,
+              !loading,
+              !pullNextTriggered,
+              posts.count >= pageSize else {
+            return
+        }
+        pullNextTriggered = true
+        turnPage(1)
     }
 
     private func turnPage(_ delta: Int) {

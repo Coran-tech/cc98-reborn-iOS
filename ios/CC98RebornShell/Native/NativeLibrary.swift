@@ -31,6 +31,7 @@ private struct NativeLibraryData: Codable {
     var blockedTitleKeywords: [String]?
     var blockedContentRules: [String]?
     var blockedNumericRules: [NativeNumericBlockRule]?
+    var blockedTopicIDs: [Int]?
     var drafts: [String: String]?
     var readPositions: [String: NativeReadPosition]?
 }
@@ -49,6 +50,7 @@ final class NativeLibrary: ObservableObject {
     @Published private(set) var blockedTitleKeywords: [String] = []
     @Published private(set) var blockedContentRules: [String] = []
     @Published private(set) var blockedNumericRules: [NativeNumericBlockRule] = []
+    @Published private(set) var blockedTopicIDs: [Int] = []
     private var drafts: [String: String] = [:]
     private var readPositions: [String: NativeReadPosition] = [:]
 
@@ -76,6 +78,20 @@ final class NativeLibrary: ObservableObject {
         } else {
             readLater.insert(saved(topic), at: 0)
         }
+        save()
+    }
+
+    func addReadLater(topicID: Int, title: String?, boardID: Int?) {
+        guard !isReadLater(topicID) else { return }
+        readLater.insert(
+            NativeSavedTopic(
+                id: topicID,
+                title: title ?? "主题 #\(topicID)",
+                boardID: boardID,
+                savedAt: Date()
+            ),
+            at: 0
+        )
         save()
     }
 
@@ -120,6 +136,21 @@ final class NativeLibrary: ObservableObject {
     }
 
     // MARK: Filters
+
+    func isTopicBlocked(_ topicID: Int) -> Bool {
+        blockedTopicIDs.contains(topicID)
+    }
+
+    func addBlockedTopic(_ topicID: Int) {
+        guard !blockedTopicIDs.contains(topicID) else { return }
+        blockedTopicIDs.append(topicID)
+        save()
+    }
+
+    func removeBlockedTopic(_ topicID: Int) {
+        blockedTopicIDs.removeAll { $0 == topicID }
+        save()
+    }
 
     func isUserBlocked(_ name: String?) -> Bool {
         isUserBlocked(id: nil, name: name)
@@ -339,6 +370,7 @@ final class NativeLibrary: ObservableObject {
         blockedTitleKeywords = []
         blockedContentRules = []
         blockedNumericRules = []
+        blockedTopicIDs = []
         save()
     }
 
@@ -401,6 +433,7 @@ final class NativeLibrary: ObservableObject {
         blockedTitleKeywords = decoded.blockedTitleKeywords ?? []
         blockedContentRules = decoded.blockedContentRules ?? []
         blockedNumericRules = decoded.blockedNumericRules ?? []
+        blockedTopicIDs = decoded.blockedTopicIDs ?? []
         drafts = decoded.drafts ?? [:]
         readPositions = decoded.readPositions ?? [:]
     }
@@ -417,6 +450,7 @@ final class NativeLibrary: ObservableObject {
             blockedTitleKeywords: blockedTitleKeywords,
             blockedContentRules: blockedContentRules,
             blockedNumericRules: blockedNumericRules,
+            blockedTopicIDs: blockedTopicIDs,
             drafts: drafts,
             readPositions: readPositions
         )

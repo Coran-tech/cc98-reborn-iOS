@@ -92,21 +92,26 @@ struct NewTopicsView: View {
                 .task {
                     await thumbnails.load(topic: topic, api: app.api)
                 }
-            }
-            if error != nil {
-                Button("加载失败，点击重试") {
-                    Task { await load(reset: false) }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    topicActions(topic)
                 }
-                .font(ShellTheme.Fonts.footnote)
-            } else if hasMore {
+            }
+            if loading {
                 HStack {
                     Spacer()
                     ProgressView()
                     Spacer()
                 }
-                .onAppear {
+            } else if error != nil {
+                Button("加载失败，点击重试") {
                     Task { await load(reset: false) }
                 }
+                .font(ShellTheme.Fonts.footnote)
+            } else if hasMore {
+                Button("加载更多") {
+                    Task { await load(reset: false) }
+                }
+                .font(ShellTheme.Fonts.footnote)
             }
         }
         .listStyle(.insetGrouped)
@@ -138,18 +143,21 @@ struct NewTopicsView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
 
-                if error != nil {
+                if loading {
+                    ProgressView()
+                        .padding(.bottom, 20)
+                } else if error != nil {
                     Button("加载失败，点击重试") {
                         Task { await load(reset: false) }
                     }
                     .font(ShellTheme.Fonts.footnote)
                     .padding(.bottom, 20)
                 } else if hasMore {
-                    ProgressView()
-                        .padding(.bottom, 20)
-                        .onAppear {
-                            Task { await load(reset: false) }
-                        }
+                    Button("加载更多") {
+                        Task { await load(reset: false) }
+                    }
+                    .font(ShellTheme.Fonts.footnote)
+                    .padding(.bottom, 20)
                 }
             }
             .refreshable { await load(reset: true) }
@@ -170,6 +178,9 @@ struct NewTopicsView: View {
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
+        .contextMenu {
+            topicActions(topic)
+        }
         .onAppear { loadMoreIfNeeded(topic) }
         .task {
             await thumbnails.load(topic: topic, api: app.api)
@@ -178,7 +189,8 @@ struct NewTopicsView: View {
 
     private var visibleTopics: [NativeTopicSummary] {
         topics.filter { topic in
-            !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
+            !library.isTopicBlocked(topic.id)
+                && !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
                 && !library.isTitleBlocked(topic.title)
                 && !library.isUserBlocked(id: topic.userId, name: topic.userName)
         }
@@ -197,6 +209,35 @@ struct NewTopicsView: View {
         let lastIDs = Set([topics.last?.id, evenTopics.last?.id, oddTopics.last?.id].compactMap { $0 })
         guard lastIDs.contains(topic.id) else { return }
         Task { await load(reset: false) }
+    }
+
+    @ViewBuilder
+    private func topicActions(_ topic: NativeTopicSummary) -> some View {
+        Button {
+            library.addReadLater(topicID: topic.id, title: topic.title, boardID: topic.boardId)
+        } label: {
+            Label("加入稍后再看", systemImage: "bookmark")
+        }
+
+        Button(role: .destructive) {
+            library.addBlockedTopic(topic.id)
+        } label: {
+            Label("屏蔽此帖", systemImage: "eye.slash")
+        }
+
+        if let userID = topic.userId {
+            Button(role: .destructive) {
+                library.addBlockedUserID(String(userID))
+            } label: {
+                Label("屏蔽此人", systemImage: "person.crop.circle.badge.xmark")
+            }
+        } else if let name = topic.userName, !name.isEmpty {
+            Button(role: .destructive) {
+                library.addBlockedUser(name)
+            } label: {
+                Label("屏蔽此人", systemImage: "person.crop.circle.badge.xmark")
+            }
+        }
     }
 
     private func resolvedBoardName(_ topic: NativeTopicSummary) -> String? {
