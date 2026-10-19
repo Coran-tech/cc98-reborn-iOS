@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BoardsView: View {
     @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var library: NativeLibrary
     @State private var groups: [NativeBoardGroup] = []
     @State private var loading = false
     @State private var error: String?
@@ -22,7 +23,7 @@ struct BoardsView: View {
                     List {
                         ForEach(filteredGroups) { group in
                             Section {
-                                ForEach(group.boards ?? []) { board in
+                                ForEach(visibleBoards(group)) { board in
                                     NavigationLink {
                                         BoardTopicsView(board: board)
                                     } label: {
@@ -63,13 +64,17 @@ struct BoardsView: View {
         .task { await load() }
     }
 
+    private func visibleBoards(_ group: NativeBoardGroup) -> [NativeBoard] {
+        (group.boards ?? []).filter { !library.isBoardBlocked(id: $0.id, name: $0.name) }
+    }
+
     private var filteredGroups: [NativeBoardGroup] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return groups }
         return groups.compactMap { group in
-            let boards = (group.boards ?? []).filter {
-                $0.name.localizedCaseInsensitiveContains(query)
-                    || ($0.description ?? "").localizedCaseInsensitiveContains(query)
+            let boards = visibleBoards(group).filter { board in
+                query.isEmpty
+                    || board.name.localizedCaseInsensitiveContains(query)
+                    || (board.description ?? "").localizedCaseInsensitiveContains(query)
             }
             guard !boards.isEmpty else { return nil }
             return NativeBoardGroup(id: group.id, name: group.name, masters: group.masters, order: group.order, boards: boards)
@@ -125,6 +130,7 @@ private struct BoardRow: View {
 struct BoardTopicsView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
     let board: NativeBoard
 
     @AppStorage("native.lastBoardID") private var lastBoardID = 0
@@ -170,7 +176,7 @@ struct BoardTopicsView: View {
                         }
                     }
 
-                    ForEach(topics) { topic in
+                    ForEach(visibleTopics) { topic in
                         NavigationLink {
                             TopicDetailView(topicID: topic.id, boardID: topic.boardId ?? board.id)
                         } label: {
@@ -232,6 +238,14 @@ struct BoardTopicsView: View {
             Text(alertMessage)
         }
         .task { await load(reset: true) }
+    }
+
+    private var visibleTopics: [NativeTopicSummary] {
+        topics.filter { topic in
+            !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
+                && !library.isTitleBlocked(topic.title)
+                && !library.isUserBlocked(id: topic.userId, name: topic.userName)
+        }
     }
 
     @MainActor

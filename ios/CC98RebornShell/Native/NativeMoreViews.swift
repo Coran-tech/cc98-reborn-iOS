@@ -17,6 +17,7 @@ private enum SearchScope: String, CaseIterable, Identifiable {
 
 struct SearchView: View {
     @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var library: NativeLibrary
 
     @State private var keyword = ""
     @State private var scope: SearchScope = .all
@@ -118,7 +119,7 @@ struct SearchView: View {
                                 }
                             }
                         } else {
-                            ForEach(results) { topic in
+                            ForEach(filteredResults) { topic in
                                 NavigationLink {
                                     TopicDetailView(topicID: topic.id, boardID: topic.boardId)
                                 } label: {
@@ -167,6 +168,14 @@ struct SearchView: View {
 
     private var isEmpty: Bool {
         results.isEmpty && users.isEmpty
+    }
+
+    private var filteredResults: [NativeTopicSummary] {
+        results.filter { topic in
+            !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
+                && !library.isTitleBlocked(topic.title)
+                && !library.isUserBlocked(id: topic.userId, name: topic.userName)
+        }
     }
 
     private var placeholder: String {
@@ -598,12 +607,168 @@ struct HistoryView: View {
     }
 }
 
+struct BlocklistView: View {
+    @EnvironmentObject private var library: NativeLibrary
+
+    @State private var newUserID = ""
+    @State private var newBoard = ""
+    @State private var newTitle = ""
+    @State private var newContent = ""
+    @State private var metric = "reputation"
+    @State private var comparison = "<"
+    @State private var threshold = "-3"
+
+    var body: some View {
+        Form {
+            Section("屏蔽用户") {
+                HStack {
+                    TextField("用户 ID 或用户名", text: $newUserID)
+                    Button("添加") {
+                        library.addBlockedUserID(newUserID)
+                        newUserID = ""
+                    }
+                    .disabled(newUserID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                ForEach(Array(Set(library.blockedUsers + library.blockedUserIDs)).sorted(), id: \.self) { value in
+                    ruleRow(value) {
+                        library.removeBlockedUser(value)
+                        library.removeBlockedUserID(value)
+                    }
+                }
+            }
+
+            Section("屏蔽版面") {
+                HStack {
+                    TextField("版面 ID 或名称", text: $newBoard)
+                    Button("添加") {
+                        library.addBlockedBoard(newBoard)
+                        newBoard = ""
+                    }
+                    .disabled(newBoard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                ForEach(library.blockedBoards, id: \.self) { value in
+                    ruleRow(value) { library.removeBlockedBoard(value) }
+                }
+            }
+
+            Section("标题匹配") {
+                HStack {
+                    TextField("关键词或 /正则/i", text: $newTitle)
+                    Button("添加") {
+                        library.addBlockedTitle(newTitle)
+                        newTitle = ""
+                    }
+                    .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                ForEach(library.blockedTitleKeywords, id: \.self) { value in
+                    ruleRow(value) { library.removeBlockedTitle(value) }
+                }
+            }
+
+            Section("发言条件") {
+                HStack {
+                    TextField("关键词、/正则/i 或 \"词\" > 3", text: $newContent)
+                    Button("添加") {
+                        library.addBlockedContentRule(newContent)
+                        newContent = ""
+                    }
+                    .disabled(newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                ForEach(library.blockedContentRules, id: \.self) { value in
+                    ruleRow(value) { library.removeBlockedContentRule(value) }
+                }
+            }
+
+            Section("数值条件") {
+                Picker("指标", selection: $metric) {
+                    Text("风评").tag("reputation")
+                    Text("赞").tag("like")
+                    Text("踩").tag("dislike")
+                    Text("赞踩总数").tag("total")
+                    Text("赞踩比").tag("ratio")
+                }
+                Picker("比较", selection: $comparison) {
+                    Text("低于").tag("<")
+                    Text("不高于").tag("<=")
+                    Text("高于").tag(">")
+                    Text("不低于").tag(">=")
+                    Text("等于").tag("=")
+                    Text("不等于").tag("!=")
+                }
+                HStack {
+                    TextField("阈值", text: $threshold)
+                        .keyboardType(.numbersAndPunctuation)
+                    Button("添加规则") {
+                        guard let value = Double(threshold) else { return }
+                        library.addNumericRule(NativeNumericBlockRule(metric: metric, comparison: comparison, threshold: value))
+                    }
+                }
+                ForEach(library.blockedNumericRules) { rule in
+                    HStack {
+                        Text("\(metricTitle(rule.metric)) \(comparisonTitle(rule.comparison)) \(format(rule.threshold))")
+                        Spacer()
+                        Button {
+                            library.removeNumericRule(rule.id)
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(ShellTheme.danger)
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Button("清空全部屏蔽规则", role: .destructive) {
+                    library.clearBlockingRules()
+                }
+            }
+        }
+        .navigationTitle("屏蔽规则")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func ruleRow(_ value: String, remove: @escaping () -> Void) -> some View {
+        HStack {
+            Text(value)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+            Button(action: remove) {
+                Image(systemName: "trash")
+                    .foregroundStyle(ShellTheme.danger)
+            }
+        }
+    }
+
+    private func metricTitle(_ value: String) -> String {
+        switch value {
+        case "like": return "赞"
+        case "dislike": return "踩"
+        case "total": return "赞踩总数"
+        case "ratio": return "赞踩比"
+        default: return "风评"
+        }
+    }
+
+    private func comparisonTitle(_ value: String) -> String {
+        switch value {
+        case "<": return "低于"
+        case "<=": return "不高于"
+        case ">": return "高于"
+        case ">=": return "不低于"
+        case "=": return "等于"
+        case "!=": return "不等于"
+        default: return value
+        }
+    }
+
+    private func format(_ value: Double) -> String {
+        value.rounded() == value ? String(Int(value)) : String(value)
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var library: NativeLibrary
     @AppStorage("native.appearance") private var appearance = "system"
-
-    @State private var newUser = ""
-    @State private var newKeyword = ""
 
     var body: some View {
         Form {
@@ -622,50 +787,8 @@ struct SettingsView: View {
                 NavigationLink("浏览历史") { HistoryView() }
             }
 
-            Section("屏蔽用户") {
-                HStack {
-                    TextField("用户名", text: $newUser)
-                    Button("添加") {
-                        library.addBlockedUser(newUser)
-                        newUser = ""
-                    }
-                    .disabled(newUser.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                ForEach(library.blockedUsers, id: \.self) { name in
-                    HStack {
-                        Text(name)
-                        Spacer()
-                        Button {
-                            library.removeBlockedUser(name)
-                        } label: {
-                            Image(systemName: "trash")
-                                .foregroundStyle(ShellTheme.danger)
-                        }
-                    }
-                }
-            }
-
-            Section("屏蔽关键词") {
-                HStack {
-                    TextField("正文关键词", text: $newKeyword)
-                    Button("添加") {
-                        library.addBlockedKeyword(newKeyword)
-                        newKeyword = ""
-                    }
-                    .disabled(newKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                ForEach(library.blockedKeywords, id: \.self) { word in
-                    HStack {
-                        Text(word)
-                        Spacer()
-                        Button {
-                            library.removeBlockedKeyword(word)
-                        } label: {
-                            Image(systemName: "trash")
-                                .foregroundStyle(ShellTheme.danger)
-                        }
-                    }
-                }
+            Section("屏蔽规则") {
+                NavigationLink("管理屏蔽规则") { BlocklistView() }
             }
 
             Section("本机数据") {
@@ -673,9 +796,6 @@ struct SettingsView: View {
                     .disabled(library.history.isEmpty)
                 Button("清空稍后再看", role: .destructive) { library.clearReadLater() }
                     .disabled(library.readLater.isEmpty)
-                Text("浏览历史、稍后再看、备注和屏蔽规则只保存在本机，不会上传。")
-                    .font(ShellTheme.Fonts.caption)
-                    .foregroundStyle(ShellTheme.secondaryText)
             }
         }
         .navigationTitle("设置")

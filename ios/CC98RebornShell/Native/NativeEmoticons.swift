@@ -60,6 +60,11 @@ struct EmoticonPicker: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var categoryID = EmoticonCatalog.categories.first?.id ?? "ac"
+    @AppStorage("native.recentEmoticons") private var recentRaw = ""
+
+    private var recentTags: [String] {
+        recentRaw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+    }
 
     private var category: EmoticonCategory {
         EmoticonCatalog.categories.first { $0.id == categoryID } ?? EmoticonCatalog.categories[0]
@@ -68,6 +73,36 @@ struct EmoticonPicker: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                if !recentTags.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("最近使用")
+                            .font(ShellTheme.Fonts.caption)
+                            .foregroundStyle(ShellTheme.secondaryText)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(recentTags, id: \.self) { tag in
+                                    Button {
+                                        insert(tag)
+                                    } label: {
+                                        if let image = UBBEmotion.image(tag, light: colorScheme == .dark, maxSide: 36) {
+                                            Image(uiImage: image)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 30, height: 30)
+                                                .frame(width: 44, height: 44)
+                                                .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("最近表情 \(tag)")
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+
                 Picker("表情分类", selection: $categoryID) {
                     ForEach(EmoticonCatalog.categories) { item in
                         Text(item.title).tag(item.id)
@@ -81,7 +116,7 @@ struct EmoticonPicker: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 52), spacing: 8)], spacing: 8) {
                         ForEach(category.ids, id: \.self) { id in
                             Button {
-                                text += "[\(category.tagPrefix)\(id)]"
+                                insert(category.tagPrefix + id)
                             } label: {
                                 Group {
                                     if let image = UBBEmotion.image(category.tagPrefix + id, light: colorScheme == .dark, maxSide: 36) {
@@ -114,6 +149,14 @@ struct EmoticonPicker: View {
                 }
             }
         }
+    }
+
+    private func insert(_ tag: String) {
+        text += "[\(tag)]"
+        var tags = recentTags.filter { $0 != tag }
+        tags.insert(tag, at: 0)
+        recentRaw = tags.prefix(24).joined(separator: ",")
+        dismiss()
     }
 }
 
