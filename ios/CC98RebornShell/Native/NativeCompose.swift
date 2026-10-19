@@ -790,18 +790,24 @@ struct MarkdownFormatBar: View {
     @Binding var selection: NSRange
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                button("B", prefix: "**", suffix: "**", bold: true)
-                button("I", prefix: "*", suffix: "*")
-                button("S", prefix: "~~", suffix: "~~")
-                button("代码", prefix: "`", suffix: "`")
-                button("引用", prefix: "> ", suffix: "")
-                button("标题", prefix: "## ", suffix: "")
-                button("列表", prefix: "- ", suffix: "")
-                button("链接", prefix: "[", suffix: "](https://)")
-                button("图片", prefix: "![", suffix: "](https://)")
-                button("分割线", prefix: "\n---\n", suffix: "")
+        VStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    button("B", prefix: "**", suffix: "**", bold: true)
+                    button("I", prefix: "*", suffix: "*")
+                    button("S", prefix: "~~", suffix: "~~")
+                    button("代码", prefix: "`", suffix: "`")
+                    button("引用", prefix: "> ", suffix: "")
+                    button("标题", prefix: "## ", suffix: "")
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    button("列表", prefix: "- ", suffix: "")
+                    button("链接", prefix: "[", suffix: "](https://)")
+                    button("图片", prefix: "![", suffix: "](https://)")
+                    button("分割线", prefix: "\n---\n", suffix: "")
+                }
             }
         }
     }
@@ -826,47 +832,53 @@ struct UBBFormatBar: View {
     @Binding var selection: NSRange
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                format("B", prefix: "[b]", suffix: "[/b]", placeholder: "粗体", bold: true)
-                format("I", prefix: "[i]", suffix: "[/i]", placeholder: "斜体", italic: true)
-                format("U", prefix: "[u]", suffix: "[/u]", placeholder: "下划线", underline: true)
-                format("S", prefix: "[del]", suffix: "[/del]", placeholder: "删除线")
+        VStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    format("B", prefix: "[b]", suffix: "[/b]", placeholder: "粗体", bold: true)
+                    format("I", prefix: "[i]", suffix: "[/i]", placeholder: "斜体", italic: true)
+                    format("U", prefix: "[u]", suffix: "[/u]", placeholder: "下划线", underline: true)
+                    format("S", prefix: "[del]", suffix: "[/del]", placeholder: "删除线")
 
-                Menu {
-                    ForEach([2, 3, 4, 5, 6], id: \.self) { size in
-                        Button("字号 \(size)") {
-                            wrap("[size=\(size)]", "[/size]", placeholder: "文字")
+                    Menu {
+                        ForEach([2, 3, 4, 5, 6], id: \.self) { size in
+                            Button("字号 \(size)") {
+                                wrap("[size=\(size)]", "[/size]", placeholder: "文字")
+                            }
                         }
+                    } label: {
+                        menuLabel("字号")
                     }
-                } label: {
-                    menuLabel("字号")
-                }
 
-                Menu {
-                    Button("红") { wrap("[color=red]", "[/color]", placeholder: "彩色文字") }
-                    Button("橙") { wrap("[color=orange]", "[/color]", placeholder: "彩色文字") }
-                    Button("蓝") { wrap("[color=blue]", "[/color]", placeholder: "彩色文字") }
-                    Button("绿") { wrap("[color=green]", "[/color]", placeholder: "彩色文字") }
-                    Button("紫") { wrap("[color=purple]", "[/color]", placeholder: "彩色文字") }
-                } label: {
-                    menuLabel("颜色")
-                }
+                    Menu {
+                        Button("红") { wrap("[color=red]", "[/color]", placeholder: "彩色文字") }
+                        Button("橙") { wrap("[color=orange]", "[/color]", placeholder: "彩色文字") }
+                        Button("蓝") { wrap("[color=blue]", "[/color]", placeholder: "彩色文字") }
+                        Button("绿") { wrap("[color=green]", "[/color]", placeholder: "彩色文字") }
+                        Button("紫") { wrap("[color=purple]", "[/color]", placeholder: "彩色文字") }
+                    } label: {
+                        menuLabel("颜色")
+                    }
 
-                Menu {
-                    Button("左对齐") { wrap("[align=left]", "[/align]", placeholder: "内容") }
-                    Button("居中") { wrap("[align=center]", "[/align]", placeholder: "内容") }
-                    Button("右对齐") { wrap("[align=right]", "[/align]", placeholder: "内容") }
-                } label: {
-                    menuLabel("对齐")
+                    Menu {
+                        Button("左对齐") { wrap("[align=left]", "[/align]", placeholder: "内容") }
+                        Button("居中") { wrap("[align=center]", "[/align]", placeholder: "内容") }
+                        Button("右对齐") { wrap("[align=right]", "[/align]", placeholder: "内容") }
+                    } label: {
+                        menuLabel("对齐")
+                    }
                 }
+            }
 
-                format("引用", prefix: "[quote]", suffix: "[/quote]", placeholder: "引用内容")
-                format("代码", prefix: "[code]", suffix: "[/code]", placeholder: "代码")
-                format("链接", prefix: "[url=链接]", suffix: "[/url]", placeholder: "链接文字")
-                format("列表", prefix: "[list]\n[*]", suffix: "\n[/list]", placeholder: "项目一\n[*]项目二")
-                format("表格", prefix: "[table]\n[tr][th]标题1[/th][th]标题2[/th][/tr]\n[tr][td]", suffix: "[/td][td]内容2[/td][/tr]\n[/table]", placeholder: "内容1")
-                format("分割线", prefix: "[hr]", suffix: "", placeholder: "")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    format("引用", prefix: "[quote]", suffix: "[/quote]", placeholder: "引用内容")
+                    format("代码", prefix: "[code]", suffix: "[/code]", placeholder: "代码")
+                    format("链接", prefix: "[url=链接]", suffix: "[/url]", placeholder: "链接文字")
+                    format("列表", prefix: "[list]\n[*]", suffix: "\n[/list]", placeholder: "项目一\n[*]项目二")
+                    format("表格", prefix: "[table]\n[tr][th]标题1[/th][th]标题2[/th][/tr]\n[tr][td]", suffix: "[/td][td]内容2[/td][/tr]\n[/table]", placeholder: "内容1")
+                    format("分割线", prefix: "[hr]", suffix: "", placeholder: "")
+                }
             }
         }
     }

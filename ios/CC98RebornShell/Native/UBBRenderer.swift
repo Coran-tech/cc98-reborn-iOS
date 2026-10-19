@@ -616,7 +616,7 @@ enum UBBEmotion {
 
     private static let cache = NSCache<NSString, UIImage>()
 
-    static func image(_ tag: String, light: Bool = false, maxSide: CGFloat = 60) -> UIImage? {
+    static func image(_ tag: String, light: Bool = false, maxSide: CGFloat = 40) -> UIImage? {
         let key = "\(tag.lowercased())|\(light ? "light" : "dark")|\(Int(maxSide))"
         if let cached = cache.object(forKey: key as NSString) { return cached }
         guard let asset = resolve(tag.lowercased(), light: light), let image = load(asset) else { return nil }
