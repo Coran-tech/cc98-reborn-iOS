@@ -99,6 +99,25 @@ final class CC98API {
         return UBBFirstImage.first(in: content)
     }
 
+    func userTopics(userID: Int, from: Int, size: Int = 10) async throws -> [NativeMyTopic] {
+        let data = try await self.data(
+            path: "/user/\(userID)/recent-topic",
+            query: [
+                URLQueryItem(name: "userid", value: String(userID)),
+                URLQueryItem(name: "from", value: String(from)),
+                URLQueryItem(name: "size", value: String(size))
+            ],
+            authenticated: false
+        )
+        if let topics = try? decoder.decode([NativeMyTopic].self, from: data) {
+            return topics
+        }
+        if let envelope = try? decoder.decode(DataEnvelope<[NativeMyTopic]>.self, from: data) {
+            return envelope.data
+        }
+        throw CC98APIError.decoding
+    }
+
     func boardGroups() async throws -> [NativeBoardGroup] {
         let data = try await data(path: "/board/all", authenticated: false)
         if let groups = try? decoder.decode([NativeBoardGroup].self, from: data), !groups.isEmpty {
