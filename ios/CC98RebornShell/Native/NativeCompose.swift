@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct ComposerImageButton: View {
     @EnvironmentObject private var app: NativeAppModel
@@ -48,6 +49,68 @@ struct ComposerImageButton: View {
     }
 }
 
+struct ComposerFileButton: View {
+    @EnvironmentObject private var app: NativeAppModel
+    @Binding var text: String
+
+    @State private var showImporter = false
+    @State private var uploading = false
+    @State private var errorMessage = ""
+    @State private var showError = false
+
+    var body: some View {
+        Button {
+            showImporter = true
+        } label: {
+            Label(uploading ? "上传中…" : "上传文件", systemImage: uploading ? "arrow.up.circle" : "paperclip")
+                .font(ShellTheme.Fonts.footnote)
+                .foregroundStyle(ShellTheme.accent)
+        }
+        .disabled(uploading)
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case let .success(urls):
+                if let url = urls.first {
+                    Task { await upload(url) }
+                }
+            case let .failure(error):
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        }
+        .alert("文件上传失败", isPresented: $showError) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
+    }
+
+    @MainActor
+    private func upload(_ url: URL) async {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+        }
+        uploading = true
+        defer { uploading = false }
+        do {
+            let data = try Data(contentsOf: url)
+            let ext = url.pathExtension.lowercased()
+            let mime = UTType(filenameExtension: ext)?.preferredMIMEType ?? "application/octet-stream"
+            let remote = try await app.api.uploadAttachment(data, fileName: url.lastPathComponent, mimeType: mime)
+            let tag = ext.isEmpty ? "file" : ext
+            text += "\n[upload=\(tag)]\(remote)[/upload]\n"
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
+    }
+}
+
 struct NewTopicComposer: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
@@ -61,6 +124,9 @@ struct NewTopicComposer: View {
     @State private var title = ""
     @State private var content = ""
     @State private var anonymous = false
+    @State private var contentType = 0
+    @State private var notifyPoster = true
+    @State private var postKind = 0
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
@@ -72,6 +138,20 @@ struct NewTopicComposer: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Text("使用账号：")
+                            .font(ShellTheme.Fonts.footnote)
+                            .foregroundStyle(ShellTheme.secondaryText)
+                        NativeAvatar(
+                            url: auth.profile?.avatarURL ?? NativeAvatarURLs.defaultURL(gender: auth.profile?.gender),
+                            name: auth.profile?.name,
+                            size: 24
+                        )
+                        Text(auth.profile?.name ?? "CC98 用户")
+                            .font(ShellTheme.Fonts.footnote.weight(.medium))
+                            .foregroundStyle(ShellTheme.primaryText)
+                    }
+
                     Text(boardName)
                         .font(ShellTheme.Fonts.caption)
                         .foregroundStyle(ShellTheme.secondaryText)
@@ -94,6 +174,7 @@ struct NewTopicComposer: View {
                     HStack {
                         ComposerImageButton(text: $content)
                         ComposerEmoticonButton(text: $content)
+                        ComposerFileButton(text: $content)
                         Spacer()
                         Text("\(content.count) / 8000")
                             .font(ShellTheme.Fonts.caption)
@@ -102,20 +183,69 @@ struct NewTopicComposer: View {
 
                     if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         DisclosureGroup("预览") {
-                            UBBContentView(source: content)
+                            UBBContentView(source: content, markdown: contentType == 1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .font(ShellTheme.Fonts.caption)
                     }
 
+                    HStack(spacing: 16) {
+                        Button {
+                            contentType = contentType == 1 ? 0 : 1
+                        } label: {
+                            Text("Markdown")
+                                .font(ShellTheme.Fonts.footnote)
+                                .foregroundStyle(contentType == 1 ? ShellTheme.accent : ShellTheme.secondaryText)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            library.setDraft(content, for: bodyKey)
+                            library.setDraft(title, for: titleKey)
+                        } label: {
+                            Text("草稿")
+                                .font(ShellTheme.Fonts.footnote)
+                                .foregroundStyle(ShellTheme.secondaryText)
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+                    }
+
+                    Toggle("接收新回复通知", isOn: $notifyPoster)
+                        .font(ShellTheme.Fonts.footnote)
+
                     Toggle("匿名发布", isOn: $anonymous)
                         .font(ShellTheme.Fonts.footnote)
+
+                    Picker("帖子类型", selection: $postKind) {
+                        Text("普通帖").tag(0)
+                        Text("学术通知").tag(1)
+                    }
+                    .pickerStyle(.segmented)
 
                     if let errorMessage {
                         Text(errorMessage)
                             .font(ShellTheme.Fonts.footnote)
                             .foregroundStyle(ShellTheme.danger)
                     }
+
+                    Button {
+                        Task { await submit() }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if sending { ProgressView().tint(.white) }
+                            Text(sending ? "发布中…" : "发表")
+                                .font(.system(size: 16, weight: .semibold))
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .foregroundStyle(.white)
+                        .background(ShellTheme.accent, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(sending || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 .padding(16)
             }
@@ -174,7 +304,10 @@ struct NewTopicComposer: View {
                 boardID: boardID,
                 title: trimmedTitle,
                 content: content,
-                isAnonymous: anonymous
+                isAnonymous: anonymous,
+                contentType: contentType,
+                notifyPoster: notifyPoster,
+                type: postKind
             )
             library.clearDraft(for: titleKey)
             library.clearDraft(for: bodyKey)
@@ -240,6 +373,7 @@ struct EditPostComposer: View {
                     HStack {
                         ComposerImageButton(text: $content)
                         ComposerEmoticonButton(text: $content)
+                        ComposerFileButton(text: $content)
                         Spacer()
                         Text("\(content.count) / 8000")
                             .font(ShellTheme.Fonts.caption)

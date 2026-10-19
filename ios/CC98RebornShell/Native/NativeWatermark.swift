@@ -54,7 +54,7 @@ struct WatermarkInstaller: UIViewRepresentable {
             let host = UIHostingController(rootView: NativeWatermarkOverlay(raw: code))
             host.view.backgroundColor = .clear
             let window = UIWindow(windowScene: scene)
-            window.windowLevel = .alert + 1
+            window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
             window.backgroundColor = .clear
             window.isUserInteractionEnabled = false
             window.rootViewController = host

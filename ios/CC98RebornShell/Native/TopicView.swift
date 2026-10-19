@@ -807,6 +807,8 @@ struct ReplyComposer: View {
                     .disabled(sending)
                 ComposerEmoticonButton(text: $text)
                     .disabled(sending)
+                ComposerFileButton(text: $text)
+                    .disabled(sending)
                 HStack {
                     Text("\(text.count) / 8000")
                         .font(ShellTheme.Fonts.caption)
