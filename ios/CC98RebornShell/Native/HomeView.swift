@@ -15,13 +15,6 @@ struct HomeView: View {
                     List {
                         statsSection(home)
                         hotSection
-                        if let announcement = home.announcement, !announcement.isEmpty {
-                            Section("全站公告") {
-                                Text(announcement)
-                                    .font(ShellTheme.Fonts.footnote)
-                                    .foregroundStyle(ShellTheme.secondaryText)
-                            }
-                        }
                     }
                     .listStyle(.insetGrouped)
                     .scrollContentBackground(.hidden)
@@ -97,9 +90,6 @@ struct HomeView: View {
             }
         } header: {
             Text("今日十大")
-        } footer: {
-            Text("数据来自 api.cc98.org；排名与计数以官方接口为准。")
-                .font(ShellTheme.Fonts.caption)
         }
     }
 

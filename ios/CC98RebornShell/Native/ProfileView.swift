@@ -112,12 +112,6 @@ struct ProfileView: View {
 
             Section("关于") {
                 LabeledContent("版本", value: appVersion)
-                Text("原生客户端 · 数据来自 api.cc98.org，使用 CC98 OpenID 授权。")
-                    .font(ShellTheme.Fonts.footnote)
-                    .foregroundStyle(ShellTheme.secondaryText)
-                Text("访问令牌只保存在本机钥匙串；退出登录会删除令牌。界面跟随系统深浅色。")
-                    .font(ShellTheme.Fonts.footnote)
-                    .foregroundStyle(ShellTheme.secondaryText)
             }
         }
         .listStyle(.insetGrouped)
