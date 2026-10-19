@@ -755,6 +755,7 @@ struct ReplyComposer: View {
                             .lineLimit(2)
                     }
                 }
+                }
                 .padding(16)
             }
             .background(ShellTheme.pageBackground)
