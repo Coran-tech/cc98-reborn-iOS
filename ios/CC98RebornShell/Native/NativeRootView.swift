@@ -16,6 +16,8 @@ final class NativeAppModel: ObservableObject {
 struct NativeRootView: View {
     @StateObject private var app = NativeAppModel()
     @StateObject private var library = NativeLibrary()
+    @StateObject private var notifications = NativeNotificationManager()
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("native.appearance") private var appearance = "system"
     @State private var selectedTab = 0
 
@@ -46,6 +48,22 @@ struct NativeRootView: View {
         .environmentObject(library)
         .preferredColorScheme(preferredColorScheme)
         .task { @MainActor in await app.auth.restore() }
+        .task {
+            notifications.configure(auth: app.auth, api: app.api)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                notifications.start()
+            } else {
+                notifications.stop()
+            }
+        }
+        .onReceive(notifications.$openMessages) { open in
+            if open {
+                selectedTab = 3
+                notifications.markMessagesOpened()
+            }
+        }
     }
 
     private var preferredColorScheme: ColorScheme? {
