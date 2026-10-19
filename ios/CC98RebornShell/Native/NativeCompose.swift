@@ -134,6 +134,10 @@ struct NewTopicComposer: View {
     @State private var postKind = 0
     @State private var selection = NSRange(location: 0, length: 0)
     @State private var boardAnonymousState: Int? = nil
+    @State private var tags: NativeTagV2? = nil
+    @State private var tag1ID: Int? = nil
+    @State private var tag2ID: Int? = nil
+    @State private var boardMasters: [String] = []
     @State private var sending = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
@@ -143,6 +147,45 @@ struct NewTopicComposer: View {
 
     private var effectiveAnonymousState: Int {
         boardAnonymousState ?? anonymousState
+    }
+
+    private var canPostActivity: Bool {
+        if auth.profile?.userTitleIds?.contains(91) == true { return true }
+        guard let name = auth.profile?.name else { return false }
+        return boardMasters.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    private func tagMenu(
+        _ title: String,
+        options: [NativeTag],
+        selected: Binding<Int?>,
+        onChange: @escaping () -> Void
+    ) -> some View {
+        Menu {
+            ForEach(options) { tag in
+                Button(tag.name) {
+                    selected.wrappedValue = tag.id
+                    onChange()
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(tagName(options, selected.wrappedValue) ?? title)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .font(ShellTheme.Fonts.footnote)
+            .foregroundStyle(selected.wrappedValue == nil ? ShellTheme.secondaryText : ShellTheme.primaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(ShellTheme.secondarySurface, in: Capsule())
+        }
+    }
+
+    private func tagName(_ options: [NativeTag], _ id: Int?) -> String? {
+        guard let id else { return nil }
+        return options.first { $0.id == id }?.name
     }
 
     var body: some View {
@@ -167,11 +210,34 @@ struct NewTopicComposer: View {
                         .font(ShellTheme.Fonts.caption)
                         .foregroundStyle(ShellTheme.secondaryText)
 
+                    if let tagGroup = tags, tagGroup.layers > 0 {
+                        HStack(spacing: 8) {
+                            tagMenu(
+                                "一级标签",
+                                options: tagGroup.tags,
+                                selected: $tag1ID
+                            ) {
+                                tag2ID = nil
+                            }
+                            if tagGroup.layers == 2 {
+                                tagMenu(
+                                    "二级标签",
+                                    options: tagGroup.tags.first { $0.id == tag1ID }?.subTags ?? [],
+                                    selected: $tag2ID
+                                ) {}
+                            }
+                        }
+                    }
+
                     TextField("主题标题", text: $title)
                         .textFieldStyle(.roundedBorder)
                         .focused($focused)
 
-                    UBBFormatBar(text: $content, selection: $selection)
+                    if contentType == 0 {
+                        UBBFormatBar(text: $content, selection: $selection)
+                    } else {
+                        MarkdownFormatBar(text: $content, selection: $selection)
+                    }
                     UBBTextEditor(text: $content, selection: $selection, minHeight: 260)
                         .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -235,7 +301,10 @@ struct NewTopicComposer: View {
 
                     Picker("帖子类型", selection: $postKind) {
                         Text("普通帖").tag(0)
-                        Text("学术通知").tag(1)
+                        Text("学术通知").tag(2)
+                        if canPostActivity {
+                            Text("校园活动").tag(1)
+                        }
                     }
                     .pickerStyle(.segmented)
 
@@ -285,7 +354,11 @@ struct NewTopicComposer: View {
                 Task {
                     if let detail = try? await app.api.board(id: boardID) {
                         boardAnonymousState = detail.anonymousState ?? 0
+                        boardMasters = detail.boardMasters ?? []
                         anonymous = (detail.anonymousState ?? 0) == 1
+                    }
+                    if let tagGroup = try? await app.api.boardTags(boardID: boardID) {
+                        tags = tagGroup
                     }
                 }
             }
@@ -318,6 +391,20 @@ struct NewTopicComposer: View {
             errorMessage = "正文不能超过 8000 个字。"
             return
         }
+        if let tagGroup = tags {
+            if tagGroup.layers >= 1, tag1ID == nil {
+                errorMessage = "请选择一级标签。"
+                return
+            }
+            if tagGroup.layers == 2, tag2ID == nil {
+                errorMessage = "请选择二级标签。"
+                return
+            }
+        }
+        if postKind == 1, !canPostActivity {
+            errorMessage = "没有权限发布校园活动类型。"
+            return
+        }
         guard !sending else { return }
         sending = true
         errorMessage = nil
@@ -329,7 +416,9 @@ struct NewTopicComposer: View {
                 isAnonymous: effectiveAnonymousState == 1 || anonymous,
                 contentType: contentType,
                 notifyPoster: notifyPoster,
-                type: postKind
+                type: postKind,
+                tag1: tag1ID,
+                tag2: tag2ID
             )
             library.clearDraft(for: titleKey)
             library.clearDraft(for: bodyKey)
@@ -360,6 +449,7 @@ struct EditPostComposer: View {
 
     private var titleKey: String { "edit.title:\(post.id)" }
     private var bodyKey: String { "edit.body:\(post.id)" }
+    private var contentType: Int { post.contentType ?? 0 }
 
     init(post: NativePost, topicTitle: String?, onSaved: @escaping () -> Void) {
         self.post = post
@@ -382,7 +472,11 @@ struct EditPostComposer: View {
                             .textFieldStyle(.roundedBorder)
                     }
 
-                    UBBFormatBar(text: $content, selection: $selection)
+                    if contentType == 0 {
+                        UBBFormatBar(text: $content, selection: $selection)
+                    } else {
+                        MarkdownFormatBar(text: $content, selection: $selection)
+                    }
                     UBBTextEditor(text: $content, selection: $selection, minHeight: 260)
                         .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -527,6 +621,42 @@ struct TopicNoteView: View {
             }
             .onAppear { text = library.note(for: topicID) }
         }
+    }
+}
+
+struct MarkdownFormatBar: View {
+    @Binding var text: String
+    @Binding var selection: NSRange
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                button("B", prefix: "**", suffix: "**", bold: true)
+                button("I", prefix: "*", suffix: "*")
+                button("S", prefix: "~~", suffix: "~~")
+                button("代码", prefix: "`", suffix: "`")
+                button("引用", prefix: "> ", suffix: "")
+                button("标题", prefix: "## ", suffix: "")
+                button("列表", prefix: "- ", suffix: "")
+                button("链接", prefix: "[", suffix: "](https://)")
+                button("图片", prefix: "![", suffix: "](https://)")
+                button("分割线", prefix: "\n---\n", suffix: "")
+            }
+        }
+    }
+
+    private func button(_ title: String, prefix: String, suffix: String, bold: Bool = false) -> some View {
+        Button {
+            UBBEditorInsertion.wrap(prefix, suffix, text: &text, selection: &selection)
+        } label: {
+            Text(title)
+                .font(.system(size: 12, weight: bold ? .bold : .regular))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(ShellTheme.secondarySurface, in: Capsule())
+                .foregroundStyle(ShellTheme.primaryText)
+        }
+        .buttonStyle(.plain)
     }
 }
 

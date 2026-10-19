@@ -133,6 +133,10 @@ final class CC98API {
         try await get("/board/\(id)", authenticated: false)
     }
 
+    func boardTags(boardID: Int) async throws -> NativeTagV2 {
+        try await get("/board/\(boardID)/tag-v2", authenticated: false)
+    }
+
     func topics(boardID: Int, from: Int, size: Int = 20) async throws -> [NativeTopicSummary] {
         try await get("/board/\(boardID)/topic", query: [
             URLQueryItem(name: "from", value: String(from)),
@@ -519,9 +523,11 @@ final class CC98API {
         isAnonymous: Bool,
         contentType: Int = 0,
         notifyPoster: Bool = false,
-        type: Int = 0
+        type: Int = 0,
+        tag1: Int? = nil,
+        tag2: Int? = nil
     ) async throws {
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "content": content,
             "contentType": contentType,
             "title": title,
@@ -530,6 +536,8 @@ final class CC98API {
             "isAnonymous": isAnonymous,
             "clientType": 1
         ]
+        if let tag1 { payload["tag1"] = tag1 }
+        if let tag2 { payload["tag2"] = tag2 }
         try await send(
             "/board/\(boardID)/topic",
             method: "POST",
