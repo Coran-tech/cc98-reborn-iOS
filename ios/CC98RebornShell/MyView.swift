@@ -5,7 +5,6 @@ import SwiftUI
 // mode switch, honest status text and a separate about/boundary section.
 struct MyView: View {
     @ObservedObject var model: ShellModel
-    @Environment(\.dismiss) private var dismiss
     @State private var pendingAlert: MyAlert?
 
     private enum MyAlert: Identifiable {
@@ -34,12 +33,6 @@ struct MyView: View {
             .background(ShellTheme.pageBackground)
             .navigationTitle("我的")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                        .tint(ShellTheme.accent)
-                }
-            }
             .alert(item: $pendingAlert) { alert in alertContent(alert) }
             .onAppear { model.refreshWebAccountIfNeeded() }
         }
@@ -116,11 +109,13 @@ struct MyView: View {
             Text(model.authStatus)
                 .font(ShellTheme.Fonts.footnote)
                 .foregroundStyle(ShellTheme.secondaryText)
-                .accessibilityIdentifier("authStatus")
+            Button { model.sheet = ShellSheet(content: .diagnostics) } label: {
+                Label("状态与诊断", systemImage: "list.bullet.rectangle")
+            }
         } header: {
             Text("当前状态")
         } footer: {
-            Text("完整脱敏诊断记录在右上角的信息按钮中。")
+            Text("完整脱敏诊断记录在“状态与诊断”中。")
         }
     }
 

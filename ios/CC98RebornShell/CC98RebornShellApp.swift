@@ -19,26 +19,25 @@ struct ShellView: View {
     @ObservedObject var model: ShellModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            if model.isLoading {
-                ProgressView(value: model.progress)
-                    .tint(ShellTheme.accent)
-                    .accessibilityLabel("页面加载进度")
+        ZStack {
+            webLayer
+                .opacity(model.selectedTab == .me ? 0 : 1)
+                .allowsHitTesting(model.selectedTab != .me)
+            if model.selectedTab == .me {
+                MyView(model: model)
             }
-            if let error = model.errorMessage { errorCard(error) }
-            if model.mode == .enhanced { enhancedNotice }
-            if let browser = model.webView { BrowserSurface(browser: browser).id(model.viewID) }
-            else { ContentUnavailableView("网页尚未创建", systemImage: "globe", description: Text("请关闭并重新打开 App。")) }
-            bottomBar
         }
         .background(ShellTheme.pageBackground)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !model.isReading && !model.isKeyboardVisible {
+                ShellTabBar(model: model)
+            }
+        }
         .alert(item: $model.pendingAction) { action in
             Alert(title: Text("先确认未提交内容"), message: Text(action.detail), primaryButton: .destructive(Text("继续"), action: { model.perform(action) }), secondaryButton: .cancel(Text("取消")))
         }
         .sheet(item: $model.sheet, onDismiss: { model.sheetDismissed() }) { sheet in
             switch sheet.content {
-            case .my: MyView(model: model)
             case .diagnostics: DiagnosticsView(model: model)
             case .safari(let url): SafariSurface(url: url)
             case .share(let items): ShareSurface(items: items)
@@ -47,51 +46,171 @@ struct ShellView: View {
         }
     }
 
-    @MainActor
-    private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: model.mode == .original ? "globe" : "sparkles")
-                .font(.title3)
-                .foregroundStyle(ShellTheme.accent)
-                .frame(width: 28)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.pageTitle.isEmpty ? "CC98" : model.pageTitle)
-                    .font(ShellTheme.Fonts.navigationTitle)
-                    .foregroundStyle(ShellTheme.primaryText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .accessibilityIdentifier("pageTitle")
-                Text(model.mode.title)
-                    .font(ShellTheme.Fonts.caption)
-                    .foregroundStyle(ShellTheme.secondaryText)
-                    .accessibilityIdentifier("modeLabel")
+    private var webLayer: some View {
+        VStack(spacing: 0) {
+            if model.isReading { readingHeader } else { tabHeader }
+            if model.isLoading {
+                ProgressView(value: model.progress)
+                    .tint(ShellTheme.accent)
+                    .accessibilityLabel("页面加载进度")
             }
-            Spacer(minLength: 8)
-            Button { model.sheet = ShellSheet(content: .my) } label: {
-                Image(systemName: "person.crop.circle")
-                    .font(.title3)
-                    .frame(width: ShellTheme.Metrics.touch, height: ShellTheme.Metrics.touch)
+            if let error = model.errorMessage { errorCard(error) }
+            if let browser = model.webView {
+                BrowserSurface(browser: browser).id(model.viewID)
+            } else {
+                ContentUnavailableView("网页尚未创建", systemImage: "globe", description: Text("请关闭并重新打开 App。"))
             }
-            .accessibilityLabel("我的")
-            .accessibilityIdentifier("myButton")
-            Button { model.sheet = ShellSheet(content: .diagnostics) } label: {
-                Image(systemName: "info.circle")
-                    .font(.title3)
-                    .frame(width: ShellTheme.Metrics.touch, height: ShellTheme.Metrics.touch)
-            }
-            .accessibilityLabel("状态与诊断")
-            .accessibilityIdentifier("diagnosticsButton")
+            if model.isReading && !model.isKeyboardVisible { readingBottomBar }
         }
-        .padding(.horizontal, ShellTheme.Metrics.margin)
-        .background(ShellTheme.surface)
+    }
+
+    private var tabHeader: some View {
+        HStack(spacing: 0) {
+            Button { model.webView?.goBack() } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 40, height: ShellTheme.Metrics.touch)
+            }
+            .disabled(!model.canGoBack)
+            .accessibilityLabel("后退")
+            .accessibilityIdentifier("backButton")
+            Text(model.pageTitle.isEmpty ? model.selectedTab.title : model.pageTitle)
+                .font(ShellTheme.Fonts.navigationTitle)
+                .foregroundStyle(ShellTheme.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.leading, 2)
+                .accessibilityIdentifier("pageTitle")
+            Spacer(minLength: 6)
+            Button {
+                if model.isLoading { model.stopLoading() } else { model.request(.reload) }
+            } label: {
+                Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
+                    .frame(width: 40, height: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel(model.isLoading ? "停止加载" : "重新加载")
+            .accessibilityIdentifier("reloadButton")
+            Menu { webMenu } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: 40, height: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("更多")
+            .accessibilityIdentifier("moreButton")
+        }
+        .padding(.horizontal, 8)
+        .background(ShellTheme.surface, ignoresSafeAreaEdges: .top)
         .overlay(alignment: .bottom) {
             Rectangle().fill(ShellTheme.separator).frame(height: 0.5)
         }
         .tint(ShellTheme.accent)
     }
 
-    @MainActor
+    private var readingHeader: some View {
+        HStack(spacing: 0) {
+            Button { model.closeReading() } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 40, height: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("后退")
+            .accessibilityIdentifier("closeReadingButton")
+            Text(model.pageTitle.isEmpty ? "阅读" : model.pageTitle)
+                .font(ShellTheme.Fonts.navigationTitle)
+                .foregroundStyle(ShellTheme.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.leading, 2)
+                .accessibilityIdentifier("readingTitle")
+            Spacer(minLength: 6)
+            Button { shareCurrentPage() } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .frame(width: 40, height: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("分享")
+            Button { model.request(.reload) } label: {
+                Image(systemName: "arrow.clockwise")
+                    .frame(width: 40, height: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("重新加载")
+            Menu { readingMenu } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: 40, height: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("更多")
+        }
+        .padding(.horizontal, 8)
+        .background(ShellTheme.surface, ignoresSafeAreaEdges: .top)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ShellTheme.separator).frame(height: 0.5)
+        }
+        .tint(ShellTheme.accent)
+    }
+
+    private var readingBottomBar: some View {
+        HStack(spacing: 0) {
+            Button { model.webView?.goBack() } label: {
+                Image(systemName: "chevron.left").frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .disabled(!model.canGoBack)
+            .accessibilityLabel("后退")
+            Button { model.webView?.goForward() } label: {
+                Image(systemName: "chevron.right").frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .disabled(!model.canGoForward)
+            .accessibilityLabel("前进")
+            Button {
+                if model.isLoading { model.stopLoading() } else { model.request(.reload) }
+            } label: {
+                Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise").frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel(model.isLoading ? "停止加载" : "重新加载")
+            Button { shareCurrentPage() } label: {
+                Image(systemName: "square.and.arrow.up").frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("分享")
+            Menu { readingMenu } label: {
+                Image(systemName: "ellipsis").frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+            }
+            .accessibilityLabel("更多")
+        }
+        .font(.system(size: 20))
+        .foregroundStyle(ShellTheme.primaryText)
+        .background(ShellTheme.surface, ignoresSafeAreaEdges: .bottom)
+        .overlay(alignment: .top) {
+            Rectangle().fill(ShellTheme.separator).frame(height: 0.5)
+        }
+        .tint(ShellTheme.accent)
+    }
+
+    @ViewBuilder
+    private var webMenu: some View {
+        Button("返回 CC98 首页", systemImage: "house") { model.request(.home) }
+        Button("分享当前地址", systemImage: "square.and.arrow.up") { shareCurrentPage() }
+            .disabled(!ShellPolicy.isWebURL(model.webView?.url))
+        Divider()
+        Button("我的", systemImage: "person.crop.circle") { model.selectTab(.me) }
+        Button("状态与诊断", systemImage: "list.bullet.rectangle") { model.sheet = ShellSheet(content: .diagnostics) }
+        Divider()
+        Button(model.mode == .original ? "试用增强模式" : "恢复原站模式", systemImage: "rectangle.on.rectangle") {
+            model.request(.mode(model.mode == .original ? .enhanced : .original))
+        }
+    }
+
+    @ViewBuilder
+    private var readingMenu: some View {
+        Button("后退", systemImage: "chevron.left") { model.closeReading() }
+        Button("返回 CC98 首页", systemImage: "house") { model.request(.home) }
+        Button("分享当前地址", systemImage: "square.and.arrow.up") { shareCurrentPage() }
+        Divider()
+        Button("状态与诊断", systemImage: "list.bullet.rectangle") { model.sheet = ShellSheet(content: .diagnostics) }
+        Button(model.mode == .original ? "试用增强模式" : "恢复原站模式", systemImage: "rectangle.on.rectangle") {
+            model.request(.mode(model.mode == .original ? .enhanced : .original))
+        }
+    }
+
+    private func shareCurrentPage() {
+        guard let url = model.webView?.url else { return }
+        try? model.share([url])
+    }
+
     private func errorCard(_ error: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -116,75 +235,29 @@ struct ShellView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ShellTheme.warning.opacity(0.12))
     }
+}
 
-    @MainActor
-    private var enhancedNotice: some View {
-        Text("增强模式会核对同账号 OpenID 绑定；可在“我的”切回原站。")
-            .font(ShellTheme.Fonts.caption)
-            .foregroundStyle(ShellTheme.secondaryText)
-            .padding(.horizontal, ShellTheme.Metrics.margin)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ShellTheme.accentSoft)
-            .accessibilityIdentifier("enhancedNotice")
-    }
+private struct ShellTabBar: View {
+    @ObservedObject var model: ShellModel
 
-    @MainActor
-    private var bottomBar: some View {
+    var body: some View {
         HStack(spacing: 0) {
-            Button { model.webView?.goBack() } label: {
-                Image(systemName: "chevron.left")
-                    .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
-            }
-            .disabled(!model.canGoBack)
-            .accessibilityLabel("后退")
-            .accessibilityIdentifier("backButton")
-            Button { model.webView?.goForward() } label: {
-                Image(systemName: "chevron.right")
-                    .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
-            }
-            .disabled(!model.canGoForward)
-            .accessibilityLabel("前进")
-            .accessibilityIdentifier("forwardButton")
-            Button {
-                if model.isLoading { model.stopLoading() } else { model.request(.reload) }
-            } label: {
-                Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
-                    .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
-            }
-            .accessibilityLabel(model.isLoading ? "停止加载" : "重新加载")
-            .accessibilityIdentifier("reloadButton")
-            Button {
-                model.request(.mode(model.mode == .original ? .enhanced : .original))
-            } label: {
-                VStack(spacing: 2) {
-                    Image(systemName: model.mode == .original ? "sparkles" : "globe")
-                    Text(model.mode == .original ? "增强" : "原站")
-                        .font(ShellTheme.Fonts.caption)
+            ForEach(ShellTab.allCases) { tab in
+                Button { model.selectTab(tab) } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: tab.symbol)
+                            .font(.system(size: 20))
+                        Text(tab.title)
+                            .font(ShellTheme.Fonts.caption)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .foregroundStyle(model.selectedTab == tab ? ShellTheme.accent : ShellTheme.secondaryText)
                 }
-                .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
+                .accessibilityLabel(tab.title)
+                .accessibilityIdentifier(tab.accessibilityIdentifier)
             }
-            .accessibilityLabel(model.mode == .original ? "切换到增强模式" : "恢复原站模式")
-            .accessibilityIdentifier("modeToggleButton")
-            Menu {
-                Button("返回 CC98 首页", systemImage: "house") { model.request(.home) }
-                Button("分享当前地址", systemImage: "square.and.arrow.up") {
-                    if let url = model.webView?.url { try? model.share([url]) }
-                }
-                .disabled(!ShellPolicy.isWebURL(model.webView?.url))
-                Divider()
-                Button("我的与设置", systemImage: "person.crop.circle") { model.sheet = ShellSheet(content: .my) }
-                Button("状态与诊断", systemImage: "list.bullet.rectangle") { model.sheet = ShellSheet(content: .diagnostics) }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .frame(maxWidth: .infinity, minHeight: ShellTheme.Metrics.touch)
-            }
-            .accessibilityLabel("更多")
         }
-        .font(.system(size: 20))
-        .foregroundStyle(ShellTheme.primaryText)
-        .padding(.horizontal, 8)
-        .background(ShellTheme.surface)
+        .background(ShellTheme.surface, ignoresSafeAreaEdges: .bottom)
         .overlay(alignment: .top) {
             Rectangle().fill(ShellTheme.separator).frame(height: 0.5)
         }
