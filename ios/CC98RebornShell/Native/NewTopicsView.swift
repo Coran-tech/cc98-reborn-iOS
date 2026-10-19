@@ -79,9 +79,12 @@ struct NewTopicsView: View {
                 NavigationLink {
                     TopicDetailView(topicID: topic.id, boardID: topic.boardId)
                 } label: {
-                    NewTopicRow(topic: topic)
+                    NewTopicRow(topic: topic, thumbnail: thumbnails.images[topic.id])
                 }
                 .onAppear { loadMoreIfNeeded(topic) }
+                .task {
+                    await thumbnails.load(topic: topic, api: app.api)
+                }
             }
             if loading && hasMore {
                 HStack {
@@ -303,26 +306,67 @@ private struct NewTopicCard: View {
 }
 private struct NewTopicRow: View {
     let topic: NativeTopicSummary
+    let thumbnail: URL?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(topic.title ?? "主题 #\(topic.id)")
-                .font(ShellTheme.Fonts.body.weight(.medium))
-                .foregroundStyle(ShellTheme.primaryText)
-                .lineLimit(2)
-            HStack(spacing: 8) {
-                if let boardName = topic.boardName, !boardName.isEmpty {
-                    Text(boardName)
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(topic.title ?? "主题 #\(topic.id)")
+                    .font(ShellTheme.Fonts.body.weight(.medium))
+                    .foregroundStyle(ShellTheme.primaryText)
+                    .lineLimit(2)
+                HStack(spacing: 8) {
+                    if let boardName = topic.boardName, !boardName.isEmpty {
+                        Text(boardName)
+                    }
+                    Text(topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"))
+                    Text("回复 \(NativeFormat.count(topic.replyCount))")
+                    Spacer(minLength: 0)
+                    Text(NativeFormat.date(topic.lastPostTime ?? topic.time))
                 }
-                Text(topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"))
-                Text("回复 \(NativeFormat.count(topic.replyCount))")
-                Spacer(minLength: 0)
-                Text(NativeFormat.date(topic.lastPostTime ?? topic.time))
+                .font(ShellTheme.Fonts.caption)
+                .foregroundStyle(ShellTheme.secondaryText)
+                .lineLimit(1)
             }
-            .font(ShellTheme.Fonts.caption)
-            .foregroundStyle(ShellTheme.secondaryText)
-            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let thumbnail {
+                AsyncImage(url: thumbnail) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        rowThumbnailPlaceholder
+                    case .empty:
+                        ZStack {
+                            ShellTheme.secondarySurface
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    @unknown default:
+                        rowThumbnailPlaceholder
+                    }
+                }
+                .frame(width: 74, height: 74)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(ShellTheme.separator, lineWidth: 0.5)
+                )
+                .accessibilityLabel("帖子图片缩略图")
+            }
         }
         .padding(.vertical, 2)
+    }
+
+    private var rowThumbnailPlaceholder: some View {
+        ZStack {
+            ShellTheme.secondarySurface
+            Image(systemName: "photo")
+                .foregroundStyle(ShellTheme.secondaryText)
+        }
     }
 }
