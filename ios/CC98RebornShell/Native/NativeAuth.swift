@@ -39,6 +39,20 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
     override init() {
         sessions = NativeSession(storage: NativeTokenStore.shared, refresh: Self.refreshTokens)
         super.init()
+        #if DEBUG
+        if NativeUITestFixture.isEnabled {
+            UserDefaults.standard.set(false, forKey: "native.newTopicsCardMode")
+            UserDefaults.standard.set("system", forKey: "native.appearance")
+            UserDefaults.standard.set(false, forKey: "native.notificationsEnabled")
+            profile = NativeUITestFixture.user
+            activeAccountID = NativeUITestFixture.userID
+            accounts = [NativeAccount(id: NativeUITestFixture.userID, name: "林间风", avatarURL: nil)]
+            identity.select(activeAccountID)
+            state = .signedIn
+            hasRefreshAuthorization = true
+            return
+        }
+        #endif
         if let data = UserDefaults.standard.data(forKey: accountsKey),
            let stored = try? JSONDecoder().decode([NativeAccount].self, from: data) { accounts = stored }
         if UserDefaults.standard.object(forKey: activeAccountKey) != nil {
@@ -49,6 +63,9 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
     }
 
     func restore() async {
+        #if DEBUG
+        if NativeUITestFixture.isEnabled { return }
+        #endif
         guard !isBusy else { return }
         // UID 0 is only the pre-multi-account legacy keychain item.
         let accountID = activeAccountID ?? 0
@@ -74,6 +91,9 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
     }
 
     func resume() async {
+        #if DEBUG
+        if NativeUITestFixture.isEnabled { return }
+        #endif
         guard !isBusy else { return }
         if profile == nil { await restore(); return }
         _ = try? await requestAuthorization(required: true)

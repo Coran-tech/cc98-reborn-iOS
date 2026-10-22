@@ -685,6 +685,11 @@ final class CC98API {
         contentType: String? = nil,
         authenticated: Bool
     ) async throws -> Data {
+        #if DEBUG
+        if NativeUITestFixture.isEnabled {
+            return try NativeUITestFixture.response(path: path, query: query, method: method)
+        }
+        #endif
         guard path.hasPrefix("/"), !path.contains("://"), !path.contains("..") else {
             throw CC98APIError.invalidURL
         }

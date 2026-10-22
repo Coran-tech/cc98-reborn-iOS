@@ -12,6 +12,8 @@ struct NativeAccountControls: View {
             if case let .unavailable(message) = auth.state {
                 Text(message).foregroundStyle(ShellTheme.secondaryText)
                 Button("重试恢复") { Task { await auth.restore() } }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("account.restore")
             } else if case let .requiresAuthorization(message) = auth.state {
                 Text(message).foregroundStyle(ShellTheme.secondaryText)
             } else if auth.profile != nil {
@@ -25,6 +27,8 @@ struct NativeAccountControls: View {
                 Button(auth.hasRefreshAuthorization ? "重新授权当前账号" : "启用长期登录／重新授权") {
                     perform { try await auth.reauthorize(accountID: id) }
                 }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("account.reauthorize")
             }
 
             ForEach(auth.accounts) { account in
@@ -61,6 +65,7 @@ struct NativeAccountControls: View {
             Button { perform { try await auth.addAccount() } } label: {
                 Label("添加账号", systemImage: "person.badge.plus").frame(minHeight: 44)
             }
+            .accessibilityIdentifier("account.add")
             if auth.profile == nil, auth.activeAccountID != nil {
                 Button("退出当前账号", role: .destructive) { confirmSignOut = true }
                     .frame(minHeight: 44)

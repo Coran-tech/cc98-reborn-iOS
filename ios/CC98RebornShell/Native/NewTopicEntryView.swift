@@ -3,6 +3,7 @@ import SwiftUI
 struct NewTopicEntryView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @Environment(\.dismiss) private var dismiss
 
     @AppStorage("native.lastBoardID") private var lastBoardID = 0
     @AppStorage("native.lastBoardName") private var lastBoardName = ""
@@ -31,6 +32,7 @@ struct NewTopicEntryView: View {
                     })
                 } else {
                     List {
+                        if let error { NativeInlineRetry(message: error) { Task { await load() } } }
                         Section {
                             Picker("发布类型", selection: $isVote) {
                                 Text("主题").tag(false)
@@ -61,12 +63,11 @@ struct NewTopicEntryView: View {
                                     .buttonStyle(.plain)
                                 }
                             } header: {
-                                HStack {
+                                VStack(alignment: .leading, spacing: 4) {
                                     Text(group.name)
                                     if let masters = group.masters, !masters.isEmpty {
-                                        Spacer()
                                         Text(masters.joined(separator: " · "))
-                                            .font(ShellTheme.Fonts.caption)
+                                            .font(ShellTheme.Fonts.metadata)
                                             .foregroundStyle(ShellTheme.secondaryText)
                                     }
                                 }
@@ -80,14 +81,11 @@ struct NewTopicEntryView: View {
                     .refreshable { await load() }
                 }
             }
-            .navigationTitle("发帖")
+            .navigationTitle("选择发帖版面")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    if lastBoard != nil {
-                        Text("选择版面后继续")
-                            .font(ShellTheme.Fonts.caption)
-                            .foregroundStyle(ShellTheme.secondaryText)
-                    }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
                 }
             }
             .task { await load() }
@@ -119,10 +117,9 @@ struct NewTopicEntryView: View {
 
     private var filteredGroups: [NativeBoardGroup] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return groups }
         return groups.compactMap { group in
-            let boards = (group.boards ?? []).filter {
-                $0.name.localizedCaseInsensitiveContains(query)
+            let boards = boards(for: group).filter {
+                query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)
                     || ($0.description ?? "").localizedCaseInsensitiveContains(query)
             }
             guard !boards.isEmpty else { return nil }
@@ -173,7 +170,7 @@ private struct BoardChoiceRow: View {
                 }
                 if let description = board.description, !description.isEmpty {
                     Text(description)
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.metadata)
                         .foregroundStyle(ShellTheme.secondaryText)
                         .lineLimit(2)
                 }
@@ -181,7 +178,7 @@ private struct BoardChoiceRow: View {
                     Text("今日 \(NativeFormat.count(board.todayCount))")
                     Text("主题 \(NativeFormat.count(board.topicCount))")
                 }
-                .font(ShellTheme.Fonts.caption)
+                .font(ShellTheme.Fonts.metadata)
                 .foregroundStyle(ShellTheme.secondaryText)
             }
             Spacer(minLength: 0)

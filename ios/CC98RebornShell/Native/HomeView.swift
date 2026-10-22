@@ -8,6 +8,8 @@ struct HomeView: View {
     @State private var hot: [NativeHotTopic] = []
     @State private var loading = false
     @State private var error: String?
+    @State private var hotTitle = "今日十大"
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         NavigationStack {
@@ -15,6 +17,10 @@ struct HomeView: View {
                 if let home {
                     List {
                         hotSection
+                        if let error {
+                            Section { NativeInlineRetry(message: error) { Task { await load() } } }
+                        }
+                        NativeLibraryStatusView()
                         statsSection(home)
                     }
                     .listStyle(.insetGrouped)
@@ -40,8 +46,10 @@ struct HomeView: View {
                     NavigationLink {
                         SearchView()
                     } label: {
-                        Image(systemName: "magnifyingglass")
+                        Image(systemName: "magnifyingglass").frame(minWidth: 44, minHeight: 44)
                     }
+                    .accessibilityLabel("搜索主题")
+                    .accessibilityIdentifier("home.search")
                 }
             }
         }
@@ -49,25 +57,27 @@ struct HomeView: View {
     }
 
     private func statsSection(_ home: NativeHome) -> some View {
-        Section {
-            HStack(spacing: 10) {
+        Section("论坛概况") {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+            layout {
                 stat("今日帖子", value: NativeFormat.count(home.todayCount))
                 stat("在线", value: NativeFormat.count(home.onlineUserCount))
                 stat("主题", value: NativeFormat.count(home.topicCount))
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 8)
         }
     }
 
     private func stat(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
-                .font(ShellTheme.Fonts.pageTitle)
+                .font(.title2.weight(.semibold))
                 .foregroundStyle(ShellTheme.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .fixedSize(horizontal: false, vertical: true)
             Text(title)
-                .font(ShellTheme.Fonts.caption)
+                .font(ShellTheme.Fonts.metadata)
                 .foregroundStyle(ShellTheme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -75,34 +85,44 @@ struct HomeView: View {
 
     private var hotSection: some View {
         Section {
-            if hot.isEmpty {
-                Text("暂时没有十大内容。")
-                    .font(ShellTheme.Fonts.footnote)
+            if hot.isEmpty && error == nil {
+                Text("暂时没有榜单内容。")
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.secondaryText)
             } else {
-                ForEach(visibleHot.indices, id: \.self) { index in
-                    let topic = visibleHot[index]
-                    NavigationLink {
-                        TopicDetailView(topicID: topic.id, boardID: topic.boardId)
-                    } label: {
-                        HotTopicRow(rank: index + 1, topic: topic)
+                ForEach(visibleHot, id: \.topic.id) { item in
+                    HStack(alignment: .top, spacing: 0) {
+                        NavigationLink {
+                            TopicDetailView(topicID: item.topic.id, boardID: item.topic.boardId)
+                        } label: {
+                            HotTopicRow(rank: item.rank, topic: item.topic)
+                        }
+                        .accessibilityIdentifier("home.hot.\(item.topic.id)")
+                        Menu { topicActions(item.topic) } label: {
+                            Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("主题操作")
                     }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        topicActions(topic)
-                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) { topicActions(item.topic) }
+                }
+                if visibleHot.count < hot.count {
+                    Text("已按屏蔽规则隐藏 \(hot.count - visibleHot.count) 个主题，保留原始排名。")
+                        .font(ShellTheme.Fonts.metadata)
+                        .foregroundStyle(ShellTheme.secondaryText)
                 }
             }
         } header: {
-            Text("今日十大")
+            Text(hotTitle)
         }
     }
 
-    private var visibleHot: [NativeHotTopic] {
-        hot.filter { topic in
-            !library.isTopicBlocked(topic.id)
-                && !library.isBoardBlocked(id: topic.boardId, name: topic.boardName)
-                && !library.isTitleBlocked(topic.title)
-                && !library.isUserBlocked(topic.authorName)
+    private var visibleHot: [(rank: Int, topic: NativeHotTopic)] {
+        hot.enumerated().compactMap { index, topic in
+            guard !library.isTopicBlocked(topic.id),
+                  !library.isBoardBlocked(id: topic.boardId, name: topic.boardName),
+                  !library.isTitleBlocked(topic.title),
+                  !library.isUserBlocked(topic.authorName) else { return nil }
+            return (index + 1, topic)
         }
     }
 
@@ -140,6 +160,9 @@ struct HomeView: View {
             var topics = index.hotTopic ?? []
             if topics.isEmpty || topics.allSatisfy({ ($0.title ?? "").isEmpty }) {
                 topics = try await app.api.hotTopics()
+                hotTitle = "周热榜"
+            } else {
+                hotTitle = "今日十大"
             }
             hot = topics
         } catch {
@@ -150,6 +173,7 @@ struct HomeView: View {
 }
 
 private struct HotTopicRow: View {
+    @ScaledMetric(relativeTo: .footnote) private var rankSize: CGFloat = 22
     let rank: Int
     let topic: NativeHotTopic
 
@@ -158,28 +182,19 @@ private struct HotTopicRow: View {
             Text("\(rank)")
                 .font(.system(.footnote, design: .rounded).weight(.bold))
                 .foregroundStyle(rank <= 3 ? ShellTheme.accent : ShellTheme.secondaryText)
-                .frame(width: 22, height: 22)
+                .frame(width: rankSize, height: rankSize)
                 .background(rank <= 3 ? ShellTheme.accentSoft : ShellTheme.secondarySurface, in: Circle())
             VStack(alignment: .leading, spacing: 4) {
                 Text(topic.title ?? "主题 #\(topic.id)")
                     .font(ShellTheme.Fonts.body.weight(.medium))
                     .foregroundStyle(ShellTheme.primaryText)
-                    .lineLimit(2)
-                HStack(spacing: 8) {
-                    if let board = topic.boardName, !board.isEmpty {
-                        Text(board)
-                    }
-                    if let author = topic.authorName, !author.isEmpty {
-                        Text(author)
-                    }
-                    Text("回复 \(NativeFormat.count(topic.replyCount))")
-                    Text("点击 \(NativeFormat.count(topic.hitCount))")
-                }
-                .font(ShellTheme.Fonts.caption)
-                .foregroundStyle(ShellTheme.secondaryText)
-                .lineLimit(1)
+                    .lineLimit(3)
+                NativeTopicMetadata(
+                    board: topic.boardName, author: topic.authorName,
+                    replyCount: topic.replyCount, hitCount: topic.hitCount, date: nil
+                )
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
     }
 }

@@ -47,8 +47,8 @@ indirect enum UBBBlock {
 extension UBBBlock {
     var images: [URL] {
         switch self {
-        case let .image(url, _, _):
-            return url.map { [$0] } ?? []
+        case let .image(url, _, hidden):
+            return hidden ? [] : (url.map { [$0] } ?? [])
         case let .quote(blocks):
             return blocks.flatMap(\.images)
         default:
@@ -97,6 +97,7 @@ struct UBBBlocksView: View {
 
 struct UBBBlockView: View {
     let block: UBBBlock
+    @ScaledMetric(relativeTo: .body) private var headingScale: CGFloat = 1
 
     @ViewBuilder
     var body: some View {
@@ -107,7 +108,7 @@ struct UBBBlockView: View {
                 .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
         case let .heading(text, level):
             Text(text)
-                .font(.system(size: headingSize(level), weight: .bold))
+                .font(.system(size: headingSize(level) * headingScale, weight: .bold))
                 .foregroundStyle(ShellTheme.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
@@ -125,7 +126,7 @@ struct UBBBlockView: View {
                     .font(ShellTheme.Fonts.footnote)
                     .foregroundStyle(ShellTheme.link)
                     .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
                 }
             } else {
@@ -144,7 +145,7 @@ struct UBBBlockView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
         case let .code(text):
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal, showsIndicators: true) {
                 Text(text)
                     .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(ShellTheme.primaryText)
@@ -197,7 +198,7 @@ struct UBBBlockView: View {
                     .font(ShellTheme.Fonts.footnote)
                     .foregroundStyle(ShellTheme.link)
                     .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
                 }
             } else if !title.isEmpty {
@@ -228,7 +229,7 @@ struct UBBInlineText: View {
         composed
             .font(ShellTheme.Fonts.body)
             .foregroundStyle(ShellTheme.primaryText)
-            .lineSpacing(3)
+            .lineSpacing(6)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
     }
@@ -298,6 +299,8 @@ struct UBBImage: View {
             .contentShape(Rectangle())
             .task(id: url) { await loadImage() }
             .onTapGesture { showViewer = true }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { showViewer = true }
             .accessibilityLabel(alt?.isEmpty == false ? alt! : "图片")
             .accessibilityHint(hidden ? "查看隐藏图片" : "查看大图")
             .fullScreenCover(isPresented: $showViewer) {
@@ -363,8 +366,14 @@ struct UBBImage: View {
                 .font(.title3)
                 .foregroundStyle(ShellTheme.secondaryText)
             Text(alt?.isEmpty == false ? alt! : "图片无法显示")
-                .font(ShellTheme.Fonts.caption)
+                .font(ShellTheme.Fonts.metadata)
                 .foregroundStyle(ShellTheme.secondaryText)
+            if url != nil {
+                Button("重新加载图片") {
+                    imageFailed = false
+                    Task { await loadImage() }
+                }.frame(minHeight: 44)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity)
@@ -552,58 +561,9 @@ private struct ZoomableImage: View {
 }
 enum UBBFirstImage {
     static func first(in source: String) -> URL? {
-        guard !source.isEmpty else { return nil }
-        let patterns: [(String, Int, Int?)] = [
-            ("\\[img(?:=([^\\]]*))?\\](.*?)\\[/img\\]", 2, 1),
-            ("!\\[[^\\]]*\\]\\(([^\\)]+)\\)", 1, nil),
-            ("(?i)<img[^>]+src=[\"']([^\"']+)[\"']", 1, nil)
-        ]
-
-        var earliest: (location: Int, raw: String)?
-        for (pattern, urlGroup, attributeGroup) in patterns {
-            guard let regex = try? NSRegularExpression(
-                pattern: pattern,
-                options: [.dotMatchesLineSeparators, .caseInsensitive]
-            ) else { continue }
-            let ns = source as NSString
-            guard let match = regex.firstMatch(in: source, range: NSRange(location: 0, length: ns.length)) else {
-                continue
-            }
-            if let attributeGroup, attributeGroup <= regex.numberOfCaptureGroups {
-                let attributeRange = match.range(at: attributeGroup)
-                if attributeRange.location != NSNotFound {
-                    let attribute = ns.substring(with: attributeRange)
-                    if attribute.trimmingCharacters(in: .whitespacesAndNewlines) == "1" {
-                        continue
-                    }
-                }
-            }
-            guard urlGroup <= regex.numberOfCaptureGroups else { continue }
-            let range = match.range(at: urlGroup)
-            guard range.location != NSNotFound else { continue }
-            let raw = ns.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !raw.isEmpty else { continue }
-            if earliest == nil || match.range.location < earliest!.location {
-                earliest = (match.range.location, raw)
-            }
-        }
-
-        guard let raw = earliest?.raw else { return nil }
-        return resolve(raw)
-    }
-
-    private static func resolve(_ raw: String) -> URL? {
-        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return nil }
-        if value.hasPrefix("//") { value = "https:" + value }
-        if value.hasPrefix("/") { value = "https://www.cc98.org" + value }
-        if !value.contains("://") { value = "https://www.cc98.org/" + value }
-        guard let url = URL(string: value),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
-            return nil
-        }
-        return url
+        // Use the same parsed visibility as the reader: hidden images never
+        // enter thumbnails or a gallery opened from another visible image.
+        UBBBlockParser.parse(source).flatMap(\.images).first
     }
 }
 

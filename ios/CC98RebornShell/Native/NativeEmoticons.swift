@@ -177,7 +177,9 @@ struct ComposerEmoticonButton: View {
             Label("表情", systemImage: "face.smiling")
                 .font(ShellTheme.Fonts.footnote)
                 .foregroundStyle(ShellTheme.accent)
+                .frame(minWidth: 44, minHeight: 44)
         }
+        .accessibilityIdentifier("compose.emoticon")
         .sheet(isPresented: $showPicker) {
             EmoticonPicker(text: $text, selection: $selection, editor: editor)
         }

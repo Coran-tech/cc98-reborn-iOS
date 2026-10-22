@@ -21,7 +21,7 @@ struct ConversationView: View {
                     VStack(spacing: 10) {
                         ProgressView()
                         Text("正在加载对话…已读取 \(progress) 楼")
-                            .font(ShellTheme.Fonts.caption)
+                            .font(ShellTheme.Fonts.metadata)
                             .foregroundStyle(ShellTheme.secondaryText)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -34,6 +34,10 @@ struct ConversationView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 10) {
+                            Text("已读取本帖前 \(progress) 楼；对话最多追溯 500 楼、4 层回复，不包含范围外内容。")
+                                .font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.secondaryText)
+                                .padding(.horizontal, 16)
+                            if let error { NativeInlineRetry(message: error) { Task { await load() } }.padding(.horizontal, 16) }
                             ForEach(items) { item in
                                 ConversationRow(item: item) {
                                     onJump(item.post.floor ?? 1)
@@ -41,7 +45,9 @@ struct ConversationView: View {
                                 }
                             }
                         }
-                        .padding(16)
+                        .padding(.vertical, 16)
+                        .frame(maxWidth: ShellTheme.Metrics.maximumReadingWidth)
+                        .frame(maxWidth: .infinity)
                     }
                 }
             }
@@ -66,6 +72,7 @@ struct ConversationView: View {
         do {
             let maxPages = 50
             for page in 0..<maxPages {
+                try Task.checkCancellation()
                 let batch = try await app.api.posts(topicID: topicID, from: page * 10, size: 10)
                 all.append(contentsOf: batch)
                 progress = all.count
@@ -76,7 +83,11 @@ struct ConversationView: View {
                 error = "该楼层不在已读取的范围内，或没有引用关系。"
             }
             items = built
+        } catch is CancellationError {
+            loading = false
+            return
         } catch {
+            items = buildItems(from: all)
             self.error = error.localizedDescription
         }
         loading = false
@@ -149,20 +160,23 @@ private struct ConversationRow: View {
                     .frame(width: 2)
             }
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(item.isFocus ? "当前楼层" : "\(item.post.floor ?? 0) 楼")
-                        .font(ShellTheme.Fonts.caption.weight(.semibold))
-                        .foregroundStyle(item.isFocus ? ShellTheme.accent : ShellTheme.secondaryText)
-                    Text(item.post.isAnonymous == true ? "匿名" : (item.post.userName ?? "未知作者"))
-                        .font(ShellTheme.Fonts.caption)
-                        .foregroundStyle(ShellTheme.secondaryText)
-                    Text(NativeFormat.date(item.post.time))
-                        .font(ShellTheme.Fonts.caption)
-                        .foregroundStyle(ShellTheme.secondaryText)
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.isFocus ? "当前楼层 · \(item.post.floor ?? 0) 楼" : "\(item.post.floor ?? 0) 楼")
+                            .font(ShellTheme.Fonts.metadata.weight(.semibold))
+                            .foregroundStyle(item.isFocus ? ShellTheme.accent : ShellTheme.secondaryText)
+                        Text(item.post.isAnonymous == true ? "匿名" : (item.post.userName ?? "未知作者"))
+                            .font(ShellTheme.Fonts.body.weight(.medium))
+                        Text(NativeFormat.date(item.post.time)).font(ShellTheme.Fonts.metadata)
+                            .foregroundStyle(ShellTheme.secondaryText)
+                        if item.depth > 0 {
+                            Text("回复层级 \(item.depth)").font(ShellTheme.Fonts.metadata)
+                                .foregroundStyle(ShellTheme.secondaryText)
+                        }
+                    }
                     Spacer(minLength: 0)
-                    Button("定位") { onJump() }
-                        .font(ShellTheme.Fonts.caption)
-                        .foregroundStyle(ShellTheme.accent)
+                    Button("定位", action: onJump).frame(minWidth: 44, minHeight: 44)
+                        .accessibilityIdentifier("conversation.floor.\(item.post.floor ?? 0)")
                 }
 
                 if item.post.isDeleted == true {
@@ -170,12 +184,11 @@ private struct ConversationRow: View {
                         .font(ShellTheme.Fonts.footnote)
                         .foregroundStyle(ShellTheme.danger)
                 } else {
-                    UBBContentView(source: item.post.content ?? "")
+                    UBBContentView(source: item.post.content ?? "", markdown: item.post.contentType == 1)
                 }
             }
         }
-        .padding(.leading, CGFloat(min(item.depth, 4)) * 12)
-        .padding(10)
+        .padding(16)
         .background(
             item.isFocus ? ShellTheme.accentSoft : ShellTheme.surface,
             in: RoundedRectangle(cornerRadius: 8)

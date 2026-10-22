@@ -76,12 +76,16 @@ struct TopicFullTextSearchView: View {
                         TextField("正文、用户名、UID 或 [ac01]", text: $query)
                             .submitLabel(.search)
                             .onSubmit { startSearch() }
+                            .accessibilityIdentifier("topic.search.query")
                         Button("搜索") { startSearch() }
+                            .frame(minWidth: 44, minHeight: 44)
+                            .accessibilityIdentifier("topic.search.submit")
                             .font(ShellTheme.Fonts.footnote.weight(.medium))
                             .foregroundStyle(ShellTheme.accent)
                             .disabled(searching || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     Toggle("包含引用内容", isOn: $includeQuotes)
+                        .disabled(searching)
                         .font(ShellTheme.Fonts.footnote)
                 }
                 .padding(16)
@@ -90,13 +94,13 @@ struct TopicFullTextSearchView: View {
                 if searching {
                     ProgressView(value: Double(progress), total: Double(max(1, maxPage))) {
                         Text("正在搜索 \(progress) / \(maxPage) 页")
-                            .font(ShellTheme.Fonts.caption)
+                            .font(ShellTheme.Fonts.metadata)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                 }
 
-                if let error {
+                if hits.isEmpty, let error {
                     NativeStateView(icon: "magnifyingglass", title: "搜索中断", message: error)
                 } else if hits.isEmpty {
                     NativeStateView(
@@ -106,6 +110,7 @@ struct TopicFullTextSearchView: View {
                     )
                 } else {
                     List {
+                        if let error { Text("搜索中断：\(error)。已找到的结果仍可定位。").font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.danger) }
                         Section("找到 \(hits.count) 个楼层") {
                             ForEach(hits) { hit in
                                 Button {
@@ -123,13 +128,14 @@ struct TopicFullTextSearchView: View {
                                                 .foregroundStyle(ShellTheme.secondaryText)
                                         }
                                         SearchSnippetText(text: hit.snippet)
-                                            .font(ShellTheme.Fonts.caption)
+                                            .font(ShellTheme.Fonts.metadata)
                                             .foregroundStyle(ShellTheme.secondaryText)
                                             .lineLimit(3)
                                     }
                                     .padding(.vertical, 2)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("topic.search.hit.\(hit.floor)")
                             }
                         }
                     }
@@ -200,13 +206,11 @@ struct TopicFullTextSearchView: View {
             )
         }
         let plain = UBBBlockParser.searchableText(source)
-        let author = [post.userName, post.userId.map { "UID \($0)" }].compactMap { $0 }.joined(separator: " · ")
+        let author = post.isAnonymous == true ? "匿名" : [post.userName, post.userId.map { "UID \($0)" }].compactMap { $0 }.joined(separator: " · ")
         let haystack = [source, plain, author].joined(separator: " ").lowercased()
         guard haystack.contains(keyword.lowercased()) else { return nil }
 
-        let lower = plain.lowercased()
-        let needle = keyword.lowercased()
-        let range = lower.range(of: needle)
+        let range = plain.range(of: keyword, options: .caseInsensitive)
         let snippet: String
         if let range {
             let start = plain.index(range.lowerBound, offsetBy: -45, limitedBy: plain.startIndex) ?? plain.startIndex
@@ -218,7 +222,7 @@ struct TopicFullTextSearchView: View {
         return Hit(
             id: post.id,
             floor: post.floor ?? 1,
-            userName: post.userName,
+            userName: post.isAnonymous == true ? "匿名" : post.userName,
             snippet: snippet.isEmpty ? (post.content ?? "") : snippet
         )
     }

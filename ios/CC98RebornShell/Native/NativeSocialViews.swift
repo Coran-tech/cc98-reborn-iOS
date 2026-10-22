@@ -24,6 +24,7 @@ enum NativeFollowKind: String, Identifiable {
 struct FollowListView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
 
     let kind: NativeFollowKind
 
@@ -62,9 +63,16 @@ struct FollowListView: View {
                                     name: users[id]?.name,
                                     size: 40
                                 )
-                                Text(users[id]?.name ?? "用户 #\(id)")
-                                    .font(ShellTheme.Fonts.body)
-                                    .foregroundStyle(ShellTheme.primaryText)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(users[id]?.name ?? "用户 #\(id)")
+                                        .font(ShellTheme.Fonts.body)
+                                        .foregroundStyle(ShellTheme.primaryText)
+                                    if !library.userNote(for: id).isEmpty {
+                                        Text("备注：\(library.userNote(for: id))")
+                                            .font(ShellTheme.Fonts.footnote)
+                                            .foregroundStyle(ShellTheme.secondaryText)
+                                    }
+                                }
                                 Spacer(minLength: 0)
                             }
                             .padding(.vertical, 2)

@@ -1,40 +1,5 @@
 import Foundation
-
-struct NativeSavedTopic: Identifiable, Codable, Hashable {
-    let id: Int
-    let title: String
-    let boardID: Int?
-    let savedAt: Date
-}
-
-struct NativeReadPosition: Codable, Hashable {
-    let page: Int
-    let floor: Int?
-    let updatedAt: Date
-}
-
-struct NativeNumericBlockRule: Codable, Identifiable, Hashable {
-    var id = UUID()
-    var metric: String
-    var comparison: String
-    var threshold: Double
-}
-
-private struct NativeLibraryData: Codable {
-    var readLater: [NativeSavedTopic] = []
-    var history: [NativeSavedTopic] = []
-    var notes: [String: String] = [:]
-    var blockedUsers: [String] = []
-    var blockedKeywords: [String] = []
-    var blockedUserIDs: [String]?
-    var blockedBoards: [String]?
-    var blockedTitleKeywords: [String]?
-    var blockedContentRules: [String]?
-    var blockedNumericRules: [NativeNumericBlockRule]?
-    var blockedTopicIDs: [Int]?
-    var drafts: [String: String]?
-    var readPositions: [String: NativeReadPosition]?
-}
+import Combine
 
 // Local-only Reborn conveniences: read later, history, topic notes and
 // user/keyword filters. Nothing here is uploaded and no token is stored.
@@ -51,6 +16,16 @@ final class NativeLibrary: ObservableObject {
     @Published private(set) var blockedContentRules: [String] = []
     @Published private(set) var blockedNumericRules: [NativeNumericBlockRule] = []
     @Published private(set) var blockedTopicIDs: [Int] = []
+    @Published private(set) var pinnedBoards: [NativePinnedBoard] = []
+    @Published private(set) var pinnedContactIDs: [Int] = []
+    @Published private(set) var userNotes: [String: String] = [:]
+    @Published private(set) var searchHistory: [NativeSearchEntry] = []
+    @Published private(set) var readLaterReadIDs: [Int] = []
+    @Published private(set) var lastSaveError: String?
+    @Published private(set) var lastSavedAt: Date?
+    @Published private(set) var draftItems: [NativeDraftItem] = []
+    private var draftDates: [String: Date] = [:]
+    private var draftContexts: [String: NativeDraftContext] = [:]
     private var drafts: [String: String] = [:]
     private var readPositions: [String: NativeReadPosition] = [:]
 
@@ -59,37 +34,28 @@ final class NativeLibrary: ObservableObject {
     private let directory: URL
     private var accountID: Int?
 
-    init(accountID: Int? = nil) {
+    private let writeData: (Data, URL) throws -> Void
+    private var unreadableStorage = false
+
+    init(accountID: Int? = nil, directory: URL? = nil,
+         writeData: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        let directory = support.appendingPathComponent("CC98Reborn", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        self.directory = directory
+        self.directory = directory ?? support.appendingPathComponent("CC98Reborn", isDirectory: true)
         self.accountID = accountID
-        self.fileURL = directory.appendingPathComponent(accountID.map { "library-\($0).json" } ?? "library.json")
+        self.writeData = writeData
+        self.fileURL = self.directory.appendingPathComponent(accountID.map { "library-\($0).json" } ?? "library.json")
         load()
     }
 
     func setAccount(_ id: Int?) {
-        guard accountID != id else { return }
-        save()
+        guard accountID != id, save() else { return }
         accountID = id
         fileURL = directory.appendingPathComponent(id.map { "library-\($0).json" } ?? "library.json")
-
-        data = NativeLibraryData()
-        readLater = []
-        history = []
-        notes = [:]
-        blockedUsers = []
-        blockedKeywords = []
-        blockedUserIDs = []
-        blockedBoards = []
-        blockedTitleKeywords = []
-        blockedContentRules = []
-        blockedNumericRules = []
-        blockedTopicIDs = []
-        drafts = [:]
-        readPositions = [:]
+        apply(NativeLibraryData())
+        lastSaveError = nil
+        lastSavedAt = nil
+        unreadableStorage = false
         load()
     }
 
@@ -102,6 +68,7 @@ final class NativeLibrary: ObservableObject {
     func toggleReadLater(_ topic: NativeTopic) {
         if isReadLater(topic.id) {
             readLater.removeAll { $0.id == topic.id }
+            readLaterReadIDs.removeAll { $0 == topic.id }
         } else {
             readLater.insert(saved(topic), at: 0)
         }
@@ -109,7 +76,7 @@ final class NativeLibrary: ObservableObject {
     }
 
     func addReadLater(topicID: Int, title: String?, boardID: Int?) {
-        guard !isReadLater(topicID) else { return }
+        guard topicID > 0, !isReadLater(topicID) else { return }
         readLater.insert(
             NativeSavedTopic(
                 id: topicID,
@@ -124,11 +91,13 @@ final class NativeLibrary: ObservableObject {
 
     func removeReadLater(_ topicID: Int) {
         readLater.removeAll { $0.id == topicID }
+        readLaterReadIDs.removeAll { $0 == topicID }
         save()
     }
 
     func clearReadLater() {
         readLater = []
+        readLaterReadIDs = []
         save()
     }
 
@@ -138,6 +107,7 @@ final class NativeLibrary: ObservableObject {
         history.removeAll { $0.id == topic.id }
         history.insert(saved(topic), at: 0)
         if history.count > 200 { history = Array(history.prefix(200)) }
+        if isReadLater(topic.id), !readLaterReadIDs.contains(topic.id) { readLaterReadIDs.append(topic.id) }
         save()
     }
 
@@ -194,11 +164,9 @@ final class NativeLibrary: ObservableObject {
     }
 
     func isBoardBlocked(id: Int?, name: String?) -> Bool {
-        let candidates = [name, id.map(String.init)].compactMap { $0?.lowercased() }.filter { !$0.isEmpty }
-        guard !candidates.isEmpty else { return false }
-        return blockedBoards.contains { rule in
-            let value = rule.lowercased()
-            return candidates.contains { $0 == value || $0.localizedCaseInsensitiveContains(value) }
+        blockedBoards.contains { rule in
+            if let boardID = Int(rule) { return boardID == id }
+            return name?.localizedCaseInsensitiveContains(rule) == true
         }
     }
 
@@ -234,10 +202,8 @@ final class NativeLibrary: ObservableObject {
         let rule = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rule.isEmpty else { return false }
 
-        if rule.count > 2, rule.hasPrefix("/"), rule.hasSuffix("/") {
-            let pattern = String(rule.dropFirst().dropLast())
-            return (try? NSRegularExpression(pattern: pattern, options: .caseInsensitive))
-                .map { $0.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)) != nil } ?? false
+        if let expression = NativeLibraryRules.regularExpression(rule) {
+            return expression.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
         }
 
         let countPattern = #"^(.+?)\s*(>=|<=|>|<|=)\s*(\d+)$"#
@@ -259,40 +225,31 @@ final class NativeLibrary: ObservableObject {
 
     private func occurrenceCount(of needle: String, in text: String) -> Int {
         guard !needle.isEmpty else { return 0 }
-        let ns = text as NSString
-        return ns.components(separatedBy: needle).count - 1
+        return text.lowercased().components(separatedBy: needle.lowercased()).count - 1
     }
 
     private func metricValue(_ metric: String, post: NativePost) -> Double? {
-        let likes = Double(post.likeCount ?? 0)
-        let dislikes = Double(post.dislikeCount ?? 0)
+        let likes = post.likeCount.map(Double.init)
+        let dislikes = post.dislikeCount.map(Double.init)
         switch metric {
         case "like":
             return likes
         case "dislike":
             return dislikes
         case "total":
+            guard let likes, let dislikes else { return nil }
             return likes + dislikes
         case "ratio":
-            return dislikes > 0 ? likes / dislikes : (likes > 0 ? likes : 0)
+            guard let likes, let dislikes, likes + dislikes > 0 else { return nil }
+            return dislikes == 0 ? .infinity : likes / dislikes
         case "reputation":
             let values = (post.awards ?? []).compactMap { award -> Double? in
-                guard let content = award.content, content.contains("风评值") else { return nil }
-                return signedNumber(in: content).map(Double.init)
+                NativeReputation.delta(in: award.content).map(Double.init)
             }
             return values.isEmpty ? nil : values.reduce(0, +)
         default:
             return nil
         }
-    }
-
-    private func signedNumber(in text: String) -> Int? {
-        guard let regex = try? NSRegularExpression(pattern: "([+-]?\\d+)") else { return nil }
-        let ns = text as NSString
-        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else {
-            return nil
-        }
-        return Int(ns.substring(with: match.range(at: 1)))
     }
 
     private func compare(_ value: Double, _ comparison: String, _ threshold: Double) -> Bool {
@@ -355,11 +312,13 @@ final class NativeLibrary: ObservableObject {
         save()
     }
 
-    func addBlockedTitle(_ value: String) {
+    @discardableResult
+    func addBlockedTitle(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !blockedTitleKeywords.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+        guard !trimmed.isEmpty, !blockedTitleKeywords.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return false }
+        if let error = NativeLibraryRules.validationError(trimmed) { lastSaveError = error; return false }
         blockedTitleKeywords.append(trimmed)
-        save()
+        return save()
     }
 
     func removeBlockedTitle(_ value: String) {
@@ -367,11 +326,13 @@ final class NativeLibrary: ObservableObject {
         save()
     }
 
-    func addBlockedContentRule(_ value: String) {
+    @discardableResult
+    func addBlockedContentRule(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !blockedContentRules.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+        guard !trimmed.isEmpty, !blockedContentRules.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return false }
+        if let error = NativeLibraryRules.validationError(trimmed) { lastSaveError = error; return false }
         blockedContentRules.append(trimmed)
-        save()
+        return save()
     }
 
     func removeBlockedContentRule(_ value: String) {
@@ -380,6 +341,7 @@ final class NativeLibrary: ObservableObject {
     }
 
     func addNumericRule(_ rule: NativeNumericBlockRule) {
+        guard rule.threshold.isFinite else { lastSaveError = "阈值必须是有限数字。"; return }
         blockedNumericRules.append(rule)
         save()
     }
@@ -407,18 +369,58 @@ final class NativeLibrary: ObservableObject {
         drafts[key] ?? ""
     }
 
-    func setDraft(_ value: String, for key: String) {
-        if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            drafts.removeValue(forKey: key)
-        } else {
-            drafts[key] = value
+    @discardableResult
+    func setDraft(_ value: String, for key: String) -> Bool {
+        setDrafts([key: value])
+    }
+
+    @discardableResult
+    func setDrafts(_ values: [String: String]) -> Bool {
+        let date = Date()
+        for (key, value) in values {
+            if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                drafts.removeValue(forKey: key)
+                draftDates.removeValue(forKey: key)
+            } else {
+                drafts[key] = value
+                draftDates[key] = date
+            }
         }
+        refreshDraftItems()
+        return save()
+    }
+
+    @discardableResult
+    func clearDraft(for key: String) -> Bool {
+        drafts.removeValue(forKey: key)
+        draftDates.removeValue(forKey: key)
+        draftContexts.removeValue(forKey: key)
+        refreshDraftItems()
+        return save()
+    }
+
+    func setDraftContext(for key: String, topicID: Int? = nil, boardID: Int? = nil,
+                         floor: Int? = nil, title: String? = nil) {
+        let context = NativeDraftContext(topicID: topicID, boardID: boardID, floor: floor, title: title)
+        guard draftContexts[key] != context else { return }
+        draftContexts[key] = context
+        refreshDraftItems()
         save()
     }
 
-    func clearDraft(for key: String) {
-        drafts.removeValue(forKey: key)
-        save()
+    @discardableResult
+    func removeDraft(_ item: NativeDraftItem) -> Bool {
+        for key in item.keys {
+            drafts.removeValue(forKey: key)
+            draftDates.removeValue(forKey: key)
+            draftContexts.removeValue(forKey: key)
+        }
+        refreshDraftItems()
+        return save()
+    }
+
+    private func refreshDraftItems() {
+        draftItems = NativeDraftItem.group(drafts: drafts, dates: draftDates, contexts: draftContexts)
     }
 
     func lastPosition(for topicID: Int) -> NativeReadPosition? {
@@ -447,8 +449,17 @@ final class NativeLibrary: ObservableObject {
     }
 
     private func load() {
-        guard let raw = try? Data(contentsOf: fileURL) else { return }
-        guard let decoded = try? JSONDecoder().decode(NativeLibraryData.self, from: raw) else { return }
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        do {
+            let raw = try Data(contentsOf: fileURL)
+            apply(try JSONDecoder().decode(NativeLibraryData.self, from: raw))
+        } catch {
+            unreadableStorage = true
+            lastSaveError = "本机数据无法读取，原文件已保留。请恢复可用文件后重开 App。\(error.localizedDescription)"
+        }
+    }
+
+    private func apply(_ decoded: NativeLibraryData) {
         data = decoded
         readLater = decoded.readLater
         history = decoded.history
@@ -463,25 +474,115 @@ final class NativeLibrary: ObservableObject {
         blockedTopicIDs = decoded.blockedTopicIDs ?? []
         drafts = decoded.drafts ?? [:]
         readPositions = decoded.readPositions ?? [:]
+        pinnedBoards = decoded.pinnedBoards ?? []
+        pinnedContactIDs = decoded.pinnedContactIDs ?? []
+        userNotes = decoded.userNotes ?? [:]
+        searchHistory = decoded.searchHistory ?? []
+        readLaterReadIDs = decoded.readLaterReadIDs ?? []
+        draftDates = decoded.draftDates ?? [:]
+        draftContexts = decoded.draftContexts ?? [:]
+        refreshDraftItems()
     }
 
-    private func save() {
-        data = NativeLibraryData(
-            readLater: readLater,
-            history: history,
-            notes: notes,
-            blockedUsers: blockedUsers,
-            blockedKeywords: blockedKeywords,
-            blockedUserIDs: blockedUserIDs,
-            blockedBoards: blockedBoards,
-            blockedTitleKeywords: blockedTitleKeywords,
-            blockedContentRules: blockedContentRules,
-            blockedNumericRules: blockedNumericRules,
-            blockedTopicIDs: blockedTopicIDs,
-            drafts: drafts,
-            readPositions: readPositions
+    private func snapshot() -> NativeLibraryData {
+        NativeLibraryData(
+            readLater: readLater, history: history, notes: notes,
+            blockedUsers: blockedUsers, blockedKeywords: blockedKeywords,
+            blockedUserIDs: blockedUserIDs, blockedBoards: blockedBoards,
+            blockedTitleKeywords: blockedTitleKeywords, blockedContentRules: blockedContentRules,
+            blockedNumericRules: blockedNumericRules, blockedTopicIDs: blockedTopicIDs,
+            drafts: drafts, readPositions: readPositions, readLaterReadIDs: readLaterReadIDs,
+            pinnedBoards: pinnedBoards, pinnedContactIDs: pinnedContactIDs, userNotes: userNotes,
+            searchHistory: searchHistory, draftDates: draftDates, draftContexts: draftContexts
         )
-        guard let encoded = try? JSONEncoder().encode(data) else { return }
-        try? encoded.write(to: fileURL, options: .atomic)
+    }
+
+    @discardableResult
+    private func persist(_ candidate: NativeLibraryData) -> Bool {
+        guard !unreadableStorage else { return false }
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try writeData(JSONEncoder().encode(candidate), fileURL)
+            data = candidate
+            lastSaveError = nil
+            lastSavedAt = Date()
+            return true
+        } catch {
+            lastSaveError = "尚未保存到本机：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    @discardableResult
+    private func save() -> Bool { persist(snapshot()) }
+
+    @discardableResult
+    func retrySave() -> Bool { save() }
+
+    // MARK: Local enhancements
+
+    func isBoardPinned(_ id: Int) -> Bool { pinnedBoards.contains { $0.id == id } }
+    @discardableResult
+    func togglePinnedBoard(id: Int, name: String) -> Bool {
+        guard id > 0 else { return false }
+        if isBoardPinned(id) { pinnedBoards.removeAll { $0.id == id } }
+        else { pinnedBoards.append(NativePinnedBoard(id: id, name: name)) }
+        return save()
+    }
+
+    func isContactPinned(_ id: Int) -> Bool { pinnedContactIDs.contains(id) }
+    @discardableResult
+    func togglePinnedContact(userID: Int) -> Bool {
+        guard userID > 0 else { return false }
+        if isContactPinned(userID) { pinnedContactIDs.removeAll { $0 == userID } }
+        else { pinnedContactIDs.append(userID) }
+        return save()
+    }
+
+    func userNote(for id: Int) -> String { userNotes[String(id)] ?? "" }
+    @discardableResult
+    func setUserNote(_ note: String, for id: Int) -> Bool {
+        guard id > 0 else { return false }
+        let value = String(note.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+        userNotes[String(id)] = value.isEmpty ? nil : value
+        return save()
+    }
+
+    func isReadLaterRead(_ id: Int) -> Bool { readLaterReadIDs.contains(id) }
+    func setReadLaterRead(_ id: Int, read: Bool) {
+        guard isReadLater(id) else { return }
+        readLaterReadIDs.removeAll { $0 == id }
+        if read { readLaterReadIDs.append(id) }
+        save()
+    }
+
+    func recordSearch(_ query: String, scope: String, boardID: Int? = nil, boardName: String? = nil) {
+        let value = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        guard !value.isEmpty else { return }
+        searchHistory.removeAll { $0.query == value && $0.scope == scope && $0.boardID == boardID }
+        searchHistory.insert(NativeSearchEntry(query: value, scope: scope, boardID: boardID, boardName: boardName, date: Date()), at: 0)
+        searchHistory = Array(searchHistory.prefix(20))
+        save()
+    }
+
+    func removeSearch(_ id: UUID) { searchHistory.removeAll { $0.id == id }; save() }
+    func clearSearchHistory() { searchHistory = []; save() }
+
+    func exportBackup(mode: NativeLibraryTransferMode) throws -> Data {
+        try NativeLibraryBackup.make(data: snapshot(), accountID: accountID, mode: mode).encoded()
+    }
+
+    func previewImport(_ raw: Data, mode: NativeLibraryTransferMode) throws -> NativeLibraryImportPreview {
+        let backup = try NativeLibraryBackup.decodeValidated(raw, accountID: accountID, mode: mode)
+        return NativeLibraryImportPreview(backup: backup, accountID: accountID)
+    }
+
+    @discardableResult
+    func importBackup(_ preview: NativeLibraryImportPreview) -> Bool {
+        guard preview.accountID == accountID else { lastSaveError = "账号已切换，请重新选择备份。"; return false }
+        let candidate = preview.backup.merging(into: snapshot())
+        guard persist(candidate) else { return false }
+        apply(candidate)
+        return true
     }
 }

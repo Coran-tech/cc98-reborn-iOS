@@ -3,6 +3,7 @@ import SwiftUI
 struct NewTopicsView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var library: NativeLibrary
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var thumbnails = NewTopicThumbnailLoader()
 
     @AppStorage("native.newTopicsCardMode") private var cardMode = false
@@ -16,6 +17,10 @@ struct NewTopicsView: View {
     @State private var showComposePicker = false
     @State private var boardNames: [Int: String] = [:]
 
+    @State private var visibleTopicID: Int?
+    @State private var loadID = UUID()
+    @State private var loadedMediaOnly = false
+
     private let pageSize = 20
 
     var body: some View {
@@ -26,6 +31,7 @@ struct NewTopicsView: View {
                     Text("图文").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .accessibilityIdentifier("newTopics.filter")
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
 
@@ -40,10 +46,8 @@ struct NewTopicsView: View {
                         })
                     } else if topics.isEmpty {
                         NativeStateView(icon: "doc.text", title: "暂无新帖", message: nil)
-                    } else if cardMode {
-                        cardFeed
                     } else {
-                        listFeed
+                        feed
                     }
                 }
             }
@@ -55,14 +59,18 @@ struct NewTopicsView: View {
                         cardMode.toggle()
                     } label: {
                         Image(systemName: cardMode ? "list.bullet" : "square.grid.2x2")
+                            .frame(minWidth: 44, minHeight: 44)
                     }
                     .accessibilityLabel(cardMode ? "切换为列表" : "切换为卡片")
+                    .accessibilityIdentifier("newTopics.layout")
 
                     Button {
                         showComposePicker = true
                     } label: {
-                        Image(systemName: "square.and.pencil")
+                        Image(systemName: "square.and.pencil").frame(minWidth: 44, minHeight: 44)
                     }
+                    .accessibilityLabel("发表主题或投票")
+                    .accessibilityIdentifier("newTopics.compose")
                 }
             }
             .task(id: mediaOnly) { await load(reset: true) }
@@ -76,114 +84,103 @@ struct NewTopicsView: View {
         }
     }
 
-    private var listFeed: some View {
-        List {
-            ForEach(visibleTopics) { topic in
-                NavigationLink {
-                    TopicDetailView(topicID: topic.id, boardID: topic.boardId)
-                } label: {
-                    NewTopicRow(
-                        topic: topic,
-                        thumbnail: thumbnails.images[topic.id],
-                        boardName: resolvedBoardName(topic)
-                    )
-                }
-                .onAppear { loadMoreIfNeeded(topic) }
-                .task {
-                    await thumbnails.load(topic: topic, api: app.api)
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    topicActions(topic)
-                }
-            }
-            if loading {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-            } else if error != nil {
-                Button("点击继续加载") {
-                    Task { await load(reset: false) }
-                }
-                .font(ShellTheme.Fonts.footnote)
-            } else if hasMore {
-                Button("点击继续加载") {
-                    Task { await load(reset: false) }
-                }
-                .font(ShellTheme.Fonts.footnote)
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(ShellTheme.pageBackground)
-        .refreshable { await load(reset: true) }
-    }
-
-    private var cardFeed: some View {
+    private var feed: some View {
         GeometryReader { geometry in
-            let columnWidth = min(260, max(120, (geometry.size.width - 44) / 2))
-            ScrollView {
-                HStack(alignment: .top, spacing: 12) {
-                    LazyVStack(spacing: 12) {
-                        ForEach(evenTopics) { topic in
-                            cardLink(topic, width: columnWidth)
+            let contentWidth = min(geometry.size.width, ShellTheme.Metrics.maximumReadingWidth)
+            let margin: CGFloat = geometry.size.width <= 320 ? 12 : 16
+            let columns = contentWidth >= 390 && dynamicTypeSize < .xxxLarge ? 2 : 1
+            let cardWidth = (contentWidth - margin * 2 - CGFloat(columns - 1) * 12) / CGFloat(columns)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 12) {
+                        NativeLibraryStatusView()
+                        if visibleTopics.isEmpty {
+                            Text("当前已加载主题均被屏蔽规则筛选，可继续读取或前往「我的」管理规则。")
+                                .font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.secondaryText)
                         }
-                    }
-                    .frame(width: columnWidth)
-
-                    LazyVStack(spacing: 12) {
-                        ForEach(oddTopics) { topic in
-                            cardLink(topic, width: columnWidth)
+                        if cardMode {
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: columns), alignment: .leading, spacing: 12) {
+                                ForEach(visibleTopics) { topic in
+                                    VStack(spacing: 0) {
+                                        NavigationLink {
+                                            TopicDetailView(topicID: topic.id, boardID: topic.boardId)
+                                        } label: {
+                                            NewTopicCard(topic: topic, thumbnail: thumbnails.images[topic.id], boardName: resolvedBoardName(topic), width: cardWidth)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityIdentifier("newTopics.topic.\(topic.id)")
+                                        HStack {
+                                            Spacer()
+                                            topicMenu(topic)
+                                        }
+                                        .padding(.horizontal, 8)
+                                    }
+                                    .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+                                    .id(topic.id)
+                                    .onAppear { loadMoreIfNeeded(topic) }
+                                    .task { await thumbnails.load(topic: topic, api: app.api) }
+                                }
+                            }
+                            .scrollTargetLayout()
+                        } else {
+                            LazyVStack(spacing: 0) {
+                                ForEach(visibleTopics) { topic in
+                                    HStack(alignment: .top, spacing: 0) {
+                                        NavigationLink {
+                                            TopicDetailView(topicID: topic.id, boardID: topic.boardId)
+                                        } label: {
+                                            NewTopicRow(topic: topic, thumbnail: thumbnails.images[topic.id], boardName: resolvedBoardName(topic))
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityIdentifier("newTopics.topic.\(topic.id)")
+                                        topicMenu(topic)
+                                    }
+                                    .padding(.vertical, 12)
+                                    .id(topic.id)
+                                    .onAppear { loadMoreIfNeeded(topic) }
+                                    .task { await thumbnails.load(topic: topic, api: app.api) }
+                                    Divider()
+                                }
+                            }
+                            .scrollTargetLayout()
                         }
+                        feedFooter
                     }
-                    .frame(width: columnWidth)
+                    .padding(.horizontal, margin)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: ShellTheme.Metrics.maximumReadingWidth)
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
-
-                if loading {
-                    ProgressView()
-                        .padding(.bottom, 20)
-                } else if error != nil {
-                    Button("点击继续加载") {
-                        Task { await load(reset: false) }
-                    }
-                    .font(ShellTheme.Fonts.footnote)
-                    .padding(.bottom, 20)
-                } else if hasMore {
-                    Button("点击继续加载") {
-                        Task { await load(reset: false) }
-                    }
-                    .font(ShellTheme.Fonts.footnote)
-                    .padding(.bottom, 20)
+                .scrollPosition(id: $visibleTopicID, anchor: .top)
+                .onChange(of: cardMode) { _, _ in
+                    if let visibleTopicID { proxy.scrollTo(visibleTopicID, anchor: .top) }
                 }
+                .refreshable { await load(reset: true) }
             }
-            .refreshable { await load(reset: true) }
         }
-        .background(ShellTheme.pageBackground)
     }
 
-    private func cardLink(_ topic: NativeTopicSummary, width: CGFloat) -> some View {
-        NavigationLink {
-            TopicDetailView(topicID: topic.id, boardID: topic.boardId)
-        } label: {
-            NewTopicCard(
-                topic: topic,
-                thumbnail: thumbnails.images[topic.id],
-                boardName: resolvedBoardName(topic),
-                width: width
-            )
+    private func topicMenu(_ topic: NativeTopicSummary) -> some View {
+        Menu { topicActions(topic) } label: {
+            Image(systemName: "ellipsis").frame(width: 44, height: 44)
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
-        .contextMenu {
-            topicActions(topic)
-        }
-        .onAppear { loadMoreIfNeeded(topic) }
-        .task {
-            await thumbnails.load(topic: topic, api: app.api)
+        .accessibilityLabel("主题操作")
+        .accessibilityIdentifier("newTopics.more.\(topic.id)")
+    }
+
+    @ViewBuilder private var feedFooter: some View {
+        if loading {
+            ProgressView("正在加载…").padding(16)
+        } else if let error {
+            NativeInlineRetry(message: error) { Task { await load(reset: loadedMediaOnly != mediaOnly) } }
+        } else if hasMore {
+            Button("继续加载") { Task { await load(reset: false) } }
+                .frame(maxWidth: .infinity, minHeight: 44)
+        } else {
+            Text("已显示本次可读取的最新内容，可下拉刷新或进入版面继续浏览。")
+                .font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.secondaryText)
+                .padding(.vertical, 12)
         }
     }
 
@@ -196,18 +193,9 @@ struct NewTopicsView: View {
         }
     }
 
-    private var evenTopics: [NativeTopicSummary] {
-        visibleTopics.enumerated().compactMap { $0.offset.isMultiple(of: 2) ? $0.element : nil }
-    }
-
-    private var oddTopics: [NativeTopicSummary] {
-        visibleTopics.enumerated().compactMap { $0.offset.isMultiple(of: 2) ? nil : $0.element }
-    }
-
     private func loadMoreIfNeeded(_ topic: NativeTopicSummary) {
-        guard hasMore, !loading, error == nil else { return }
-        let lastIDs = Set([topics.last?.id, evenTopics.last?.id, oddTopics.last?.id].compactMap { $0 })
-        guard lastIDs.contains(topic.id) else { return }
+        guard hasMore, !loading, error == nil, loadedMediaOnly == mediaOnly else { return }
+        guard visibleTopics.suffix(2).contains(where: { $0.id == topic.id }) else { return }
         Task { await load(reset: false) }
     }
 
@@ -225,13 +213,13 @@ struct NewTopicsView: View {
             Label("屏蔽此帖", systemImage: "eye.slash")
         }
 
-        if let userID = topic.userId {
+        if topic.isAnonymous != true, let userID = topic.userId {
             Button(role: .destructive) {
                 library.addBlockedUserID(String(userID))
             } label: {
                 Label("屏蔽此人", systemImage: "person.crop.circle.badge.xmark")
             }
-        } else if let name = topic.userName, !name.isEmpty {
+        } else if topic.isAnonymous != true, let name = topic.userName, !name.isEmpty {
             Button(role: .destructive) {
                 library.addBlockedUser(name)
             } label: {
@@ -263,39 +251,40 @@ struct NewTopicsView: View {
 
     @MainActor
     private func load(reset: Bool) async {
-        guard !loading else { return }
+        guard reset || !loading else { return }
+        let requestID = UUID()
+        loadID = requestID
+        let requestedMedia = mediaOnly
+        let requestedPage = reset ? 0 : page
         loading = true
         error = nil
-        if reset {
-            page = 0
-            hasMore = true
+        // Switching feeds starts a distinct query; stale responses must not overwrite it.
+        if reset && requestedMedia != loadedMediaOnly {
+            topics = []
+            visibleTopicID = nil
         }
         do {
-            let from = page * pageSize
-            guard from < 500 else {
-                hasMore = false
-                loading = false
-                return
-            }
-            let size = from > 480 ? 500 - from : pageSize
-            let fetched = try await app.api.newTopics(
-                from: from,
-                size: size,
-                mediaOnly: mediaOnly
-            )
+            let from = requestedPage * pageSize
+            guard from < 500 else { hasMore = false; loading = false; return }
+            let size = min(pageSize, 500 - from)
+            let fetched = try await app.api.newTopics(from: from, size: size, mediaOnly: requestedMedia)
+            guard loadID == requestID, mediaOnly == requestedMedia else { return }
             if reset {
                 topics = fetched
             } else {
                 let existing = Set(topics.map(\.id))
                 topics.append(contentsOf: fetched.filter { !existing.contains($0.id) })
             }
-            page += 1
+            loadedMediaOnly = requestedMedia
+            page = requestedPage + 1
             hasMore = fetched.count == size && from + size < 500
         } catch {
-            self.error = error.localizedDescription
+            guard loadID == requestID else { return }
+            if !(error is CancellationError) { self.error = error.localizedDescription }
         }
-        loading = false
+        if loadID == requestID { loading = false }
     }
+
 }
 
 @MainActor
@@ -324,6 +313,7 @@ final class NewTopicThumbnailLoader: ObservableObject {
 }
 
 private struct NewTopicCard: View {
+    @EnvironmentObject private var library: NativeLibrary
     let topic: NativeTopicSummary
     let thumbnail: URL?
     let boardName: String?
@@ -356,31 +346,30 @@ private struct NewTopicCard: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     if let boardName, !boardName.isEmpty {
                         Text(boardName)
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
                             .background(ShellTheme.accentSoft, in: Capsule())
                             .foregroundStyle(ShellTheme.accent)
                             .lineLimit(1)
                     }
-                    Spacer(minLength: 0)
                     Text(NativeFormat.date(topic.lastPostTime ?? topic.time))
-                        .font(.system(size: 10))
+                        .font(ShellTheme.Fonts.metadata)
                         .foregroundStyle(ShellTheme.secondaryText)
                 }
 
                 Text(topic.title ?? "主题 #\(topic.id)")
-                    .font(.subheadline.weight(.semibold))
+                    .font(ShellTheme.Fonts.body.weight(.semibold))
                     .foregroundStyle(ShellTheme.primaryText)
                     .lineLimit(4)
                     .multilineTextAlignment(.leading)
 
                 if let excerpt {
                     Text(excerpt)
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.metadata)
                         .foregroundStyle(ShellTheme.secondaryText)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -388,13 +377,15 @@ private struct NewTopicCard: View {
 
                 Spacer(minLength: 2)
 
-                HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if topic.isAnonymous != true, let userID = topic.userId, !library.userNote(for: userID).isEmpty {
+                        Text("备注：\(library.userNote(for: userID))").fixedSize(horizontal: false, vertical: true)
+                    }
                     Label(NativeFormat.count(topic.replyCount), systemImage: "bubble.left")
                 }
-                .font(.system(size: 10))
+                .font(ShellTheme.Fonts.metadata)
                 .foregroundStyle(ShellTheme.secondaryText)
             }
             .padding(12)
@@ -422,13 +413,17 @@ private struct NewTopicCard: View {
 
     private var excerpt: String? {
         guard let raw = topic.lastPostContent, !raw.isEmpty else { return nil }
-        let withoutTags = raw.replacingOccurrences(of: "\\[/?[^\\]]+\\]", with: "", options: .regularExpression)
+        // Do not turn hidden image/attachment URLs into visible excerpt text.
+        let withoutMedia = raw.replacingOccurrences(of: "(?is)\\[(img|upload)(?:=[^\\]]*)?\\].*?\\[/\\1\\]", with: "", options: .regularExpression)
+        let withoutTags = withoutMedia.replacingOccurrences(of: "\\[/?[^\\]]+\\]", with: "", options: .regularExpression)
         let collapsed = withoutTags.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         let value = collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
     }
 }
 private struct NewTopicRow: View {
+    @EnvironmentObject private var library: NativeLibrary
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let topic: NativeTopicSummary
     let thumbnail: URL?
     let boardName: String?
@@ -439,23 +434,17 @@ private struct NewTopicRow: View {
                 Text(topic.title ?? "主题 #\(topic.id)")
                     .font(ShellTheme.Fonts.body.weight(.medium))
                     .foregroundStyle(ShellTheme.primaryText)
-                    .lineLimit(2)
-                HStack(spacing: 8) {
-                    if let boardName, !boardName.isEmpty {
-                        Text(boardName)
-                    }
-                    Text(topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"))
-                    Text("回复 \(NativeFormat.count(topic.replyCount))")
-                    Spacer(minLength: 0)
-                    Text(NativeFormat.date(topic.lastPostTime ?? topic.time))
-                }
-                .font(ShellTheme.Fonts.caption)
-                .foregroundStyle(ShellTheme.secondaryText)
-                .lineLimit(1)
+                    .lineLimit(3)
+                NativeTopicMetadata(
+                    board: boardName,
+                    author: topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"),
+                    userNote: topic.isAnonymous == true ? nil : topic.userId.map { library.userNote(for: $0) },
+                    replyCount: topic.replyCount, date: NativeFormat.date(topic.lastPostTime ?? topic.time)
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let thumbnail {
+            if let thumbnail, !dynamicTypeSize.isAccessibilitySize {
                 AsyncImage(url: thumbnail) { phase in
                     switch phase {
                     case let .success(image):

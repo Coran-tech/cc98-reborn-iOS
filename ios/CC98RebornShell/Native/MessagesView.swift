@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum NativeMessageSection: String, CaseIterable, Identifiable {
     case reply, at, system, privateMessages
@@ -30,6 +31,7 @@ struct MessagesView: View {
 
     @State private var section: NativeMessageSection = .reply
     @State private var counts: NativeMessageCounts? = nil
+    @State private var countUnavailable = false
     @State private var refreshID = 0
     @State private var markingRead = false
     @State private var alertMessage = ""
@@ -43,6 +45,11 @@ struct MessagesView: View {
             } else {
                 VStack(spacing: 0) {
                     messageTabs
+                    if countUnavailable {
+                        Text("暂无法确认未读数量，下次打开时重试。")
+                            .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+                            .padding(.horizontal, 16)
+                    }
 
                     Group {
                         switch section {
@@ -56,13 +63,17 @@ struct MessagesView: View {
                 }
                 .background(ShellTheme.pageBackground)
                 .navigationTitle("消息")
-                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         if section != .privateMessages {
-                            Button("全部已读") {
-                                Task { await markAllRead() }
+                            Menu {
+                                Button("将\(section.title)全部标为已读") { Task { await markAllRead() } }
+                            } label: {
+                                Image(systemName: "checkmark.circle").frame(minWidth: 44, minHeight: 44)
                             }
+                            .accessibilityLabel("当前分类已读操作")
+                            .accessibilityIdentifier("messages.markRead")
                             .disabled(markingRead)
                         }
                     }
@@ -83,14 +94,13 @@ struct MessagesView: View {
                 Button {
                     section = item
                 } label: {
-                    VStack(spacing: 1) {
-                        Text(count(for: item))
-                            .font(.system(.footnote, design: .rounded).weight(.semibold))
-                        Text(item.title)
-                            .font(.system(size: 10))
+                    VStack(spacing: 4) {
+                        Text(item.title).font(ShellTheme.Fonts.footnote.weight(.semibold))
+                        Text(count(for: item)).font(.footnote.monospacedDigit())
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .frame(minHeight: 48)
+                    .padding(.vertical, 4)
                     .background(
                         section == item ? ShellTheme.accentSoft : Color.clear,
                         in: RoundedRectangle(cornerRadius: 8)
@@ -98,6 +108,8 @@ struct MessagesView: View {
                     .foregroundStyle(section == item ? ShellTheme.accent : ShellTheme.secondaryText)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("messages.\(item.rawValue)")
+                .accessibilityAddTraits(section == item ? .isSelected : [])
             }
         }
         .padding(4)
@@ -107,21 +119,23 @@ struct MessagesView: View {
     }
 
     private func count(for section: NativeMessageSection) -> String {
+        guard counts != nil else { return "—" }
         switch section {
         case .reply:
-            return NativeFormat.count(counts?.replyCount)
+            return counts?.replyCount.map { NativeFormat.count($0) } ?? "—"
         case .at:
-            return NativeFormat.count(counts?.atCount)
+            return counts?.atCount.map { NativeFormat.count($0) } ?? "—"
         case .system:
-            return NativeFormat.count(counts?.systemCount)
+            return counts?.systemCount.map { NativeFormat.count($0) } ?? "—"
         case .privateMessages:
-            return NativeFormat.count(counts?.messageCount)
+            return counts?.messageCount.map { NativeFormat.count($0) } ?? "—"
         }
     }
 
     @MainActor
     private func loadCounts() async {
-        counts = try? await app.api.messageCounts()
+        do { counts = try await app.api.messageCounts(); countUnavailable = false }
+        catch { countUnavailable = true }
     }
 
     @MainActor
@@ -290,7 +304,7 @@ private struct NotificationRow: View {
                             .lineLimit(1)
                     }
                 }
-                .font(ShellTheme.Fonts.caption)
+                .font(ShellTheme.Fonts.footnote)
                 .foregroundStyle(ShellTheme.secondaryText)
             }
             Spacer(minLength: 0)
@@ -321,6 +335,7 @@ private struct NotificationRow: View {
 
 private struct PrivateMessageListView: View {
     @EnvironmentObject private var app: NativeAppModel
+    @EnvironmentObject private var library: NativeLibrary
 
     @State private var contacts: [NativeRecentContact] = []
     @State private var users: [Int: NativeBasicUser] = [:]
@@ -329,21 +344,27 @@ private struct PrivateMessageListView: View {
     @State private var page = 0
     @State private var hasMore = true
 
+    private var orderedContacts: [NativeRecentContact] {
+        let byID = Dictionary(contacts.map { ($0.userId, $0) }, uniquingKeysWith: { first, _ in first })
+        let pinned = library.pinnedContactIDs.map { byID[$0] ?? NativeRecentContact(userId: $0, time: nil, isRead: nil, lastContent: nil) }
+        return pinned + contacts.filter { !library.isContactPinned($0.userId) }
+    }
+
     var body: some View {
         Group {
-            if contacts.isEmpty && loading {
+            if orderedContacts.isEmpty && loading {
                 ProgressView("正在加载私信…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(ShellTheme.pageBackground)
-            } else if contacts.isEmpty, let error {
+            } else if orderedContacts.isEmpty, let error {
                 NativeStateView(icon: "bubble.left.and.exclamationmark.bubble.right", title: "私信无法加载", message: error, action: {
                     Task { await load(reset: true) }
                 })
-            } else if contacts.isEmpty {
+            } else if orderedContacts.isEmpty {
                 NativeStateView(icon: "bubble.left.and.bubble.right", title: "暂无私信", message: "还没有最近联系人。")
             } else {
                 List {
-                    ForEach(contacts) { contact in
+                    ForEach(orderedContacts) { contact in
                         NavigationLink {
                             PrivateConversationView(
                                 contactID: contact.userId,
@@ -353,7 +374,19 @@ private struct PrivateMessageListView: View {
                         } label: {
                             contactRow(contact)
                         }
+                        .accessibilityIdentifier("message.contact.\(contact.userId)")
+                        .contextMenu {
+                            Button(library.isContactPinned(contact.userId) ? "取消置顶联系人" : "置顶联系人", systemImage: "pin") {
+                                library.togglePinnedContact(userID: contact.userId)
+                            }
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button(library.isContactPinned(contact.userId) ? "取消置顶" : "置顶", systemImage: "pin") {
+                                library.togglePinnedContact(userID: contact.userId)
+                            }.tint(ShellTheme.accent)
+                        }
                     }
+                    NativeLibraryStatusView()
 
                     if error != nil {
                         Button("加载失败，点击重试") {
@@ -388,9 +421,22 @@ private struct PrivateMessageListView: View {
                     Text(users[contact.userId]?.name ?? "用户 #\(contact.userId)")
                         .font(ShellTheme.Fonts.body.weight(.medium))
                         .foregroundStyle(ShellTheme.primaryText)
+                    if library.isContactPinned(contact.userId) {
+                        Image(systemName: "pin.fill").font(.footnote).foregroundStyle(ShellTheme.accent)
+                            .accessibilityLabel("已置顶")
+                    }
                     if contact.isRead == false {
                         Circle().fill(ShellTheme.accent).frame(width: 7, height: 7)
                     }
+                }
+                if !library.userNote(for: contact.userId).isEmpty {
+                    Text("备注：\(library.userNote(for: contact.userId))")
+                        .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+                        .lineLimit(2)
+                }
+                if !library.draft(for: "pm:\(contact.userId)").isEmpty {
+                    Text("草稿：\(library.draft(for: "pm:\(contact.userId)"))")
+                        .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.accent).lineLimit(2)
                 }
                 Text(contact.lastContent ?? "")
                     .font(ShellTheme.Fonts.footnote)
@@ -399,7 +445,7 @@ private struct PrivateMessageListView: View {
             }
             Spacer(minLength: 0)
             Text(NativeFormat.date(contact.time))
-                .font(ShellTheme.Fonts.caption)
+                .font(ShellTheme.Fonts.footnote)
                 .foregroundStyle(ShellTheme.secondaryText)
         }
         .padding(.vertical, 2)
@@ -433,7 +479,7 @@ private struct PrivateMessageListView: View {
             page += 1
 
             let known = Set(users.keys)
-            let newIDs = Array(Set(fetched.map(\.userId)).subtracting(known))
+            let newIDs = Array(Set(fetched.map(\.userId) + library.pinnedContactIDs).subtracting(known))
             if !newIDs.isEmpty, let basics = try? await app.api.userBasics(ids: newIDs) {
                 for user in basics { users[user.id] = user }
             }
@@ -444,9 +490,23 @@ private struct PrivateMessageListView: View {
     }
 }
 
+private struct ConversationScrollRequest: Equatable {
+    let id = UUID()
+    let messageID: Int
+    let bottom: Bool
+}
+
+private struct ConversationBottomPreference: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 struct PrivateConversationView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     let contactID: Int
     let contactName: String?
@@ -458,78 +518,147 @@ struct PrivateConversationView: View {
     @State private var sending = false
     @State private var hasMore = true
     @State private var offset = 0
-    @State private var errorMessage: String? = nil
+    @State private var errorMessage: String?
+    @State private var errorTitle = "私信暂不可用"
     @State private var showError = false
+    @State private var restoredDraft = false
+    @State private var showExit = false
+    @State private var atBottom = true
+    @State private var newMessagesAvailable = false
+    @State private var scrollRequest: ConversationScrollRequest?
+    @State private var showNote = false
     @FocusState private var focused: Bool
 
     private let pageSize = 10
+    private var draftKey: String { "pm:\(contactID)" }
+    private var displayName: String { contactName ?? "用户 #\(contactID)" }
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 10) {
-                        if hasMore {
-                            Button("加载更早") {
-                                Task { await load(reset: false) }
+            GeometryReader { geometry in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 14) {
+                            if hasMore {
+                                Button(loading ? "正在加载…" : "加载更早的私信") { Task { await loadEarlier() } }
+                                    .font(ShellTheme.Fonts.footnote)
+                                    .frame(minHeight: 44)
+                                    .disabled(loading)
+                                    .accessibilityIdentifier("message.earlier")
                             }
-                            .font(ShellTheme.Fonts.caption)
-                            .disabled(loading)
+                            if messages.isEmpty && loading { ProgressView("正在加载私信…").padding(.top, 40) }
+                            if messages.isEmpty && !loading {
+                                Text(errorMessage ?? "还没有私信，发送第一条消息吧。")
+                                    .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+                                    .padding(.vertical, 24)
+                            }
+                            ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+                                bubble(message, showTime: shouldShowTime(at: index), availableWidth: geometry.size.width - 32)
+                                    .id(message.id)
+                            }
+                            Color.clear.frame(height: 1)
+                                .background(GeometryReader { marker in
+                                    Color.clear.preference(key: ConversationBottomPreference.self,
+                                        value: marker.frame(in: .named("conversationScroll")).maxY)
+                                })
                         }
-                        if messages.isEmpty && loading {
-                            ProgressView("正在加载私信…")
-                                .padding(.top, 40)
-                        }
-                        ForEach(messages.indices, id: \.self) { index in
-                            bubble(messages[index], showTime: shouldShowTime(at: index))
-                                .id(messages[index].id)
+                        .padding(16)
+                    }
+                    .coordinateSpace(name: "conversationScroll")
+                    .scrollDismissesKeyboard(.interactively)
+                    .onPreferenceChange(ConversationBottomPreference.self) { bottom in
+                        atBottom = bottom >= 0 && bottom <= geometry.size.height + 64
+                        if atBottom { newMessagesAvailable = false }
+                    }
+                    .onChange(of: scrollRequest) { _, request in
+                        guard let request else { return }
+                        DispatchQueue.main.async {
+                            proxy.scrollTo(request.messageID, anchor: request.bottom ? .bottom : .top)
                         }
                     }
-                    .padding(16)
-                }
-                .onChange(of: messages.count) { _, _ in
-                    scrollToBottom(proxy)
+                    .overlay(alignment: .bottomTrailing) {
+                        if newMessagesAvailable {
+                            Button("查看新消息", systemImage: "arrow.down") { requestBottom() }
+                                .font(ShellTheme.Fonts.footnote)
+                                .buttonStyle(.borderedProminent)
+                                .padding(12)
+                        }
+                    }
                 }
             }
+            NativeLibraryStatusView().padding(.horizontal, 16)
             composer
         }
         .background(ShellTheme.pageBackground)
-        .navigationTitle(contactName ?? "私信")
+        .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load(reset: true) }
-        .alert("发送失败", isPresented: $showError) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
+        .navigationBarBackButtonHidden()
+        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { close() } label: { Label("返回", systemImage: "chevron.left").frame(minHeight: 44) }
+                    .disabled(sending)
+                    .accessibilityIdentifier("message.back")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(library.isContactPinned(contactID) ? "取消置顶联系人" : "置顶联系人", systemImage: "pin") {
+                        library.togglePinnedContact(userID: contactID)
+                    }
+                    Button("用户备注", systemImage: "note.text") { showNote = true }
+                    NavigationLink("查看用户主页") { UserProfileView(userID: contactID, userName: contactName) }
+                    Button("刷新会话", systemImage: "arrow.clockwise") { Task { await refreshLatest(follow: atBottom) } }
+                } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+                .accessibilityLabel("联系人操作")
+                .accessibilityIdentifier("message.contactActions")
+            }
         }
+        .sheet(isPresented: $showNote) { UserNoteEditor(userID: contactID, userName: displayName) }
+        .task {
+            guard !restoredDraft else { return }
+            text = library.draft(for: draftKey)
+            restoredDraft = true
+            await initialLoad()
+        }
+        .onChange(of: text) { _, value in
+            if restoredDraft { library.setDraft(value, for: draftKey) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active && restoredDraft { library.setDraft(text, for: draftKey) }
+        }
+        .confirmationDialog("私信草稿尚未保存", isPresented: $showExit, titleVisibility: .visible) {
+            Button("重试保存并返回") { if library.setDraft(text, for: draftKey) { dismiss() } }
+            Button("复制私信") { UIPasteboard.general.string = text }
+            Button("丢弃本会话草稿并返回", role: .destructive) { library.clearDraft(for: draftKey); dismiss() }
+            Button("继续编辑", role: .cancel) { }
+        }
+        .alert(errorTitle, isPresented: $showError) {
+            Button("好", role: .cancel) { }
+        } message: { Text(errorMessage ?? "") }
     }
 
-    private func bubble(_ message: NativePrivateMessage, showTime: Bool) -> some View {
+    private func bubble(_ message: NativePrivateMessage, showTime: Bool, availableWidth: CGFloat) -> some View {
         let mine = message.senderId == auth.profile?.id
         let otherAvatar = contactAvatarURL ?? NativeAvatarURLs.defaultURL(gender: nil)
         let myAvatar = auth.profile?.avatarURL ?? NativeAvatarURLs.defaultURL(gender: auth.profile?.gender)
         return HStack(alignment: .bottom, spacing: 6) {
-            if !mine {
-                NativeAvatar(url: otherAvatar, name: contactName, size: 24)
-            }
-            if mine { Spacer(minLength: 30) }
-            VStack(alignment: mine ? .trailing : .leading, spacing: 3) {
+            if !mine { NativeAvatar(url: otherAvatar, name: contactName, size: 24) }
+            if mine { Spacer(minLength: 8) }
+            VStack(alignment: mine ? .trailing : .leading, spacing: 5) {
                 UBBContentView(source: message.content ?? "")
-                    .padding(10)
-                    .background(
-                        mine ? ShellTheme.accent.opacity(0.16) : ShellTheme.surface,
-                        in: RoundedRectangle(cornerRadius: 12)
-                    )
+                    .font(ShellTheme.Fonts.body)
+                    .textSelection(.enabled)
+                    .padding(12)
+                    .background(mine ? ShellTheme.accentSoft : ShellTheme.surface, in: RoundedRectangle(cornerRadius: 12))
                 if showTime {
                     Text(NativeFormat.date(message.time))
-                        .font(.system(size: 10))
+                        .font(ShellTheme.Fonts.footnote)
                         .foregroundStyle(ShellTheme.secondaryText)
                 }
             }
-            if !mine { Spacer(minLength: 30) }
-            if mine {
-                NativeAvatar(url: myAvatar, name: auth.profile?.name, size: 24)
-            }
+            .frame(maxWidth: max(120, availableWidth * 0.82), alignment: mine ? .trailing : .leading)
+            if !mine { Spacer(minLength: 8) }
+            if mine { NativeAvatar(url: myAvatar, name: auth.profile?.name, size: 24) }
         }
     }
 
@@ -540,84 +669,122 @@ struct PrivateConversationView: View {
     }
 
     private func shouldShowTime(at index: Int) -> Bool {
-        guard index > 0, messages.indices.contains(index) else { return true }
-        guard let current = NativeFormat.dateValue(messages[index].time),
-              let previous = NativeFormat.dateValue(messages[index - 1].time) else {
-            return true
-        }
+        guard index > 0, messages.indices.contains(index),
+              let current = NativeFormat.dateValue(messages[index].time),
+              let previous = NativeFormat.dateValue(messages[index - 1].time) else { return true }
         return current.timeIntervalSince(previous) > 300
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("输入私信…", text: $text, axis: .vertical)
-                .lineLimit(1...4)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 18))
-                .focused($focused)
-            Button {
-                Task { await send() }
-            } label: {
-                Image(systemName: "paperplane.fill")
-                    .frame(width: 40, height: 40)
+        VStack(alignment: .leading, spacing: 4) {
+            Text("以 \(auth.profile?.name ?? "当前账号") 发送给 \(displayName)")
+                .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("输入私信…", text: $text, axis: .vertical)
+                    .font(ShellTheme.Fonts.body)
+                    .lineLimit(1...5)
+                    .padding(12)
+                    .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+                    .focused($focused)
+                    .accessibilityIdentifier("message.input")
+                Button { Task { await send() } } label: {
+                    Group {
+                        if sending { ProgressView() }
+                        else { Image(systemName: "paperplane.fill") }
+                    }
+                    .frame(width: 24, height: 24)
+                }
+                .buttonStyle(NativePrimaryButtonStyle())
+                .accessibilityLabel(sending ? "正在发送" : "发送私信")
+                .accessibilityIdentifier("message.send")
+                .disabled(sending || loading || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(ShellTheme.accent)
-            .disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(12)
         .background(ShellTheme.surface)
-        .overlay(alignment: .top) {
-            Rectangle().fill(ShellTheme.separator).frame(height: 0.5)
-        }
+        .overlay(alignment: .top) { Rectangle().fill(ShellTheme.separator).frame(height: 0.5) }
+    }
+
+    private func close() {
+        if library.setDraft(text, for: draftKey) { dismiss() }
+        else { showExit = true }
+    }
+
+    private func requestBottom() {
+        guard let last = messages.last else { return }
+        scrollRequest = ConversationScrollRequest(messageID: last.id, bottom: true)
+        newMessagesAvailable = false
     }
 
     @MainActor
-    private func load(reset: Bool) async {
+    private func initialLoad() async {
         guard !loading else { return }
         loading = true
+        defer { loading = false }
         do {
-            let fetched = try await app.api.privateMessages(userID: contactID, from: reset ? 0 : offset, size: pageSize)
-            let ordered = fetched.reversed()
-            if reset {
-                messages = Array(ordered)
-                offset = fetched.count
-                hasMore = fetched.count == pageSize
-            } else {
-                let existing = Set(messages.map(\.id))
-                let older = ordered.filter { !existing.contains($0.id) }
-                messages = older + messages
-                offset += fetched.count
-                hasMore = fetched.count == pageSize
-            }
+            let fetched = try await app.api.privateMessages(userID: contactID, from: 0, size: pageSize)
+            messages = Array(fetched.reversed())
+            offset = fetched.count
+            hasMore = fetched.count == pageSize
+            errorMessage = nil
+            requestBottom()
+        } catch { errorTitle = "私信加载失败"; errorMessage = error.localizedDescription; showError = true }
+    }
+
+    @MainActor
+    private func loadEarlier() async {
+        guard !loading, hasMore else { return }
+        loading = true
+        let anchor = messages.first?.id
+        defer { loading = false }
+        do {
+            let fetched = try await app.api.privateMessages(userID: contactID, from: offset, size: pageSize)
+            let existing = Set(messages.map(\.id))
+            let older = fetched.reversed().filter { !existing.contains($0.id) }
+            messages = older + messages
+            offset += fetched.count
+            hasMore = fetched.count == pageSize
+            if let anchor { scrollRequest = ConversationScrollRequest(messageID: anchor, bottom: false) }
+            else { requestBottom() }
+        } catch { errorTitle = "更早私信加载失败"; errorMessage = error.localizedDescription; showError = true }
+    }
+
+    @MainActor
+    private func refreshLatest(follow: Bool, sent: Bool = false) async {
+        guard !loading else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let fetched = try await app.api.privateMessages(userID: contactID, from: 0, size: pageSize)
+            let existing = Set(messages.map(\.id))
+            let newer = fetched.reversed().filter { !existing.contains($0.id) }
+            messages.append(contentsOf: newer)
+            offset += newer.count
+            if follow { requestBottom() }
+            else if !newer.isEmpty { newMessagesAvailable = true }
         } catch {
-            errorMessage = error.localizedDescription
+            errorTitle = sent ? "私信已发送，刷新会话失败" : "刷新会话失败"
+            errorMessage = sent ? "请刷新会话核对，不要重复发送。\n" + error.localizedDescription : error.localizedDescription
             showError = true
         }
-        loading = false
     }
 
     @MainActor
     private func send() async {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, !sending else { return }
+        let original = text
+        let value = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, !sending, !loading else { return }
+        let follow = atBottom
         sending = true
+        defer { sending = false }
         do {
             try await app.api.sendPrivateMessage(receiverID: contactID, content: value)
-            text = ""
-            await load(reset: true)
+            if text == original { text = ""; library.clearDraft(for: draftKey) }
+            await refreshLatest(follow: follow, sent: true)
         } catch {
-            errorMessage = error.localizedDescription
+            errorTitle = "私信发送未完成"
+            errorMessage = error.localizedDescription + "\n输入已保留；若请求超时，请先刷新会话核对后再重试。"
             showError = true
-        }
-        sending = false
-    }
-
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        guard let last = messages.last else { return }
-        withAnimation {
-            proxy.scrollTo(last.id, anchor: .bottom)
         }
     }
 }

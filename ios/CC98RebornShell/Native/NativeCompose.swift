@@ -28,50 +28,87 @@ struct ComposerImageButton: View {
     @Binding var text: String
     @Binding var selection: NSRange
     let editor: UBBEditorController
+    var onUploadingChanged: (Bool) -> Void = { _ in }
 
     @State private var item: PhotosPickerItem?
+    @State private var pendingData: Data?
     @State private var uploading = false
     @State private var errorMessage = ""
     @State private var showError = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            picker
+            if pendingData != nil && !uploading {
+                Button("图片未上传 · 重试或移除") { showError = true }
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.danger)
+                    .frame(minHeight: 44)
+            }
+        }
+    }
+
+    private var picker: some View {
         PhotosPicker(selection: $item, matching: .images) {
-            Label(uploading ? "上传中…" : "插入图片", systemImage: uploading ? "arrow.up.circle" : "photo")
+            Label(uploading ? "图片上传中…" : "图片", systemImage: uploading ? "arrow.up.circle" : "photo")
                 .font(ShellTheme.Fonts.footnote)
                 .foregroundStyle(ShellTheme.accent)
+                .frame(minWidth: 44, minHeight: 44)
         }
+        .accessibilityIdentifier("compose.image")
         .disabled(uploading)
         .onChange(of: item) { _, newItem in
             guard let newItem else { return }
-            Task { await upload(newItem) }
+            Task { await readAndUpload(newItem) }
         }
-        .alert("图片上传失败", isPresented: $showError) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(errorMessage)
+        .alert("所选图片上传失败", isPresented: $showError) {
+            if pendingData != nil {
+                Button("重试上传") { Task { await uploadPending() } }
+            }
+            Button("移除待上传图片", role: .destructive) { pendingData = nil }
+            Button("保留，稍后重试", role: .cancel) { }
+        } message: { Text(errorMessage + "\n正文和已上传内容不会删除。") }
+        .contextMenu {
+            if pendingData != nil, !uploading {
+                Button("重试待上传图片") { Task { await uploadPending() } }
+                Button("移除待上传图片", role: .destructive) { pendingData = nil }
+            }
         }
     }
 
     @MainActor
-    private func upload(_ pickerItem: PhotosPickerItem) async {
+    private func readAndUpload(_ pickerItem: PhotosPickerItem) async {
         uploading = true
-        defer {
-            uploading = false
-            item = nil
-        }
+        onUploadingChanged(true)
+        defer { uploading = false; onUploadingChanged(false); item = nil }
         do {
             guard let data = try await pickerItem.loadTransferable(type: Data.self) else {
                 throw NSError(domain: "CC98Reborn", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法读取所选图片。"])
             }
-            let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) ?? data
-            let url = try await app.api.uploadImage(jpeg)
-            if !editor.insert("\n[img]\(url)[/img]\n") {
-                UBBEditorInsertion.insert("\n[img]\(url)[/img]\n", text: &text, selection: &selection)
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-            showError = true
+            pendingData = UIImage(data: data)?.jpegData(compressionQuality: 0.85) ?? data
+            try await sendPending()
+        } catch { errorMessage = error.localizedDescription; showError = true }
+    }
+
+    @MainActor
+    private func uploadPending() async {
+        guard !uploading else { return }
+        uploading = true
+        onUploadingChanged(true)
+        defer { uploading = false; onUploadingChanged(false) }
+        do { try await sendPending() }
+        catch { errorMessage = error.localizedDescription; showError = true }
+    }
+
+    @MainActor
+    private func sendPending() async throws {
+        guard let pendingData else { return }
+        let url = try await app.api.uploadImage(pendingData)
+        let snippet = "\n[img]\(url)[/img]\n"
+        if !editor.insert(snippet) {
+            UBBEditorInsertion.insert(snippet, text: &text, selection: &selection)
         }
+        self.pendingData = nil
     }
 }
 
@@ -80,66 +117,137 @@ struct ComposerFileButton: View {
     @Binding var text: String
     @Binding var selection: NSRange
     let editor: UBBEditorController
+    var onUploadingChanged: (Bool) -> Void = { _ in }
 
     @State private var showImporter = false
     @State private var uploading = false
+    @State private var pendingData: Data?
+    @State private var fileName = "文件"
+    @State private var fileExtension = ""
     @State private var errorMessage = ""
     @State private var showError = false
 
     var body: some View {
-        Button {
-            showImporter = true
-        } label: {
-            Label(uploading ? "上传中…" : "上传文件", systemImage: uploading ? "arrow.up.circle" : "paperclip")
-                .font(ShellTheme.Fonts.footnote)
-                .foregroundStyle(ShellTheme.accent)
-        }
-        .disabled(uploading)
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case let .success(urls):
-                if let url = urls.first {
-                    Task { await upload(url) }
-                }
-            case let .failure(error):
-                errorMessage = error.localizedDescription
-                showError = true
+        VStack(alignment: .leading, spacing: 0) {
+            filePicker
+            if pendingData != nil && !uploading {
+                Button("文件未上传 · 重试或移除") { showError = true }
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.danger)
+                    .frame(minHeight: 44)
             }
         }
-        .alert("文件上传失败", isPresented: $showError) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(errorMessage)
+    }
+
+    private var filePicker: some View {
+        Button { showImporter = true } label: {
+            Label(uploading ? "\(fileName) 上传中…" : "文件", systemImage: uploading ? "arrow.up.circle" : "paperclip")
+                .font(ShellTheme.Fonts.footnote)
+                .foregroundStyle(ShellTheme.accent)
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .accessibilityIdentifier("compose.file")
+        .disabled(uploading)
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
+            switch result {
+            case let .success(urls):
+                if let url = urls.first { Task { await readAndUpload(url) } }
+            case let .failure(error):
+                errorMessage = error.localizedDescription; showError = true
+            }
+        }
+        .alert("\(fileName) 上传失败", isPresented: $showError) {
+            if pendingData != nil {
+                Button("重试上传") { Task { await uploadPending() } }
+            }
+            Button("移除待上传文件", role: .destructive) { pendingData = nil }
+            Button("保留，稍后重试", role: .cancel) { }
+        } message: { Text(errorMessage + "\n正文和已上传内容不会删除。") }
+        .contextMenu {
+            if pendingData != nil, !uploading {
+                Button("重试 \(fileName)") { Task { await uploadPending() } }
+                Button("移除待上传文件", role: .destructive) { pendingData = nil }
+            }
         }
     }
 
     @MainActor
-    private func upload(_ url: URL) async {
+    private func readAndUpload(_ url: URL) async {
         let accessing = url.startAccessingSecurityScopedResource()
-        defer {
-            if accessing { url.stopAccessingSecurityScopedResource() }
-        }
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        fileName = url.lastPathComponent
+        fileExtension = url.pathExtension.lowercased()
+        do { pendingData = try Data(contentsOf: url) }
+        catch { errorMessage = error.localizedDescription; showError = true; return }
+        await uploadPending()
+    }
+
+    @MainActor
+    private func uploadPending() async {
+        guard let pendingData, !uploading else { return }
         uploading = true
-        defer { uploading = false }
+        onUploadingChanged(true)
+        defer { uploading = false; onUploadingChanged(false) }
         do {
-            let data = try Data(contentsOf: url)
-            let ext = url.pathExtension.lowercased()
-            let mime = UTType(filenameExtension: ext)?.preferredMIMEType ?? "application/octet-stream"
-            let remote = try await app.api.uploadAttachment(data, fileName: url.lastPathComponent, mimeType: mime)
-            let tag = ext.isEmpty ? "file" : ext
+            let mime = UTType(filenameExtension: fileExtension)?.preferredMIMEType ?? "application/octet-stream"
+            let remote = try await app.api.uploadAttachment(pendingData, fileName: fileName, mimeType: mime)
+            let tag = fileExtension.isEmpty ? "file" : fileExtension
             let snippet = "\n[upload=\(tag)]\(remote)[/upload]\n"
             if !editor.insert(snippet) {
                 UBBEditorInsertion.insert(snippet, text: &text, selection: &selection)
             }
-        } catch {
-            errorMessage = error.localizedDescription
-            showError = true
+            self.pendingData = nil
+        } catch { errorMessage = error.localizedDescription; showError = true }
+    }
+}
+
+struct ComposerAttachmentsBar: View {
+    @Binding var text: String
+    @Binding var selection: NSRange
+    let editor: UBBEditorController
+    var onUploadingChanged: (Bool) -> Void = { _ in }
+    @State private var imageUploading = false
+    @State private var fileUploading = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 20) {
+                    ComposerImageButton(text: $text, selection: $selection, editor: editor) { value in
+                        imageUploading = value
+                        onUploadingChanged(value || fileUploading)
+                    }
+                    ComposerEmoticonButton(text: $text, selection: $selection, editor: editor)
+                    ComposerFileButton(text: $text, selection: $selection, editor: editor) { value in
+                        fileUploading = value
+                        onUploadingChanged(imageUploading || value)
+                    }
+                }
+            }
+            Text(imageUploading || fileUploading ? "正在上传，请完成后再发布或退出。" : "选择图片或文件后立即上传到 CC98。")
+                .font(ShellTheme.Fonts.footnote)
+                .foregroundStyle(ShellTheme.secondaryText)
         }
     }
+}
+
+private struct NativeTopicDraftSettings: Codable, Equatable {
+    var contentType: Int
+    var anonymous: Bool
+    var notifyPoster: Bool
+    var postKind: Int
+    var tag1ID: Int?
+    var tag2ID: Int?
+    var voteItems: [String]
+    var expiredDays: Int
+    var maxVoteCount: Int
+    var needVote: Bool
+}
+
+private struct NativeTopicDraftSnapshot: Equatable {
+    let title: String
+    let body: String
+    let settings: NativeTopicDraftSettings
 }
 
 struct NewTopicComposer: View {
@@ -173,11 +281,36 @@ struct NewTopicComposer: View {
     @State private var draftStatus = ""
     @StateObject private var editor = UBBEditorController()
     @State private var sending = false
+    @State private var uploading = false
+    @State private var draftReady = false
+    @State private var savedSnapshot: NativeTopicDraftSnapshot?
+    @State private var showExit = false
+    @State private var showRestore = false
+    @State private var showClearDraft = false
+    @State private var showModeChange = false
+    @State private var published = false
+    @State private var showMentionWarning = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
 
-    private var titleKey: String { "newtopic.title:\(boardID)" }
-    private var bodyKey: String { "newtopic.body:\(boardID)" }
+    private var draftPrefix: String { isVote ? "newvote" : "newtopic" }
+    private var titleKey: String { "\(draftPrefix).title:\(boardID)" }
+    private var bodyKey: String { "\(draftPrefix).body:\(boardID)" }
+    private var settingsKey: String { "\(draftPrefix).settings:\(boardID)" }
+    private var hasInput: Bool { !title.isEmpty || !content.isEmpty || voteItems.contains { !$0.isEmpty } }
+    private var settings: NativeTopicDraftSettings {
+        NativeTopicDraftSettings(contentType: contentType, anonymous: anonymous, notifyPoster: notifyPoster,
+            postKind: postKind, tag1ID: tag1ID, tag2ID: tag2ID, voteItems: voteItems,
+            expiredDays: expiredDays, maxVoteCount: maxVoteCount, needVote: needVote)
+    }
+
+    private var snapshot: NativeTopicDraftSnapshot { NativeTopicDraftSnapshot(title: title, body: content, settings: settings) }
+    private var savedAtDescription: String {
+        if let date = library.draftItems.first(where: { $0.keys.contains(bodyKey) || $0.keys.contains(titleKey) })?.updatedAt {
+            return "保存时间：\(date.formatted(date: .abbreviated, time: .shortened))。"
+        }
+        return "旧草稿未记录保存时间。"
+    }
 
     private var effectiveAnonymousState: Int {
         boardAnonymousState ?? anonymousState
@@ -207,12 +340,12 @@ struct NewTopicComposer: View {
                 Text(tagName(options, selected.wrappedValue) ?? title)
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
             }
             .font(ShellTheme.Fonts.footnote)
             .foregroundStyle(selected.wrappedValue == nil ? ShellTheme.secondaryText : ShellTheme.primaryText)
             .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .frame(minHeight: 44)
             .background(ShellTheme.secondarySurface, in: Capsule())
         }
     }
@@ -241,38 +374,25 @@ struct NewTopicComposer: View {
                     }
 
                     Text(boardName)
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.footnote)
                         .foregroundStyle(ShellTheme.secondaryText)
 
-                    if let tagGroup = tags, tagGroup.layers > 0 {
-                        HStack(spacing: 8) {
-                            tagMenu(
-                                "一级标签",
-                                options: tagGroup.tags,
-                                selected: $tag1ID
-                            ) {
-                                tag2ID = nil
-                            }
-                            if tagGroup.layers == 2 {
-                                tagMenu(
-                                    "二级标签",
-                                    options: tagGroup.tags.first { $0.id == tag1ID }?.subTags ?? [],
-                                    selected: $tag2ID
-                                ) {}
-                            }
-                        }
-                    }
-
-                    TextField("主题标题", text: $title)
+                    Text("主题标题").font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+                    TextField("输入主题标题", text: $title)
+                        .font(ShellTheme.Fonts.body)
+                        .accessibilityIdentifier("compose.title")
                         .textFieldStyle(.roundedBorder)
                         .focused($focused)
 
+                    Text(contentType == 0 ? "正文 · UBB 源码" : "正文 · Markdown 源码")
+                        .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
                     if contentType == 0 {
                         UBBFormatBar(text: $content, selection: $selection, editor: editor)
                     } else {
                         MarkdownFormatBar(text: $content, selection: $selection, editor: editor)
                     }
                     UBBTextEditor(text: $content, selection: $selection, controller: editor, minHeight: 260)
+                        .accessibilityIdentifier("compose.body")
                         .frame(minHeight: 260)
                         .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -281,22 +401,19 @@ struct NewTopicComposer: View {
                                 .stroke(ShellTheme.separator, lineWidth: 0.5)
                         )
 
-                    HStack {
-                        ComposerImageButton(text: $content, selection: $selection, editor: editor)
-                        ComposerEmoticonButton(text: $content, selection: $selection, editor: editor)
-                        ComposerFileButton(text: $content, selection: $selection, editor: editor)
-                        Spacer()
-                        Text("\(content.count) / 8000")
-                            .font(ShellTheme.Fonts.caption)
-                            .foregroundStyle(content.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
-                    }
+                    ComposerAttachmentsBar(text: $content, selection: $selection, editor: editor) { uploading = $0 }
+                    Text("\(content.count) / 8000")
+                        .font(ShellTheme.Fonts.footnote)
+                        .foregroundStyle(content.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
 
                     if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         DisclosureGroup("预览") {
                             UBBContentView(source: content, markdown: contentType == 1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.body)
+                        .accessibilityIdentifier("compose.preview")
                     }
 
                     if isVote {
@@ -324,6 +441,8 @@ struct NewTopicComposer: View {
                                         } label: {
                                             Image(systemName: "minus.circle")
                                                 .foregroundStyle(ShellTheme.danger)
+                                                .frame(width: 44, height: 44)
+                                                .accessibilityLabel("删除选项 \(index + 1)")
                                         }
                                     }
                                 }
@@ -334,6 +453,7 @@ struct NewTopicComposer: View {
                                     voteItems.append("")
                                 } label: {
                                     Label("添加选项", systemImage: "plus.circle")
+                                        .frame(minHeight: 44)
                                         .font(ShellTheme.Fonts.footnote)
                                         .foregroundStyle(ShellTheme.accent)
                                 }
@@ -346,56 +466,32 @@ struct NewTopicComposer: View {
                         .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
                     }
 
-                    HStack(spacing: 16) {
-                        Button {
-                            contentType = contentType == 1 ? 0 : 1
-                        } label: {
-                            Text("Markdown")
-                                .font(ShellTheme.Fonts.footnote)
-                                .foregroundStyle(contentType == 1 ? ShellTheme.accent : ShellTheme.secondaryText)
-                        }
-                        .buttonStyle(.plain)
+                    draftControls
+                    NativeLibraryStatusView()
 
-                        Button {
-                            library.setDraft(content, for: bodyKey)
-                            library.setDraft(title, for: titleKey)
-                            draftStatus = "草稿已保存"
-                        } label: {
-                            Text("保存草稿")
-                                .font(ShellTheme.Fonts.footnote)
-                                .foregroundStyle(ShellTheme.secondaryText)
-                        }
-                        .buttonStyle(.plain)
+                    Button(contentType == 0 ? "格式：UBB · 切换为 Markdown" : "格式：Markdown · 切换为 UBB") {
+                        showModeChange = true
+                    }
+                    .font(ShellTheme.Fonts.footnote)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("compose.format")
 
-                        Button {
-                            title = library.draft(for: titleKey)
-                            content = library.draft(for: bodyKey)
-                            selection = NSRange(location: (content as NSString).length, length: 0)
-                            draftStatus = "已恢复草稿"
-                        } label: {
-                            Text("恢复")
-                                .font(ShellTheme.Fonts.footnote)
-                                .foregroundStyle(ShellTheme.secondaryText)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            library.clearDraft(for: titleKey)
-                            library.clearDraft(for: bodyKey)
-                            draftStatus = "草稿已清除"
-                        } label: {
-                            Text("清除")
-                                .font(ShellTheme.Fonts.footnote)
-                                .foregroundStyle(ShellTheme.danger)
-                        }
-                        .buttonStyle(.plain)
-
-                        Spacer()
-
-                        if !draftStatus.isEmpty {
-                            Text(draftStatus)
-                                .font(ShellTheme.Fonts.caption)
-                                .foregroundStyle(ShellTheme.secondaryText)
+                    if let tagGroup = tags, tagGroup.layers > 0 {
+                        HStack(spacing: 8) {
+                            tagMenu(
+                                "一级标签",
+                                options: tagGroup.tags,
+                                selected: $tag1ID
+                            ) {
+                                tag2ID = nil
+                            }
+                            if tagGroup.layers == 2 {
+                                tagMenu(
+                                    "二级标签",
+                                    options: tagGroup.tags.first { $0.id == tag1ID }?.subTags ?? [],
+                                    selected: $tag2ID
+                                ) {}
+                            }
                         }
                     }
 
@@ -430,66 +526,127 @@ struct NewTopicComposer: View {
                             .foregroundStyle(ShellTheme.danger)
                     }
 
-                    Button {
-                        Task { await submit() }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if sending { ProgressView().tint(.white) }
-                            Text(sending ? "发布中…" : "发表")
-                                .font(.system(size: 16, weight: .semibold))
-                            Spacer()
-                        }
-                        .padding(.vertical, 12)
-                        .foregroundStyle(.white)
-                        .background(ShellTheme.accent, in: RoundedRectangle(cornerRadius: 10))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(sending || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+                .disabled(sending || published)
                 .padding(16)
+                .frame(maxWidth: 680)
+                .frame(maxWidth: .infinity)
             }
             .background(ShellTheme.pageBackground)
-            .navigationTitle("发表主题")
+            .navigationTitle(isVote ? "发表投票" : "发表主题")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(sending)
+                    Button("取消") { if hasInput { showExit = true } else { dismiss() } }
+                        .frame(minHeight: 44)
+                        .disabled(sending || uploading || published)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("发布") { Task { await submit() } }
-                        .disabled(sending || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(sending ? "发布中…" : "发布") { Task { await submit() } }
+                        .font(ShellTheme.Fonts.body.weight(.semibold))
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("compose.submit")
+                        .disabled(sending || uploading || published || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .onAppear {
-                if title.isEmpty { title = library.draft(for: titleKey) }
-                if content.isEmpty { content = library.draft(for: bodyKey) }
+            .interactiveDismissDisabled(hasInput || uploading || sending || published)
+            .confirmationDialog("退出当前任务？", isPresented: $showExit, titleVisibility: .visible) {
+                Button("保存草稿并退出") { if saveDraft() { dismiss() } }
+                Button("丢弃本任务草稿并退出", role: .destructive) { clearDraft(); dismiss() }
+                Button("继续编辑", role: .cancel) { }
+            } message: { Text("仅影响这个版面的当前\(isVote ? "投票" : "主题")草稿。") }
+            .alert("恢复\(boardName)的草稿？", isPresented: $showRestore) {
+                Button("取消", role: .cancel) { }
+                Button("恢复") { restoreDraft(); draftStatus = "已恢复草稿" }
+            } message: { Text(savedAtDescription + "将用本机保存的草稿替换当前标题、正文和发布设置。") }
+            .alert("清除本任务草稿？", isPresented: $showClearDraft) {
+                Button("取消", role: .cancel) { }
+                Button("仅清除已保存草稿", role: .destructive) { clearDraft() }
+            } message: { Text("当前编辑区保留；下次修改会重新自动保存。") }
+            .alert("切换源码格式？", isPresented: $showModeChange) {
+                Button("取消", role: .cancel) { }
+                Button("切换并检查预览") { contentType = contentType == 0 ? 1 : 0 }
+            } message: { Text("保留全部原文，不自动转换 UBB 与 Markdown 语法。发布前请检查预览。") }
+            .alert("主题已发布，部分提醒未完成", isPresented: $showMentionWarning) {
+                Button("完成") { onCreated(); dismiss() }
+            } message: { Text("请到主题内核对 @ 提醒。不要重新发布主题。") }
+            .task {
+                guard !draftReady else { return }
                 anonymous = effectiveAnonymousState == 1
+                restoreDraft()
                 if isVote { postKind = 0; anonymous = false }
-                focused = true
-                Task {
-                    if let detail = try? await app.api.board(id: boardID) {
-                        boardAnonymousState = detail.anonymousState ?? 0
-                        boardMasters = detail.boardMasters ?? []
-                        anonymous = (detail.anonymousState ?? 0) == 1
-                    }
-                    if let tagGroup = try? await app.api.boardTags(boardID: boardID) {
-                        tags = tagGroup
-                    }
+                savedSnapshot = snapshot
+                draftReady = true
+                if let detail = try? await app.api.board(id: boardID) {
+                    boardAnonymousState = detail.anonymousState ?? 0
+                    boardMasters = detail.boardMasters ?? []
+                    if detail.anonymousState == 1 { anonymous = true }
                 }
+                if let tagGroup = try? await app.api.boardTags(boardID: boardID) { tags = tagGroup }
             }
-            .onChange(of: title) { _, value in
-                library.setDraft(value, for: titleKey)
-            }
-            .onChange(of: content) { _, value in
-                library.setDraft(value, for: bodyKey)
-            }
+            .onChange(of: title) { _, _ in if draftReady && !published && snapshot != savedSnapshot { saveDraft() } }
+            .onChange(of: content) { _, _ in if draftReady && !published && snapshot != savedSnapshot { saveDraft() } }
+            .onChange(of: settings) { _, _ in if draftReady && !published && snapshot != savedSnapshot { saveDraft() } }
+
         }
     }
 
+    private var draftControls: some View {
+        HStack(alignment: .top) {
+            Menu {
+                Button("保存当前草稿") { saveDraft() }
+                Button("恢复已保存草稿") { showRestore = true }
+                Button("清除本任务草稿", role: .destructive) { showClearDraft = true }
+                Button("复制正文") { UIPasteboard.general.string = content }
+            } label: { Label("草稿", systemImage: "doc.badge.ellipsis").frame(minHeight: 44) }
+            .accessibilityIdentifier("compose.draft")
+            Spacer()
+            Text(draftStatus.isEmpty ? "按账号保存在本机" : draftStatus)
+                .font(ShellTheme.Fonts.footnote)
+                .foregroundStyle(ShellTheme.secondaryText)
+                .padding(.top, 12)
+        }
+    }
+
+    @discardableResult
+    private func saveDraft() -> Bool {
+        let savedTitle = library.setDraft(title, for: titleKey)
+        let savedBody = library.setDraft(content, for: bodyKey)
+        let encoded = (try? JSONEncoder().encode(settings)).flatMap { String(data: $0, encoding: .utf8) }
+        let savedSettings = encoded.map { library.setDraft($0, for: settingsKey) } ?? false
+        let saved = savedTitle && savedBody && savedSettings
+        if saved { savedSnapshot = snapshot }
+        draftStatus = saved ? "草稿已保存到本机" : "草稿未保存，请重试或复制正文"
+        return saved
+    }
+
+    private func restoreDraft() {
+        title = library.draft(for: titleKey)
+        content = library.draft(for: bodyKey)
+        selection = NSRange(location: (content as NSString).length, length: 0)
+        guard let data = library.draft(for: settingsKey).data(using: .utf8),
+              let saved = try? JSONDecoder().decode(NativeTopicDraftSettings.self, from: data) else { return }
+        contentType = saved.contentType == 1 ? 1 : 0
+        anonymous = saved.anonymous
+        notifyPoster = saved.notifyPoster
+        postKind = saved.postKind
+        tag1ID = saved.tag1ID; tag2ID = saved.tag2ID
+        voteItems = saved.voteItems.count >= 2 ? Array(saved.voteItems.prefix(20)) : ["", ""]
+        expiredDays = min(1000, max(1, saved.expiredDays))
+        maxVoteCount = min(voteItems.count, max(1, saved.maxVoteCount))
+        needVote = saved.needVote
+    }
+
+    private func clearDraft() {
+        library.clearDraft(for: titleKey)
+        library.clearDraft(for: bodyKey)
+        library.clearDraft(for: settingsKey)
+        savedSnapshot = snapshot
+        draftStatus = library.lastSaveError == nil ? "已清除本任务草稿，编辑区保留" : "清除未保存到本机，请重试"
+    }
+
     private static func mentionedNames(in content: String) -> [String] {
-        var text = content.replacingOccurrences(
+        let text = content.replacingOccurrences(
             of: "(?is)\\[quote\\].*?\\[/quote\\]",
             with: " ",
             options: .regularExpression
@@ -560,7 +717,7 @@ struct NewTopicComposer: View {
                 return
             }
         }
-        guard !sending else { return }
+        guard !sending, !uploading, !published else { return }
         sending = true
         errorMessage = nil
         do {
@@ -582,14 +739,15 @@ struct NewTopicComposer: View {
                     needVote: needVote
                 ) : nil
             )
+            published = true
+            clearDraft()
             if let topicID, !isVote {
                 let mentions = Self.mentionedNames(in: content)
                 if !mentions.isEmpty {
-                    try? await app.api.notifyMentions(topicID: topicID, names: mentions)
+                    do { try await app.api.notifyMentions(topicID: topicID, names: mentions) }
+                    catch { showMentionWarning = true; sending = false; return }
                 }
             }
-            library.clearDraft(for: titleKey)
-            library.clearDraft(for: bodyKey)
             onCreated()
             dismiss()
         } catch {
@@ -614,11 +772,26 @@ struct EditPostComposer: View {
     @State private var selection = NSRange(location: 0, length: 0)
     @StateObject private var editor = UBBEditorController()
     @State private var saving = false
+    @State private var uploading = false
+    @State private var loaded = false
+    @State private var savedFields: [String] = []
+    @State private var completed = false
+    @State private var showExit = false
+    @State private var showRestore = false
+    @State private var showClear = false
+    @State private var draftStatus = ""
     @State private var errorMessage: String? = nil
 
     private var titleKey: String { "edit.title:\(post.id)" }
     private var bodyKey: String { "edit.body:\(post.id)" }
     private var contentType: Int { post.contentType ?? 0 }
+    private var savedAtDescription: String {
+        if let date = library.draftItems.first(where: { $0.keys.contains(bodyKey) || $0.keys.contains(titleKey) })?.updatedAt {
+            return "保存时间：\(date.formatted(date: .abbreviated, time: .shortened))。"
+        }
+        return "旧草稿未记录保存时间。"
+    }
+    private var changed: Bool { title != (post.floor == 1 ? topicTitle ?? "" : "") || content != (post.content ?? "") }
 
     init(post: NativePost, topicTitle: String?, onSaved: @escaping () -> Void) {
         self.post = post
@@ -633,20 +806,25 @@ struct EditPostComposer: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(post.floor == 1 ? "编辑主题" : "编辑 \(post.floor ?? 0) 楼")
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.footnote)
                         .foregroundStyle(ShellTheme.secondaryText)
 
                     if post.floor == 1 {
                         TextField("主题标题", text: $title)
                             .textFieldStyle(.roundedBorder)
+                            .font(ShellTheme.Fonts.body)
+                            .accessibilityIdentifier("compose.title")
                     }
 
+                    Text(contentType == 0 ? "正文 · UBB 源码" : "正文 · Markdown 源码")
+                        .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
                     if contentType == 0 {
                         UBBFormatBar(text: $content, selection: $selection, editor: editor)
                     } else {
                         MarkdownFormatBar(text: $content, selection: $selection, editor: editor)
                     }
                     UBBTextEditor(text: $content, selection: $selection, controller: editor, minHeight: 260)
+                        .accessibilityIdentifier("compose.body")
                         .frame(minHeight: 260)
                         .padding(4)
                         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -655,22 +833,31 @@ struct EditPostComposer: View {
                                 .stroke(ShellTheme.separator, lineWidth: 0.5)
                         )
 
+                    ComposerAttachmentsBar(text: $content, selection: $selection, editor: editor) { uploading = $0 }
+                    Text("\(content.count) / 8000")
+                        .font(ShellTheme.Fonts.footnote)
+                        .foregroundStyle(content.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                     HStack {
-                        ComposerImageButton(text: $content, selection: $selection, editor: editor)
-                        ComposerEmoticonButton(text: $content, selection: $selection, editor: editor)
-                        ComposerFileButton(text: $content, selection: $selection, editor: editor)
+                        Menu {
+                            Button("保存当前草稿") { saveDraft() }
+                            Button("恢复已保存草稿") { showRestore = true }
+                            Button("清除本任务草稿", role: .destructive) { showClear = true }
+                            Button("复制正文") { UIPasteboard.general.string = content }
+                        } label: { Label("草稿", systemImage: "doc.badge.ellipsis").frame(minHeight: 44) }
+                        .accessibilityIdentifier("compose.draft")
                         Spacer()
-                        Text("\(content.count) / 8000")
-                            .font(ShellTheme.Fonts.caption)
-                            .foregroundStyle(content.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
+                        Text(draftStatus).font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
                     }
+                    NativeLibraryStatusView()
 
                     if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         DisclosureGroup("预览") {
-                            UBBContentView(source: content)
+                            UBBContentView(source: content, markdown: contentType == 1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.body)
+                        .accessibilityIdentifier("compose.preview")
                     }
 
                     if let errorMessage {
@@ -679,34 +866,78 @@ struct EditPostComposer: View {
                             .foregroundStyle(ShellTheme.danger)
                     }
                 }
+                .disabled(saving)
                 .padding(16)
+                .frame(maxWidth: 680)
+                .frame(maxWidth: .infinity)
             }
             .background(ShellTheme.pageBackground)
             .navigationTitle("编辑")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(saving)
+                    Button("取消") { if changed { showExit = true } else { dismiss() } }
+                        .frame(minHeight: 44)
+                        .disabled(saving || uploading)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { Task { await save() } }
-                        .disabled(saving || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(saving ? "保存中…" : "保存") { Task { await save() } }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("compose.submit")
+                        .disabled(saving || uploading || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .interactiveDismissDisabled(changed || saving || uploading)
+            .confirmationDialog("退出编辑？", isPresented: $showExit, titleVisibility: .visible) {
+                Button("保存草稿并退出") { if saveDraft() { dismiss() } }
+                Button("丢弃本任务草稿并退出", role: .destructive) { clearDraft(); dismiss() }
+                Button("继续编辑", role: .cancel) { }
+            }
+            .alert("恢复本楼层草稿？", isPresented: $showRestore) {
+                Button("取消", role: .cancel) { }
+                Button("恢复") { restoreDraft() }
+            } message: { Text(savedAtDescription + "将替换当前编辑区；原站帖子不会改变。") }
+            .alert("清除本楼层草稿？", isPresented: $showClear) {
+                Button("取消", role: .cancel) { }
+                Button("仅清除草稿", role: .destructive) { clearDraft() }
+            } message: { Text("当前编辑区保留，下次修改会重新保存草稿。") }
             .onAppear {
-                let savedTitle = library.draft(for: titleKey)
-                let savedBody = library.draft(for: bodyKey)
-                if !savedTitle.isEmpty { title = savedTitle }
-                if !savedBody.isEmpty { content = savedBody }
+                guard !loaded else { return }
+                restoreDraft()
+                library.setDraftContext(for: bodyKey, topicID: post.topicId, boardID: post.boardId, floor: post.floor, title: topicTitle)
+                savedFields = [title, content]
+                loaded = true
             }
-            .onChange(of: title) { _, value in
-                library.setDraft(value, for: titleKey)
-            }
-            .onChange(of: content) { _, value in
-                library.setDraft(value, for: bodyKey)
-            }
+            .onChange(of: title) { _, _ in if loaded && !completed && [title, content] != savedFields { saveDraft() } }
+            .onChange(of: content) { _, _ in if loaded && !completed && [title, content] != savedFields { saveDraft() } }
+
         }
+    }
+
+    @discardableResult
+    private func saveDraft() -> Bool {
+        library.setDraftContext(for: bodyKey, topicID: post.topicId, boardID: post.boardId, floor: post.floor, title: topicTitle)
+        let titleSaved = library.setDraft(title, for: titleKey)
+        let bodySaved = library.setDraft(content, for: bodyKey)
+        let success = titleSaved && bodySaved
+        if success { savedFields = [title, content] }
+        draftStatus = success ? "草稿已保存到本机" : "草稿未保存，请重试或复制正文"
+        return success
+    }
+
+    private func restoreDraft() {
+        let savedTitle = library.draft(for: titleKey)
+        let savedBody = library.draft(for: bodyKey)
+        if !savedTitle.isEmpty { title = savedTitle }
+        if !savedBody.isEmpty { content = savedBody }
+        selection = NSRange(location: (content as NSString).length, length: 0)
+    }
+
+    private func clearDraft() {
+        library.clearDraft(for: titleKey)
+        library.clearDraft(for: bodyKey)
+        savedFields = [title, content]
+        draftStatus = library.lastSaveError == nil ? "已清除草稿，编辑区保留" : "清除未保存到本机"
     }
 
     @MainActor
@@ -724,7 +955,7 @@ struct EditPostComposer: View {
             errorMessage = "正文不能超过 8000 个字。"
             return
         }
-        guard !saving else { return }
+        guard !saving, !uploading else { return }
         saving = true
         errorMessage = nil
         do {
@@ -734,8 +965,8 @@ struct EditPostComposer: View {
                 content: content,
                 contentType: post.contentType ?? 0
             )
-            library.clearDraft(for: titleKey)
-            library.clearDraft(for: bodyKey)
+            completed = true
+            clearDraft()
             onSaved()
             dismiss()
         } catch {
@@ -753,6 +984,9 @@ struct TopicNoteView: View {
     let topicTitle: String
 
     @State private var text = ""
+    @State private var initialText = ""
+    @State private var loaded = false
+    @State private var showExit = false
 
     var body: some View {
         NavigationStack {
@@ -762,6 +996,8 @@ struct TopicNoteView: View {
                     .foregroundStyle(ShellTheme.secondaryText)
                     .lineLimit(2)
                 TextEditor(text: $text)
+                    .font(ShellTheme.Fonts.body)
+                    .accessibilityLabel("主题备注")
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 200)
                     .padding(8)
@@ -771,8 +1007,9 @@ struct TopicNoteView: View {
                             .stroke(ShellTheme.separator, lineWidth: 0.5)
                     )
                 Text("\(text.count) / 500 · 仅保存在本机")
-                    .font(ShellTheme.Fonts.caption)
-                    .foregroundStyle(ShellTheme.secondaryText)
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(text.count > 500 ? ShellTheme.danger : ShellTheme.secondaryText)
+                NativeLibraryStatusView()
             }
             .padding(16)
             .background(ShellTheme.pageBackground)
@@ -780,17 +1017,31 @@ struct TopicNoteView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("取消") { if text != initialText { showExit = true } else { dismiss() } }
+                        .frame(minHeight: 44)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        library.setNote(text, for: topicID)
-                        dismiss()
-                    }
+                    Button("保存") { save() }
+                        .frame(minHeight: 44)
+                        .disabled(text.count > 500)
                 }
             }
-            .onAppear { text = library.note(for: topicID) }
+            .interactiveDismissDisabled(text != initialText)
+            .confirmationDialog("备注尚未保存", isPresented: $showExit, titleVisibility: .visible) {
+                Button("保存并退出") { save() }.disabled(text.count > 500)
+                Button("丢弃本次修改", role: .destructive) { dismiss() }
+                Button("继续编辑", role: .cancel) { }
+            }
+            .onAppear {
+                guard !loaded else { return }
+                text = library.note(for: topicID); initialText = text; loaded = true
+            }
         }
+    }
+    private func save() {
+        guard text.count <= 500 else { return }
+        library.setNote(text, for: topicID)
+        if library.lastSaveError == nil { dismiss() }
     }
 }
 
@@ -801,7 +1052,7 @@ struct MarkdownFormatBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     button("B", prefix: "**", suffix: "**", bold: true)
                     button("I", prefix: "*", suffix: "*")
@@ -811,7 +1062,7 @@ struct MarkdownFormatBar: View {
                     button("标题", prefix: "## ", suffix: "")
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     button("列表", prefix: "- ", suffix: "")
                     button("链接", prefix: "[", suffix: "](https://)")
@@ -829,13 +1080,14 @@ struct MarkdownFormatBar: View {
             }
         } label: {
             Text(title)
-                .font(.system(size: 12, weight: bold ? .bold : .regular))
+                .font(ShellTheme.Fonts.body.weight(bold ? .bold : .regular))
                 .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .frame(minWidth: 44, minHeight: 44)
                 .background(ShellTheme.secondarySurface, in: Capsule())
                 .foregroundStyle(ShellTheme.primaryText)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title == "B" ? "粗体" : title == "I" ? "斜体" : title == "S" ? "删除线" : title)
     }
 }
 
@@ -846,7 +1098,7 @@ struct UBBFormatBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     format("B", prefix: "[b]", suffix: "[/b]", placeholder: "粗体", bold: true)
                     format("I", prefix: "[i]", suffix: "[/i]", placeholder: "斜体", italic: true)
@@ -883,7 +1135,7 @@ struct UBBFormatBar: View {
                 }
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     format("引用", prefix: "[quote]", suffix: "[/quote]", placeholder: "引用内容")
                     format("代码", prefix: "[code]", suffix: "[/code]", placeholder: "代码")
@@ -898,9 +1150,9 @@ struct UBBFormatBar: View {
 
     private func menuLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 12))
+            .font(ShellTheme.Fonts.footnote)
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .frame(minWidth: 44, minHeight: 44)
             .background(ShellTheme.secondarySurface, in: Capsule())
             .foregroundStyle(ShellTheme.primaryText)
     }
@@ -924,13 +1176,15 @@ struct UBBFormatBar: View {
             wrap(prefix, suffix, placeholder: placeholder)
         } label: {
             Text(title)
-                .font(.system(size: 12, weight: bold ? .bold : .regular))
+                .font(ShellTheme.Fonts.body.weight(bold ? .bold : .regular))
+                .italic(italic)
                 .underline(underline)
                 .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .frame(minWidth: 44, minHeight: 44)
                 .background(ShellTheme.secondarySurface, in: Capsule())
                 .foregroundStyle(ShellTheme.primaryText)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(placeholder.isEmpty ? title : placeholder)
     }
 }

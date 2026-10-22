@@ -45,11 +45,11 @@ struct UBBTextEditor: UIViewRepresentable {
         let textView = UITextView()
         textView.delegate = context.coordinator
         textView.font = .preferredFont(forTextStyle: .body)
+        textView.adjustsFontForContentSizeCategory = true
         textView.textColor = .label
         textView.backgroundColor = .clear
         textView.textContainerInset = UIEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)
-        textView.isScrollEnabled = true
-        textView.alwaysBounceVertical = true
+        textView.isScrollEnabled = false
         textView.keyboardDismissMode = .interactive
         textView.autocorrectionType = .yes
         textView.text = text
@@ -61,6 +61,8 @@ struct UBBTextEditor: UIViewRepresentable {
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.parent = self
         controller.attach(textView, text: $text, selection: $selection)
+        // A SwiftUI refresh must not replace the IME's unfinished composition.
+        guard textView.markedTextRange == nil else { return }
         if textView.text != text {
             let previous = textView.selectedRange
             textView.text = text
@@ -74,7 +76,7 @@ struct UBBTextEditor: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
         let width = proposal.width ?? uiView.bounds.width
-        let contentHeight = uiView.contentSize.height + uiView.textContainerInset.top + uiView.textContainerInset.bottom
+        let contentHeight = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
         return CGSize(width: width, height: max(minHeight, contentHeight))
     }
 

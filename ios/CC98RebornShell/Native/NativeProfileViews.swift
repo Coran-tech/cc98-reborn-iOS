@@ -18,6 +18,12 @@ struct ProfileSettingsView: View {
     @State private var uploadingAvatar = false
     @State private var errorMessage: String? = nil
     @State private var avatarItem: PhotosPickerItem?
+    @State private var originalFields: [String] = []
+    @State private var showExit = false
+    @State private var avatarStatus = ""
+
+    private var fields: [String] { [introduction, signature, email, qq, String(gender), birthday] }
+    private var changed: Bool { loaded && fields != originalFields }
 
     var body: some View {
         Form {
@@ -27,12 +33,14 @@ struct ProfileSettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         PhotosPicker(selection: $avatarItem, matching: .images) {
                             Label(uploadingAvatar ? "上传中…" : "更换头像", systemImage: "photo")
-                                .font(ShellTheme.Fonts.footnote)
+                                .font(ShellTheme.Fonts.body)
+                                .frame(minHeight: 44)
                                 .foregroundStyle(ShellTheme.accent)
                         }
-                        .disabled(uploadingAvatar)
-                        Text("支持从相册选择，上传后立即生效。")
-                            .font(ShellTheme.Fonts.caption)
+                        .disabled(uploadingAvatar || saving)
+                        .accessibilityIdentifier("profile.avatar")
+                        Text(avatarStatus.isEmpty ? "选择照片后立即上传并更换头像，返回不会撤销。" : avatarStatus)
+                            .font(ShellTheme.Fonts.footnote)
                             .foregroundStyle(ShellTheme.secondaryText)
                     }
                 }
@@ -44,27 +52,42 @@ struct ProfileSettingsView: View {
                     Text("男").tag(1)
                     Text("女").tag(2)
                 }
-                TextField("生日（YYYY-MM-DD）", text: $birthday)
-                    .keyboardType(.numbersAndPunctuation)
-                TextField("QQ", text: $qq)
-                    .keyboardType(.numberPad)
-                TextField("邮箱", text: $email)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("生日").font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+                    TextField("YYYY-MM-DD", text: $birthday).keyboardType(.numbersAndPunctuation)
+                        .accessibilityIdentifier("profile.birthday")
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("QQ").font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+                    TextField("QQ 号码", text: $qq).keyboardType(.numberPad)
+                        .accessibilityIdentifier("profile.qq")
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("邮箱").font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+                    TextField("邮箱地址", text: $email)
+                        .keyboardType(.emailAddress).textInputAutocapitalization(.never)
+                        .accessibilityIdentifier("profile.email")
+                }
             }
 
             Section("个人简介") {
                 TextEditor(text: $introduction)
+                    .font(ShellTheme.Fonts.body)
+                    .accessibilityLabel("个人简介")
+                    .accessibilityIdentifier("profile.introduction")
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 100)
             }
 
             Section("签名档（UBB）") {
                 TextEditor(text: $signature)
+                    .font(ShellTheme.Fonts.body)
+                    .accessibilityLabel("签名档 UBB 源码")
+                    .accessibilityIdentifier("profile.signature")
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 100)
                 Text("签名档支持 UBB，会显示在帖子下方。")
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.footnote)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
 
@@ -76,14 +99,30 @@ struct ProfileSettingsView: View {
                 }
             }
         }
+        .disabled(saving)
         .navigationTitle("编辑资料")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
+        .toolbar(.hidden, for: .tabBar)
+        .interactiveDismissDisabled(changed || saving || uploadingAvatar)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { if changed { showExit = true } else { dismiss() } } label: {
+                    Label("返回", systemImage: "chevron.left").frame(minHeight: 44)
+                }.disabled(saving || uploadingAvatar)
+            }
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存") { Task { await save() } }
-                    .disabled(saving)
+                Button(saving ? "保存中…" : "保存") { Task { await save() } }
+                    .frame(minHeight: 44)
+                    .disabled(saving || uploadingAvatar || !loaded)
+                    .accessibilityIdentifier("profile.save")
             }
         }
+        .confirmationDialog("资料尚未保存", isPresented: $showExit, titleVisibility: .visible) {
+            Button("保存并返回") { Task { await save() } }
+            Button("丢弃未保存资料", role: .destructive) { dismiss() }
+            Button("继续编辑", role: .cancel) { }
+        } message: { Text("已更换的头像立即生效，不受此处保存或丢弃影响。") }
         .onAppear { loadFromProfile() }
         .onChange(of: avatarItem?.itemIdentifier) { _, _ in
             Task { await uploadAvatar(avatarItem) }
@@ -98,6 +137,7 @@ struct ProfileSettingsView: View {
         qq = user.qq ?? ""
         gender = user.gender ?? 0
         birthday = user.birthday ?? ""
+        originalFields = fields
         loaded = true
     }
 
@@ -107,7 +147,7 @@ struct ProfileSettingsView: View {
             errorMessage = "请先登录。"
             return
         }
-        guard !saving else { return }
+        guard !saving, !uploadingAvatar else { return }
         saving = true
         errorMessage = nil
         do {
@@ -141,6 +181,7 @@ struct ProfileSettingsView: View {
             let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) ?? data
             _ = try await app.api.uploadPortrait(jpeg)
             await auth.refreshProfile()
+            avatarStatus = "头像已更换；下方资料仍需点击保存。"
             avatarItem = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -179,7 +220,7 @@ struct MyActivityView: View {
             }
         }
         .background(ShellTheme.pageBackground)
-        .navigationTitle("回复 + 发帖")
+        .navigationTitle("我的主题与回复")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -228,7 +269,7 @@ struct MyTopicsView: View {
                                     Spacer(minLength: 0)
                                     Text(NativeFormat.date(item.time))
                                 }
-                                .font(ShellTheme.Fonts.caption)
+                                .font(ShellTheme.Fonts.footnote)
                                 .foregroundStyle(ShellTheme.secondaryText)
                             }
                             .padding(.vertical, 2)
@@ -358,7 +399,7 @@ struct MyPostsView: View {
                                     Spacer(minLength: 0)
                                     Text(NativeFormat.date(item.time))
                                 }
-                                .font(ShellTheme.Fonts.caption)
+                                .font(ShellTheme.Fonts.footnote)
                                 .foregroundStyle(ShellTheme.secondaryText)
                             }
                             .padding(.vertical, 2)

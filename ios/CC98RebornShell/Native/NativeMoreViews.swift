@@ -29,6 +29,8 @@ struct SearchView: View {
     @State private var error: String? = nil
     @State private var page = 0
     @State private var hasMore = false
+    @State private var clearSearch = false
+    @State private var searched = false
 
     private let pageSize = 20
 
@@ -45,6 +47,7 @@ struct SearchView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .disabled(loading)
             .padding(.horizontal, 16)
             .padding(.top, 8)
 
@@ -58,7 +61,7 @@ struct SearchView: View {
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(ShellTheme.Fonts.caption.weight(.semibold))
                     }
                     .font(ShellTheme.Fonts.footnote)
                     .foregroundStyle(board == nil ? ShellTheme.secondaryText : ShellTheme.primaryText)
@@ -66,33 +69,43 @@ struct SearchView: View {
                     .padding(.vertical, 8)
                 }
                 .buttonStyle(.plain)
+                .disabled(loading)
+                .frame(minHeight: 44)
             }
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(ShellTheme.secondaryText)
                 TextField(placeholder, text: $keyword)
+                    .accessibilityIdentifier("search.query")
+                    .disabled(loading)
                     .submitLabel(.search)
                     .onSubmit { Task { await search(reset: true) } }
                 if !keyword.isEmpty {
                     Button {
                         keyword = ""
+                        searched = false
                         results = []
                         users = []
                         error = nil
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(ShellTheme.secondaryText)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
+                    .disabled(loading)
+                    .accessibilityLabel("清空搜索词")
                 }
                 Button("搜索") {
                     Task { await search(reset: true) }
-                }
+                }.accessibilityIdentifier("search.submit")
                 .font(ShellTheme.Fonts.footnote.weight(.medium))
                 .foregroundStyle(ShellTheme.accent)
                 .disabled(loading)
+                .frame(minHeight: 44)
             }
-            .padding(12)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
             .background(ShellTheme.surface)
             .overlay(alignment: .bottom) {
                 Rectangle().fill(ShellTheme.separator).frame(height: 0.5)
@@ -106,10 +119,33 @@ struct SearchView: View {
                     NativeStateView(icon: "magnifyingglass", title: "搜索失败", message: error, action: {
                         Task { await search(reset: true) }
                     })
+                } else if isEmpty && !searched && !library.searchHistory.isEmpty {
+                    List {
+                        Section {
+                            ForEach(library.searchHistory) { item in
+                                Button {
+                                    keyword = item.query
+                                    scope = SearchScope(rawValue: item.scope) ?? .all
+                                    board = item.boardID.map { NativeBoard.placeholder(id: $0) }
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(item.query).font(ShellTheme.Fonts.body).foregroundStyle(ShellTheme.primaryText)
+                                        Text(item.boardName ?? (SearchScope(rawValue: item.scope)?.title ?? "全站"))
+                                            .font(ShellTheme.Fonts.caption).foregroundStyle(ShellTheme.secondaryText)
+                                    }.padding(.vertical, 4)
+                                }
+                                .accessibilityIdentifier("search.history." + item.query)
+                                .swipeActions { Button("删除", role: .destructive) { library.removeSearch(item.id) } }
+                            }
+                        } header: { Text("最近搜索 · 点击填入") }
+                        Button("清空搜索历史", role: .destructive) { clearSearch = true }
+                    }.listStyle(.insetGrouped).scrollContentBackground(.hidden)
                 } else if isEmpty {
-                    NativeStateView(icon: "text.magnifyingglass", title: "搜索 CC98", message: emptyMessage)
+                    NativeStateView(icon: "text.magnifyingglass", title: searched ? "没有搜索结果" : "搜索 CC98", message: searched ? "试试其他关键词或搜索范围。" : emptyMessage)
                 } else {
                     List {
+                        if let error { Text(error).font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.danger) }
+                        if scope != .user && filteredResults.isEmpty { Text("结果已被本机屏蔽规则过滤。") }
                         if scope == .user {
                             ForEach(users, id: \.id) { user in
                                 NavigationLink {
@@ -151,16 +187,25 @@ struct SearchView: View {
         .background(ShellTheme.pageBackground)
         .navigationTitle("搜索")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: keyword) { _, _ in
+            guard !loading else { return }
+            results = []; users = []; error = nil; hasMore = false; page = 0; searched = false
+        }
         .onChange(of: scope) { _, _ in
             results = []
             users = []
             error = nil
+            searched = false
             hasMore = false
             page = 0
+        }
+        .confirmationDialog("清空搜索历史？", isPresented: $clearSearch, titleVisibility: .visible) {
+            Button("清空", role: .destructive) { library.clearSearchHistory() }
         }
         .sheet(isPresented: $showBoardPicker) {
             BoardPickerView { selected in
                 board = selected
+                results = []; users = []; error = nil; hasMore = false; page = 0; searched = false
                 showBoardPicker = false
             }
         }
@@ -229,6 +274,8 @@ struct SearchView: View {
         loading = true
         error = nil
         if reset {
+            searched = true
+            library.recordSearch(query, scope: scope.rawValue, boardID: scope == .board ? board?.id : nil, boardName: scope == .board ? board?.name : nil)
             page = 0
             results = []
             users = []
@@ -385,11 +432,23 @@ struct FavoritesView: View {
                 NativeStateView(icon: "star", title: "暂无收藏", message: "在主题页点击收藏后，会出现在这里。")
             } else {
                 List {
+                    Section { Text(selectedGroupName).font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText) }
+                    if let error { Text(error).font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.danger) }
                     ForEach(topics) { topic in
+                        HStack(spacing: 8) {
                         NavigationLink {
                             TopicDetailView(topicID: topic.id, boardID: topic.boardId)
                         } label: {
                             TopicLinkRow(topic: topic)
+                        }
+                        Menu {
+                            ForEach(groups) { group in
+                                Button("移动到 \(group.name ?? "分组")") { Task { await move(topic, to: group.id) } }
+                            }
+                            Button("取消收藏", role: .destructive) { Task { await remove(topic) } }
+                        } label: {
+                            Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                        }.accessibilityLabel("收藏操作")
                         }
                         .swipeActions {
                             Button(role: .destructive) {
@@ -444,7 +503,7 @@ struct FavoritesView: View {
                     Button("新建分组") { showCreateGroup = true }
                 } label: {
                     Label(selectedGroupName, systemImage: "folder")
-                }
+                }.disabled(loading)
             }
         }
         .alert("新建收藏分组", isPresented: $showCreateGroup) {
@@ -464,7 +523,9 @@ struct FavoritesView: View {
     }
 
     private func selectGroup(_ id: Int?) {
+        guard !loading else { return }
         selectedGroupID = id
+        topics = []
         Task { await load(reset: true) }
     }
 
@@ -539,78 +600,84 @@ struct FavoritesView: View {
 
 struct ReadLaterView: View {
     @EnvironmentObject private var library: NativeLibrary
-
+    @State private var query = ""
+    @State private var filter = "all"
+    @State private var clearing = false
+    private var items: [NativeSavedTopic] {
+        library.readLater.filter { item in
+            (query.isEmpty || item.title.localizedCaseInsensitiveContains(query) || String(item.id) == query)
+                && (filter == "all" || (filter == "read") == library.isReadLaterRead(item.id))
+        }
+    }
     var body: some View {
-        Group {
-            if library.readLater.isEmpty {
-                NativeStateView(icon: "bookmark", title: "暂无稍后再看", message: "在主题页的更多菜单里添加。")
-            } else {
-                List {
-                    ForEach(library.readLater) { item in
-                        NavigationLink {
-                            TopicDetailView(topicID: item.id, boardID: item.boardID)
-                        } label: {
+        List {
+            Section {
+                Picker("阅读状态", selection: $filter) {
+                    Text("全部").tag("all"); Text("未读").tag("unread"); Text("已读").tag("read")
+                }.pickerStyle(.segmented).accessibilityIdentifier("read-later.filter")
+            }
+            if items.isEmpty {
+                ContentUnavailableView("没有符合条件的主题", systemImage: "bookmark", description: Text("在主题页加入稍后再看，或导入已有清单。"))
+            }
+            ForEach(items) { item in
+                HStack {
+                    NavigationLink { TopicDetailView(topicID: item.id, boardID: item.boardID) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
                             SavedTopicRow(item: item)
-                        }
-                        .swipeActions {
-                            Button(role: .destructive) {
-                                library.removeReadLater(item.id)
-                            } label: {
-                                Label("移除", systemImage: "bookmark.slash")
-                            }
+                            Text(library.isReadLaterRead(item.id) ? "已读" : "未读").font(ShellTheme.Fonts.caption).foregroundStyle(ShellTheme.secondaryText)
                         }
                     }
+                    Menu {
+                        Button(library.isReadLaterRead(item.id) ? "标为未读" : "标为已读") { library.setReadLaterRead(item.id, read: !library.isReadLaterRead(item.id)) }
+                        Button("移除", role: .destructive) { library.removeReadLater(item.id) }
+                    } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }.accessibilityLabel("稍后再看操作")
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
+                .swipeActions { Button("移除", role: .destructive) { library.removeReadLater(item.id) } }
             }
         }
-        .background(ShellTheme.pageBackground)
+        .accessibilityIdentifier("read-later.list")
+        .searchable(text: $query, prompt: "搜索标题或主题 ID")
         .navigationTitle("稍后再看")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if !library.readLater.isEmpty {
-                Button("清空", role: .destructive) { library.clearReadLater() }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    NavigationLink("导入与导出") { LibraryTransferView(mode: .readLater) }
+                    Button("清空清单", role: .destructive) { clearing = true }.disabled(library.readLater.isEmpty)
+                } label: { Label("管理", systemImage: "ellipsis.circle") }
             }
         }
+        .confirmationDialog("清空稍后再看？", isPresented: $clearing, titleVisibility: .visible) {
+            Button("清空清单", role: .destructive) { library.clearReadLater() }
+        } message: { Text("仅删除当前账号本机清单，不影响原站收藏。") }
     }
 }
 
 struct HistoryView: View {
     @EnvironmentObject private var library: NativeLibrary
-
+    @State private var query = ""
+    @State private var clearing = false
     var body: some View {
-        Group {
-            if library.history.isEmpty {
-                NativeStateView(icon: "clock", title: "暂无浏览历史", message: "打开过的主题会记录在这里，仅保存在本机。")
-            } else {
-                List {
-                    ForEach(library.history) { item in
-                        NavigationLink {
-                            TopicDetailView(topicID: item.id, boardID: item.boardID)
-                        } label: {
-                            SavedTopicRow(item: item)
-                        }
-                    }
-                }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
+        List {
+            if library.history.isEmpty { ContentUnavailableView("暂无浏览记录", systemImage: "clock") }
+            ForEach(library.history.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }) { item in
+                NavigationLink { TopicDetailView(topicID: item.id, boardID: item.boardID) } label: { SavedTopicRow(item: item) }
             }
         }
-        .background(ShellTheme.pageBackground)
+        .searchable(text: $query, prompt: "搜索浏览历史")
         .navigationTitle("浏览历史")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if !library.history.isEmpty {
-                Button("清空", role: .destructive) { library.clearHistory() }
-            }
-        }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("清空", role: .destructive) { clearing = true }.disabled(library.history.isEmpty) } }
+        .confirmationDialog("清空浏览历史？", isPresented: $clearing, titleVisibility: .visible) {
+            Button("清空", role: .destructive) { library.clearHistory() }
+        } message: { Text("删除当前账号在本机保存的最近 200 条浏览记录。") }
     }
 }
 
 struct BlocklistView: View {
     @EnvironmentObject private var library: NativeLibrary
 
+    @State private var clearing = false
     @State private var newUserID = ""
     @State private var newBoard = ""
     @State private var newTitle = ""
@@ -638,7 +705,7 @@ struct BlocklistView: View {
                 }
             }
 
-            Section("屏蔽版面") {
+            Section {
                 HStack {
                     TextField("版面 ID 或名称", text: $newBoard)
                     Button("添加") {
@@ -650,14 +717,13 @@ struct BlocklistView: View {
                 ForEach(library.blockedBoards, id: \.self) { value in
                     ruleRow(value) { library.removeBlockedBoard(value) }
                 }
-            }
+            } header: { Text("屏蔽版面") } footer: { Text("数字 ID 精确匹配；名称按包含关系匹配。") }
 
             Section("标题匹配") {
                 HStack {
                     TextField("关键词或 /正则/i", text: $newTitle)
                     Button("添加") {
-                        library.addBlockedTitle(newTitle)
-                        newTitle = ""
+                        if library.addBlockedTitle(newTitle) { newTitle = "" }
                     }
                     .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -670,11 +736,12 @@ struct BlocklistView: View {
                 HStack {
                     TextField("关键词、/正则/i 或 \"词\" > 3", text: $newContent)
                     Button("添加") {
-                        library.addBlockedContentRule(newContent)
-                        newContent = ""
+                        if library.addBlockedContentRule(newContent) { newContent = "" }
                     }
                     .disabled(newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+                Text("单条条件命中即折叠；支持关键词、/正则/i 与出现次数比较，不支持 AND／OR 组合表达式。")
+                    .font(ShellTheme.Fonts.caption).foregroundStyle(ShellTheme.secondaryText)
                 ForEach(library.blockedContentRules, id: \.self) { value in
                     ruleRow(value) { library.removeBlockedContentRule(value) }
                 }
@@ -691,7 +758,8 @@ struct BlocklistView: View {
             }
 
             Section("数值条件") {
-                Picker("指标", selection: $metric) {                    Text("风评").tag("reputation")
+                Picker("指标", selection: $metric) {
+                    Text("风评").tag("reputation")
                     Text("赞").tag("like")
                     Text("踩").tag("dislike")
                     Text("赞踩总数").tag("total")
@@ -709,10 +777,12 @@ struct BlocklistView: View {
                     TextField("阈值", text: $threshold)
                         .keyboardType(.numbersAndPunctuation)
                     Button("添加规则") {
-                        guard let value = Double(threshold) else { return }
+                        guard let value = Double(threshold), value.isFinite else { return }
                         library.addNumericRule(NativeNumericBlockRule(metric: metric, comparison: comparison, threshold: value))
                     }
                 }
+                Text("赞踩比 = 赞 ÷ 踩。有赞无踩为无限大；零赞零踩或指标缺失时不判定。")
+                    .font(ShellTheme.Fonts.caption).foregroundStyle(ShellTheme.secondaryText)
                 ForEach(library.blockedNumericRules) { rule in
                     HStack {
                         Text("\(metricTitle(rule.metric)) \(comparisonTitle(rule.comparison)) \(format(rule.threshold))")
@@ -722,19 +792,23 @@ struct BlocklistView: View {
                         } label: {
                             Image(systemName: "trash")
                                 .foregroundStyle(ShellTheme.danger)
-                        }
+                                .frame(width: 44, height: 44)
+                        }.accessibilityLabel("删除数值规则")
                     }
                 }
             }
 
             Section {
                 Button("清空全部屏蔽规则", role: .destructive) {
-                    library.clearBlockingRules()
+                    clearing = true
                 }
             }
         }
         .navigationTitle("屏蔽规则")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("清空全部屏蔽规则？", isPresented: $clearing, titleVisibility: .visible) {
+            Button("清空规则", role: .destructive) { library.clearBlockingRules() }
+        }
     }
 
     private func ruleRow(_ value: String, remove: @escaping () -> Void) -> some View {
@@ -745,7 +819,8 @@ struct BlocklistView: View {
             Button(action: remove) {
                 Image(systemName: "trash")
                     .foregroundStyle(ShellTheme.danger)
-            }
+                    .frame(width: 44, height: 44)
+            }.accessibilityLabel("删除规则")
         }
     }
 
@@ -772,7 +847,7 @@ struct BlocklistView: View {
     }
 
     private func format(_ value: Double) -> String {
-        value.rounded() == value ? String(Int(value)) : String(value)
+        value.formatted(.number.precision(.fractionLength(0...4)))
     }
 }
 
@@ -781,6 +856,9 @@ struct SettingsView: View {
     @AppStorage("native.appearance") private var appearance = "system"
     @AppStorage("native.replyRebornTail") private var replyTail = true
     @AppStorage("native.saveBrowseProgress") private var saveBrowseProgress = false
+
+    @AppStorage("native.notificationsEnabled") private var notificationsEnabled = false
+    @State private var clearing: String?
 
     var body: some View {
         Form {
@@ -792,6 +870,10 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
             }
+
+            Section {
+                Toggle("新消息本地通知", isOn: $notificationsEnabled)
+            } header: { Text("消息") } footer: { Text("仅前台检查新消息。开启后申请系统通知许可，不提供远程推送。") }
 
             Section("回复") {
                 Toggle("附加 CC98 Reborn 小尾巴", isOn: $replyTail)
@@ -810,6 +892,7 @@ struct SettingsView: View {
                 NavigationLink("我的收藏") { FavoritesView() }
                 NavigationLink("稍后再看") { ReadLaterView() }
                 NavigationLink("浏览历史") { HistoryView() }
+                NavigationLink("草稿中心") { DraftCenterView() }
             }
 
             Section("屏蔽规则") {
@@ -817,20 +900,30 @@ struct SettingsView: View {
             }
 
             Section("本机数据") {
-                Button("清空浏览历史", role: .destructive) { library.clearHistory() }
+                NavigationLink("本机增强备份") { LibraryTransferView(mode: .library) }
+                Button("清空浏览历史", role: .destructive) { clearing = "history" }
                     .disabled(library.history.isEmpty)
-                Button("清空稍后再看", role: .destructive) { library.clearReadLater() }
+                Button("清空稍后再看", role: .destructive) { clearing = "later" }
                     .disabled(library.readLater.isEmpty)
             }
         }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(clearing == "history" ? "清空浏览历史？" : "清空稍后再看？",
+                            isPresented: Binding(get: { clearing != nil }, set: { if !$0 { clearing = nil } }), titleVisibility: .visible, presenting: clearing) { target in
+            Button("清空当前账号的本机记录", role: .destructive) {
+                if target == "history" { library.clearHistory() } else { library.clearReadLater() }
+                clearing = nil
+            }
+        }
     }
 }
 
 struct UserProfileView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
+    @EnvironmentObject private var library: NativeLibrary
+    @State private var showNote = false
 
     let userID: Int?
     let userName: String?
@@ -873,12 +966,23 @@ struct UserProfileView: View {
                                 }
                             }
                         }
-                        HStack(spacing: 10) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 72))], spacing: 12) {
                             stat("发帖", user.postCount)
                             stat("威望", user.prestige)
                             stat("风评", user.popularity)
                             stat("关注", user.followCount)
                             stat("粉丝", user.fanCount)
+                        }
+                    }
+
+                    Section("本机备注") {
+                        Button { showNote = true } label: {
+                            HStack {
+                                Text(library.userNote(for: user.id).isEmpty ? "添加用户备注" : library.userNote(for: user.id))
+                                    .foregroundStyle(ShellTheme.primaryText)
+                                Spacer()
+                                Image(systemName: "square.and.pencil").foregroundStyle(ShellTheme.accent)
+                            }.frame(minHeight: 44)
                         }
                     }
 
@@ -925,7 +1029,7 @@ struct UserProfileView: View {
                                 } label: {
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(topic.title ?? "主题 #\(topic.id)")
-                                            .font(ShellTheme.Fonts.footnote.weight(.medium))
+                                            .font(ShellTheme.Fonts.body.weight(.medium))
                                             .foregroundStyle(ShellTheme.primaryText)
                                             .lineLimit(2)
                                         HStack(spacing: 8) {
@@ -978,6 +1082,9 @@ struct UserProfileView: View {
         .navigationTitle(user?.name ?? "用户")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+        .sheet(isPresented: $showNote) {
+            if let user { UserNoteEditor(userID: user.id, userName: user.name ?? "用户 #\(user.id)") }
+        }
         .alert("提示", isPresented: $showAlert) {
             Button("好", role: .cancel) {}
         } message: {
@@ -991,7 +1098,6 @@ struct UserProfileView: View {
                 .font(.system(.footnote, design: .rounded).weight(.semibold))
                 .foregroundStyle(ShellTheme.primaryText)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
             Text(title)
                 .font(ShellTheme.Fonts.caption)
                 .foregroundStyle(ShellTheme.secondaryText)

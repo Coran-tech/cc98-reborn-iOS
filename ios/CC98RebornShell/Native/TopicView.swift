@@ -77,6 +77,8 @@ struct NativeTraceRequest: Identifiable {
 }
 
 struct TopicDetailView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
     @EnvironmentObject private var library: NativeLibrary
@@ -119,6 +121,7 @@ struct TopicDetailView: View {
     @State private var scrollToTopOnNextLoad = false
     @State private var didAutoResume: Bool
     @State private var pullNextTriggered = false
+    @State private var loadID = UUID()
 
     private let pageSize = 10
 
@@ -136,6 +139,7 @@ struct TopicDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                 if let topic { header(topic) }
+                NativeLibraryStatusView().padding(.horizontal, 16)
 
                 if let topic, topic.isPosterOnly == true {
                     HStack(spacing: 8) {
@@ -168,6 +172,7 @@ struct TopicDetailView: View {
                         }
                     )
                     .id(floorAnchor(opPost.id))
+                    .accessibilityIdentifier("topic.floor.\(opPost.floor ?? 1)")
                 }
 
                 if page == 1, let voteInfo {
@@ -207,16 +212,14 @@ struct TopicDetailView: View {
                             }
                         )
                         .id(floorAnchor(post.id))
+                        .accessibilityIdentifier("topic.floor.\(post.floor ?? 0)")
                     }
                     if let error {
-                        Text(error)
-                            .font(ShellTheme.Fonts.footnote)
-                            .foregroundStyle(ShellTheme.danger)
-                            .frame(maxWidth: .infinity, alignment: .center)
+                        NativeInlineRetry(message: error) { Task { await load() } }.padding(.horizontal, 16)
                     }
                     if page < pageCount, posts.count >= pageSize {
                         Text("上拉进入下一页")
-                            .font(ShellTheme.Fonts.caption)
+                            .font(ShellTheme.Fonts.metadata)
                             .foregroundStyle(ShellTheme.secondaryText)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 8)
@@ -225,7 +228,9 @@ struct TopicDetailView: View {
                         .frame(height: 1)
                 }
             }
-            .padding(16)
+            .padding(.vertical, 16)
+            .frame(maxWidth: ShellTheme.Metrics.maximumReadingWidth)
+            .frame(maxWidth: .infinity)
             .id("topic-top")
             .background(
                 ScrollBottomObserver(threshold: 100) {
@@ -287,7 +292,7 @@ struct TopicDetailView: View {
             UserProfileView(userID: link.userID, userName: link.userName)
         }
         .sheet(isPresented: $showReply, onDismiss: { quotedPost = nil }) {
-            ReplyComposer(topicID: topicID, quotedPost: quotedPost) {
+            ReplyComposer(topicID: topicID, quotedPost: quotedPost, allowReplyTail: topic != nil && board != nil && topic?.isAnonymous != true && topic?.isPosterOnly != true && (topic?.allowedViewerState ?? 0) == 0 && (board?.anonymousState ?? 0) == 0) {
                 Task {
                     let nextPage = max(1, ((topic?.replyCount ?? 0) + 11) / pageSize)
                     page = nextPage
@@ -353,9 +358,10 @@ struct TopicDetailView: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(ShellTheme.primaryText)
                 Text("\(hotReplyPosts.count)")
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
+            .padding(.horizontal, 16)
             ForEach(hotReplyPosts) { post in
                 PostCard(
                     post: post,
@@ -380,18 +386,16 @@ struct TopicDetailView: View {
     private func header(_ topic: NativeTopic) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(topic.title ?? "主题 #\(topic.id)")
-                .font(ShellTheme.Fonts.pageTitle)
+                .font(ShellTheme.Fonts.topicTitle)
                 .foregroundStyle(ShellTheme.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Text(topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"))
-                Text(NativeFormat.date(topic.time))
-                Spacer(minLength: 0)
-                Text("回复 \(NativeFormat.count(topic.replyCount))")
-                Text("点击 \(NativeFormat.count(topic.hitCount))")
-            }
-            .font(ShellTheme.Fonts.caption)
-            .foregroundStyle(ShellTheme.secondaryText)
+                .accessibilityIdentifier("topic.title")
+            NativeTopicMetadata(
+                author: topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"),
+                userNote: topic.isAnonymous == true ? nil : topic.userId.map { library.userNote(for: $0) },
+                replyCount: topic.replyCount, hitCount: topic.hitCount,
+                date: NativeFormat.date(topic.time)
+            )
             if let resolvedBoardID {
                 NavigationLink {
                     BoardTopicsView(board: board ?? NativeBoard.placeholder(id: resolvedBoardID))
@@ -400,19 +404,21 @@ struct TopicDetailView: View {
                         Image(systemName: "square.grid.2x2")
                         Text(board?.name ?? "版面 #\(resolvedBoardID)")
                     }
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.link)
                 }
                 .buttonStyle(.plain)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("topic.board")
             }
             if !library.note(for: topic.id).isEmpty {
                 Text("备注：\(library.note(for: topic.id))")
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.warning)
                     .lineLimit(3)
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner))
         .overlay(
@@ -422,108 +428,92 @@ struct TopicDetailView: View {
     }
 
     private var bottomBars: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
             if pageCount > 1 {
-                HStack(spacing: 12) {
-                    Button {
-                        turnPage(-1)
-                    } label: {
-                        Label("上一页", systemImage: "chevron.left")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(minWidth: 104, minHeight: 46)
-                            .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10))
-                            .foregroundStyle(page <= 1 ? ShellTheme.secondaryText : ShellTheme.accent)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(page <= 1 || loading)
-
-                    Spacer(minLength: 0)
-
-                    Text("第 \(page) / \(pageCount) 页")
-                        .font(ShellTheme.Fonts.footnote)
-                        .foregroundStyle(ShellTheme.secondaryText)
-                        .monospacedDigit()
-
-                    Spacer(minLength: 0)
-
-                    Button {
-                        turnPage(1)
-                    } label: {
-                        Label("下一页", systemImage: "chevron.right")
-                            .font(.system(size: 15, weight: .semibold))
-                            .labelStyle(.titleAndIcon)
-                            .frame(minWidth: 104, minHeight: 46)
-                            .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10))
-                            .foregroundStyle(page >= pageCount ? ShellTheme.secondaryText : ShellTheme.accent)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(page >= pageCount || loading)
+                if dynamicTypeSize.isAccessibilitySize {
+                    pageIndicator
+                    HStack(spacing: 8) { previousPageButton; nextPageButton }
+                } else {
+                    HStack(spacing: 8) { previousPageButton; pageIndicator; nextPageButton }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
             }
-
-            HStack {
-                Button {
-                    Task { await toggleFavorite() }
-                } label: {
-                    Label(isFavorite ? "已收藏" : "收藏", systemImage: isFavorite ? "star.fill" : "star")
+            HStack(spacing: 12) {
+                Button { Task { await toggleFavorite() } } label: {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .frame(minWidth: 44, minHeight: 48)
                 }
+                .accessibilityLabel(isFavorite ? "取消收藏" : "收藏主题")
+                .accessibilityIdentifier("topic.favorite")
                 .disabled(favoriteBusy)
 
-                Spacer()
-
-                Button {
-                    openReply()
-                } label: {
+                Button { openReply() } label: {
                     Label("回复", systemImage: "arrowshape.turn.up.left")
+                        .frame(maxWidth: .infinity)
                 }
-
-                Spacer()
+                .buttonStyle(NativePrimaryButtonStyle())
+                .accessibilityIdentifier("topic.reply")
 
                 Menu {
                     if let topic {
-                        Button {
-                            library.toggleReadLater(topic)
-                        } label: {
-                            Label(
-                                library.isReadLater(topic.id) ? "取消稍后再看" : "稍后再看",
-                                systemImage: library.isReadLater(topic.id) ? "bookmark.slash" : "bookmark"
-                            )
+                        Button { library.toggleReadLater(topic) } label: {
+                            Label(library.isReadLater(topic.id) ? "取消稍后再看" : "稍后再看", systemImage: "bookmark")
                         }
                     }
-                    Button {
-                        showFloorJump = true
-                    } label: {
-                        Label("跳转楼层", systemImage: "number")
-                    }
-                    Button {
-                        showFullTextSearch = true
-                    } label: {
-                        Label("全文搜索", systemImage: "text.magnifyingglass")
-                    }
-                    Button {
-                        showNote = true
-                    } label: {
-                        Label("主题备注", systemImage: "note.text")
-                    }
+                    Button { showFloorJump = true } label: { Label("跳转楼层", systemImage: "number") }
+                    Button { showFullTextSearch = true } label: { Label("全文搜索", systemImage: "text.magnifyingglass") }
+                    Button { showNote = true } label: { Label("主题备注", systemImage: "note.text") }
                     ShareLink(item: URL(string: "https://www.cc98.org/topic/\(topicID)")!) {
                         Label("分享", systemImage: "square.and.arrow.up")
                     }
                 } label: {
-                    Label("更多", systemImage: "ellipsis.circle")
+                    Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 48)
                 }
+                .accessibilityLabel("主题更多操作")
+                .accessibilityIdentifier("topic.more")
             }
-            .font(ShellTheme.Fonts.footnote)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
         }
+        .font(.subheadline.weight(.medium))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(maxWidth: ShellTheme.Metrics.maximumReadingWidth)
+        .frame(maxWidth: .infinity)
         .background(ShellTheme.surface)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(ShellTheme.separator)
-                .frame(height: 0.5)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private var pageIndicator: some View {
+        Button { showFloorJump = true } label: {
+            Text("\(page) / \(pageCount)")
+                .font(ShellTheme.Fonts.metadata).monospacedDigit()
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minWidth: 44, minHeight: 44)
         }
+        .accessibilityLabel("第\(page)页，共\(pageCount)页；跳转楼层")
+        .accessibilityIdentifier("topic.pageIndicator")
+    }
+
+    private var previousPageButton: some View {
+        Button { turnPage(-1) } label: {
+            Label("上一页", systemImage: "chevron.left")
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(page <= 1 ? ShellTheme.secondaryText : ShellTheme.accent)
+        .disabled(page <= 1 || loading)
+        .accessibilityIdentifier("topic.previousPage")
+    }
+
+    private var nextPageButton: some View {
+        Button { turnPage(1) } label: {
+            Label("下一页", systemImage: "chevron.right")
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(ShellTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(page >= pageCount ? ShellTheme.secondaryText : ShellTheme.accent)
+        .disabled(page >= pageCount || loading)
+        .accessibilityIdentifier("topic.nextPage")
     }
 
     private func handlePullNext() {
@@ -582,7 +572,7 @@ struct TopicDetailView: View {
 
     @MainActor
     private func loadSignatures(for posts: [NativePost]) async {
-        let ids = Set(posts.compactMap(\.userId)).filter { $0 > 0 && !signatureChecked.contains($0) }
+        let ids = Set(posts.filter { $0.isAnonymous != true }.compactMap(\.userId)).filter { $0 > 0 && !signatureChecked.contains($0) }
         guard !ids.isEmpty else { return }
         for id in ids {
             signatureChecked.insert(id)
@@ -611,7 +601,7 @@ struct TopicDetailView: View {
             if let opPost { candidates.append(opPost) }
             candidates.append(contentsOf: posts)
             if let post = candidates.first(where: { $0.floor == targetFloor }) {
-                withAnimation {
+                withAnimation(reduceMotion ? nil : .default) {
                     proxy.scrollTo(floorAnchor(post.id), anchor: .top)
                 }
                 highlightedPostID = post.id
@@ -628,7 +618,7 @@ struct TopicDetailView: View {
         }
 
         if scrollToTopOnNextLoad {
-            withAnimation {
+            withAnimation(reduceMotion ? nil : .default) {
                 proxy.scrollTo("topic-top", anchor: .top)
             }
             scrollToTopOnNextLoad = false
@@ -681,14 +671,17 @@ struct TopicDetailView: View {
 
     @MainActor
     private func load() async {
-        guard !loading else { return }
+        let requestID = UUID()
+        loadID = requestID
+        let requestedPage = page
         loading = true
         error = nil
         do {
             async let topicRequest = app.api.topic(id: topicID)
-            async let postsRequest = app.api.posts(topicID: topicID, from: (page - 1) * pageSize, size: pageSize)
+            async let postsRequest = app.api.posts(topicID: topicID, from: (requestedPage - 1) * pageSize, size: pageSize)
             let loadedTopic = try await topicRequest
             let loadedPosts = try await postsRequest
+            guard requestID == loadID, page == requestedPage else { return }
             topic = loadedTopic
             posts = loadedPosts
             if page == 1 {
@@ -721,9 +714,10 @@ struct TopicDetailView: View {
             }
             await loadSignatures(for: loadedPosts)
         } catch {
-            self.error = error.localizedDescription
+            guard requestID == loadID else { return }
+            if !(error is CancellationError) { self.error = error.localizedDescription }
         }
-        loading = false
+        if requestID == loadID { loading = false }
     }
 }
 
@@ -745,6 +739,7 @@ struct ReplyComposer: View {
 
     let topicID: Int
     let quotedPost: NativePost?
+    let allowReplyTail: Bool
     var onSent: () -> Void
     @AppStorage("native.replyRebornTail") private var replyTail = true
 
@@ -752,6 +747,10 @@ struct ReplyComposer: View {
     @State private var selection = NSRange(location: 0, length: 0)
     @StateObject private var editor = UBBEditorController()
     @State private var sending = false
+    @State private var uploading = false
+    @State private var showExitConfirmation = false
+    @State private var didRestoreDraft = false
+    @State private var completed = false
     @State private var errorMessage: String? = nil
     @FocusState private var focused: Bool
 
@@ -762,9 +761,10 @@ struct ReplyComposer: View {
         return "reply:\(topicID)"
     }
 
-    init(topicID: Int, quotedPost: NativePost? = nil, onSent: @escaping () -> Void) {
+    init(topicID: Int, quotedPost: NativePost? = nil, allowReplyTail: Bool = true, onSent: @escaping () -> Void) {
         self.topicID = topicID
         self.quotedPost = quotedPost
+        self.allowReplyTail = allowReplyTail
         self.onSent = onSent
         _text = State(initialValue: quotedPost.map { ReplyComposer.quoteText(topicID: topicID, post: $0) } ?? "")
     }
@@ -787,6 +787,7 @@ struct ReplyComposer: View {
                         .foregroundStyle(ShellTheme.danger)
                 }
                 UBBFormatBar(text: $text, selection: $selection, editor: editor)
+                    .disabled(sending)
                 UBBTextEditor(text: $text, selection: $selection, controller: editor, minHeight: 240)
                     .frame(minHeight: 240)
                     .padding(4)
@@ -801,25 +802,25 @@ struct ReplyComposer: View {
                         UBBContentView(source: text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.metadata)
                 }
-                ComposerImageButton(text: $text, selection: $selection, editor: editor)
+                ComposerAttachmentsBar(text: $text, selection: $selection, editor: editor) { uploading = $0 }
                     .disabled(sending)
-                ComposerEmoticonButton(text: $text, selection: $selection, editor: editor)
-                    .disabled(sending)
-                ComposerFileButton(text: $text, selection: $selection, editor: editor)
-                    .disabled(sending)
-                HStack {
-                    Text("\(text.count) / 8000")
-                        .font(ShellTheme.Fonts.caption)
-                        .foregroundStyle(text.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
-                    Spacer()
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(ShellTheme.Fonts.caption)
-                            .foregroundStyle(ShellTheme.danger)
-                            .lineLimit(2)
-                    }
+                Text("\(submittedContent.count) / 8000")
+                    .font(ShellTheme.Fonts.metadata)
+                    .foregroundStyle(submittedContent.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
+                if shouldAppendTail {
+                    Text("发送时附加 Reborn 小尾巴，已计入字数。")
+                        .font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.secondaryText)
+                }
+                if let errorMessage {
+                    Text(errorMessage).font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("reply.error")
+                }
+                NativeLibraryStatusView()
+                if library.lastSaveError == nil, library.draft(for: draftKey) == text, !text.isEmpty {
+                    Text("草稿已保存到本机").font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.secondaryText)
                 }
                 }
                 .padding(16)
@@ -830,26 +831,50 @@ struct ReplyComposer: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(sending)
+                    Button("关闭") {
+                        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { dismiss() }
+                        else { showExitConfirmation = true }
+                    }
+                    .disabled(sending || uploading)
+                    .accessibilityIdentifier("reply.close")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("发送") {
-                        Task { await send() }
-                    }
-                    .disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(sending ? "发送中…" : "发送") { Task { await send() } }
+                        .disabled(sending || uploading || auth.profile == nil || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || submittedContent.count > 8000)
+                        .accessibilityIdentifier("reply.send")
                 }
             }
             .onAppear {
-                if text.isEmpty {
-                    text = library.draft(for: draftKey)
-                }
+                guard !didRestoreDraft else { return }
+                didRestoreDraft = true
+                let saved = library.draft(for: draftKey)
+                if !saved.isEmpty { text = saved }
+                library.setDraftContext(for: draftKey, topicID: topicID, boardID: quotedPost?.boardId, floor: quotedPost?.floor)
+                if !text.isEmpty { library.setDraft(text, for: draftKey) }
                 focused = true
             }
             .onChange(of: text) { _, value in
-                library.setDraft(value, for: draftKey)
+                if !completed { library.setDraft(value, for: draftKey) }
+            }
+            .interactiveDismissDisabled(sending || uploading || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .confirmationDialog("保留这份回复草稿？", isPresented: $showExitConfirmation, titleVisibility: .visible) {
+                Button("保存草稿并退出") {
+                    if library.setDraft(text, for: draftKey) { dismiss() }
+                }
+                Button("丢弃草稿并退出", role: .destructive) {
+                    if library.clearDraft(for: draftKey) { completed = true; dismiss() }
+                }
+                Button("继续编辑", role: .cancel) {}
             }
         }
+    }
+
+    private var shouldAppendTail: Bool { replyTail && allowReplyTail && quotedPost?.isAnonymous != true }
+
+    private var submittedContent: String {
+        let base = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return "" }
+        return shouldAppendTail ? NativeReplyTail.appending(to: base) : base
     }
 
     @MainActor
@@ -860,27 +885,29 @@ struct ReplyComposer: View {
         }
         let base = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty else { return }
-        let value = replyTail ? NativeReplyTail.appending(to: base) : base
+        let value = submittedContent
         guard value.count <= 8000 else {
             errorMessage = "内容不能超过 8000 个字。"
             return
         }
-        guard !sending else { return }
+        guard !sending, !uploading else { return }
         sending = true
         errorMessage = nil
         do {
             try await app.api.reply(topicID: topicID, content: value, parentID: quotedPost?.id)
+            completed = true
             library.clearDraft(for: draftKey)
             onSent()
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.localizedDescription + "\n正文和草稿已保留；若发送结果不明，请先检查原帖，勿重复发送。"
         }
         sending = false
     }
 }
 
 struct PostCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
     @EnvironmentObject private var library: NativeLibrary
@@ -897,8 +924,8 @@ struct PostCard: View {
     let onQuote: (() -> Void)?
 
     @State private var likeState: Int
-    @State private var likeCount: Int
-    @State private var dislikeCount: Int
+    @State private var likeCount: Int?
+    @State private var dislikeCount: Int?
     @State private var busy = false
     @State private var alertMessage = ""
     @State private var showAlert = false
@@ -907,6 +934,8 @@ struct PostCard: View {
     @State private var showRating = false
     @State private var awards: [NativeAward]
     @State private var awardsChecked: Bool
+    @State private var editingUserNote = false
+    @State private var noteInput = ""
 
     init(
         post: NativePost,
@@ -931,8 +960,8 @@ struct PostCard: View {
         self.onTrace = onTrace
         self.onQuote = onQuote
         _likeState = State(initialValue: post.likeState ?? 0)
-        _likeCount = State(initialValue: post.likeCount ?? 0)
-        _dislikeCount = State(initialValue: post.dislikeCount ?? 0)
+        _likeCount = State(initialValue: post.likeCount)
+        _dislikeCount = State(initialValue: post.dislikeCount)
         _awards = State(initialValue: post.awards ?? [])
         _awardsChecked = State(initialValue: post.awards != nil)
     }
@@ -940,27 +969,35 @@ struct PostCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                if let userID = post.userId, userID > 0 {
+                if post.isAnonymous != true, let userID = post.userId, userID > 0 {
                     NavigationLink {
                         UserProfileView(userID: userID, userName: post.userName)
                     } label: {
-                        NativeAvatar(url: displayAvatarURL, name: post.userName, size: 28)
+                        NativeAvatar(url: displayAvatarURL, name: post.isAnonymous == true ? "匿名" : post.userName, size: 36)
                     }
                     .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
                 } else {
-                    NativeAvatar(url: displayAvatarURL, name: post.userName, size: 28)
+                    NativeAvatar(url: displayAvatarURL, name: post.isAnonymous == true ? "匿名" : post.userName, size: 36)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(post.isAnonymous == true ? "匿名" : (post.userName ?? "未知作者"))
-                            .font(.subheadline.weight(.medium))
+                            .font(.body.weight(.medium))
                             .foregroundStyle(ShellTheme.primaryText)
-                        if post.isLZ == true { badge("楼主", color: ShellTheme.accent) }
-                        if post.isBest == true { badge("精彩", color: ShellTheme.warning) }
-                        if isHot { badge("热评", color: ShellTheme.warning) }
+                        HStack(spacing: 6) {
+                            if post.isLZ == true { badge("楼主", color: ShellTheme.accent) }
+                            if post.isBest == true { badge("精彩", color: ShellTheme.warning) }
+                            if isHot { badge("热评", color: ShellTheme.warning) }
+                        }
+                        if post.isAnonymous != true, let userID = post.userId, !library.userNote(for: userID).isEmpty {
+                            Text("备注：\(library.userNote(for: userID))")
+                                .font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     Text("\(floorTitle) · \(NativeFormat.date(post.time))")
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.metadata)
                         .foregroundStyle(ShellTheme.secondaryText)
                         .contextMenu {
                             if let topicID = post.topicId, let floor = post.floor, floor > 0 {
@@ -990,7 +1027,7 @@ struct PostCard: View {
 
                 if post.isDeleted == true {
                     Text("该楼层已被删除")
-                        .font(ShellTheme.Fonts.caption)
+                        .font(ShellTheme.Fonts.metadata)
                         .foregroundStyle(ShellTheme.danger)
                 }
             }
@@ -1005,63 +1042,14 @@ struct PostCard: View {
                 RatingRecordTable(awards: awards)
             }
 
-            HStack(spacing: 12) {
-                Button {
-                    Task { await setLike(1) }
-                } label: {
-                    Label(NativeFormat.count(likeCount), systemImage: likeState == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                        .foregroundStyle(likeState == 1 ? ShellTheme.accent : ShellTheme.secondaryText)
-                }
-                .disabled(busy)
-                Button {
-                    Task { await setLike(2) }
-                } label: {
-                    Label(NativeFormat.count(dislikeCount), systemImage: likeState == 2 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                        .foregroundStyle(likeState == 2 ? ShellTheme.danger : ShellTheme.secondaryText)
-                }
-                .disabled(busy)
-                if let onQuote {
-                    Button {
-                        onQuote()
-                    } label: {
-                        Label("引用", systemImage: "quote.bubble")
-                            .foregroundStyle(ShellTheme.secondaryText)
-                    }
-                }
-                if let onTrace {
-                    Button {
-                        onTrace()
-                    } label: {
-                        Label("查看对话", systemImage: "bubble.left.and.bubble.right")
-                            .foregroundStyle(ShellTheme.secondaryText)
-                    }
-                }
-                Button {
-                    if auth.profile == nil {
-                        alertMessage = "请先在「我的」登录，再参与风评。"
-                        showAlert = true
-                    } else {
-                        showRating = true
-                    }
-                } label: {
-                    Label("风评", systemImage: "star")
-                        .foregroundStyle(ShellTheme.secondaryText)
-                }
-                if canEdit {
-                    Button {
-                        showEdit = true
-                    } label: {
-                        Label("编辑", systemImage: "pencil")
-                            .foregroundStyle(ShellTheme.secondaryText)
-                    }
-                }
-                Spacer(minLength: 0)
-                if busy { ProgressView() }
+            ViewThatFits(in: .horizontal) {
+                postActions(compact: false)
+                postActions(compact: true)
             }
-            .font(.system(size: 11))
-            .buttonStyle(.plain)
+            NativeLibraryStatusView()
+
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner))
         .overlay(
@@ -1084,11 +1072,75 @@ struct PostCard: View {
         .sheet(isPresented: $showRating) {
             RatingComposer(post: post)
         }
+        .alert("用户备注", isPresented: $editingUserNote) {
+            TextField("最多 80 字", text: $noteInput)
+                .onChange(of: noteInput) { _, value in noteInput = String(value.prefix(80)) }
+            Button("保存") {
+                if let userID = post.userId { library.setUserNote(noteInput, for: userID) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("仅保存在当前账号的本机数据中，真实用户名保持不变。")
+        }
         .task(id: post.id) {
             guard !awardsChecked else { return }
             awardsChecked = true
             awards = (try? await app.api.postAwards(postID: post.id)) ?? []
         }
+    }
+
+    private func postActions(compact: Bool) -> some View {
+        HStack(spacing: 8) {
+            Button { Task { await setLike(1) } } label: {
+                Label(NativeFormat.count(likeCount), systemImage: likeState == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+                    .foregroundStyle(likeState == 1 ? ShellTheme.accent : ShellTheme.secondaryText)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .disabled(busy)
+            .accessibilityLabel("\(likeState == 1 ? "取消赞" : "赞")，\(NativeFormat.count(likeCount))")
+            Button { Task { await setLike(2) } } label: {
+                Label(NativeFormat.count(dislikeCount), systemImage: likeState == 2 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                    .foregroundStyle(likeState == 2 ? ShellTheme.danger : ShellTheme.secondaryText)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .disabled(busy)
+            .accessibilityLabel("\(likeState == 2 ? "取消踩" : "踩")，\(NativeFormat.count(dislikeCount))")
+            Spacer(minLength: 0)
+            if let onQuote {
+                Button(action: onQuote) {
+                    if compact { Image(systemName: "quote.bubble").frame(minWidth: 44, minHeight: 44) }
+                    else { Label("引用", systemImage: "quote.bubble").frame(minWidth: 44, minHeight: 44) }
+                }
+                .accessibilityLabel("引用\(floorTitle)")
+                .accessibilityIdentifier("topic.quote.\(post.floor ?? 0)")
+            }
+            Menu {
+                if let onTrace { Button(action: onTrace) { Label("查看对话", systemImage: "bubble.left.and.bubble.right") } }
+                Button {
+                    if auth.profile == nil {
+                        alertMessage = "请先在「我的」登录，再参与风评。"; showAlert = true
+                    } else { showRating = true }
+                } label: { Label("风评", systemImage: "star") }
+                if canEdit { Button { showEdit = true } label: { Label("编辑原帖", systemImage: "pencil") } }
+                if let topicID = post.topicId, let floor = post.floor, floor > 0 {
+                    Button {
+                        UIPasteboard.general.string = "https://www.cc98.org/topic/\(topicID)/\(max(1, (floor + 9) / 10))#\(floor)"
+                    } label: { Label("复制楼层链接", systemImage: "link") }
+                }
+                if post.isAnonymous != true, let userID = post.userId, userID > 0 {
+                    Button {
+                        noteInput = library.userNote(for: userID); editingUserNote = true
+                    } label: { Label("用户备注", systemImage: "note.text") }
+                    Button(role: .destructive) { library.addBlockedUserID(String(userID)) } label: {
+                        Label("屏蔽此用户", systemImage: "person.crop.circle.badge.xmark")
+                    }
+                }
+            } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
+            .accessibilityLabel("\(floorTitle)更多操作")
+            .accessibilityIdentifier("topic.postMore.\(post.floor ?? 0)")
+        }
+        .font(ShellTheme.Fonts.metadata)
+        .buttonStyle(.plain)
     }
 
     private var canEdit: Bool {
@@ -1113,13 +1165,14 @@ struct PostCard: View {
         HStack(spacing: 8) {
             Image(systemName: "eye.slash")
             Text(blockReason)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button("显示") {
                 revealBlocked = true
             }
-            .font(ShellTheme.Fonts.caption.weight(.medium))
+            .font(ShellTheme.Fonts.metadata.weight(.medium))
             .foregroundStyle(ShellTheme.accent)
+            .frame(minWidth: 44, minHeight: 44)
         }
         .font(ShellTheme.Fonts.footnote)
         .foregroundStyle(ShellTheme.secondaryText)
@@ -1129,7 +1182,7 @@ struct PostCard: View {
 
     private var blockReason: String {
         if library.isUserBlocked(id: post.userId, name: post.userName) {
-            return "已屏蔽用户 \(post.userName ?? "")"
+            return post.isAnonymous == true ? "命中用户屏蔽规则" : "已屏蔽用户 \(post.userName ?? "")"
         }
         return "命中屏蔽关键词"
     }
@@ -1141,7 +1194,7 @@ struct PostCard: View {
 
     private func badge(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.caption.weight(.semibold))
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(color.opacity(0.15), in: Capsule())
@@ -1196,10 +1249,13 @@ struct FloorJumpView: View {
                     TextField("1 – \(max(1, maxFloor))", text: $text)
                         .keyboardType(.numberPad)
                         .focused($focused)
+                        .accessibilityIdentifier("topic.floorInput")
                     Button("跳转") {
                         jump()
                     }
                     .disabled(Int(text) == nil)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("topic.floorGo")
                 }
             }
             .navigationTitle("跳转楼层")

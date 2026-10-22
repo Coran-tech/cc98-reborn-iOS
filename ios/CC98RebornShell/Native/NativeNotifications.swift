@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     @Published private(set) var openMessages = false
+    @Published var notice: String?
 
     private var api: CC98API?
     private var auth: NativeAuth?
@@ -20,14 +21,27 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
     func configure(auth: NativeAuth, api: CC98API) {
         self.auth = auth
         self.api = api
-        Task {
-            let center = UNUserNotificationCenter.current()
-            _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
-            start()
+        start()
+    }
+
+    func setEnabled(_ enabled: Bool) async -> Bool {
+        guard enabled else { stop(); return false }
+        do {
+            let allowed = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
+            if allowed { start(); return true }
+            notice = "系统通知尚未允许。你仍可在“消息”查看新内容，也可以在系统设置中开启通知。"
+        } catch {
+            notice = "暂时无法启用通知，请稍后重试。消息页面仍可正常使用。"
         }
+        stop()
+        return false
     }
 
     func start() {
+        #if DEBUG
+        if NativeUITestFixture.isEnabled { return }
+        #endif
+        guard UserDefaults.standard.bool(forKey: "native.notificationsEnabled") else { return }
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -75,7 +89,7 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
         content.body = "你有 \(current - previous) 条新消息"
         content.sound = .default
         content.threadIdentifier = "cc98.\(identifier)"
-        content.userInfo = ["tab": "messages"]
+        content.userInfo = ["tab": "messages", "accountID": lastAccountID ?? 0]
         let request = UNNotificationRequest(
             identifier: "cc98.\(identifier).\(Int(Date().timeIntervalSince1970))",
             content: content,
@@ -98,7 +112,12 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         Task { @MainActor in
-            openMessages = true
+            let expectedID = response.notification.request.content.userInfo["accountID"] as? Int
+            if let expectedID, expectedID != auth?.activeAccountID {
+                notice = "这条通知来自另一个账号。请先在“我的”切换到对应账号，再查看消息。"
+            } else {
+                openMessages = true
+            }
             completionHandler()
         }
     }

@@ -28,6 +28,7 @@ private struct NativeRootContent: View {
     @StateObject private var notifications = NativeNotificationManager()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("native.appearance") private var appearance = "system"
+    @AppStorage("native.notificationsEnabled") private var notificationsEnabled = false
     @State private var selectedTab = 0
 
     var body: some View {
@@ -46,6 +47,12 @@ private struct NativeRootContent: View {
         .preferredColorScheme(preferredColorScheme)
         .task { await auth.restore() }
         .task { notifications.configure(auth: auth, api: app.api) }
+        .onChange(of: notificationsEnabled) { _, enabled in
+            Task { notificationsEnabled = await notifications.setEnabled(enabled) }
+        }
+        .alert("消息提醒", isPresented: Binding(get: { notifications.notice != nil }, set: { if !$0 { notifications.notice = nil } })) {
+            Button("知道了", role: .cancel) { notifications.notice = nil }
+        } message: { Text(notifications.notice ?? "") }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await auth.resume() }
@@ -73,7 +80,16 @@ private struct NativeAccountTabs: View {
     @Binding var selectedTab: Int
 
     init(auth: NativeAuth, selectedTab: Binding<Int>) {
+        #if DEBUG
+        if NativeUITestFixture.isEnabled {
+            let library = NativeLibrary(accountID: auth.activeAccountID, directory: NativeUITestFixture.libraryDirectory)
+            _library = StateObject(wrappedValue: library)
+        } else {
+            _library = StateObject(wrappedValue: NativeLibrary(accountID: auth.activeAccountID))
+        }
+        #else
         _library = StateObject(wrappedValue: NativeLibrary(accountID: auth.activeAccountID))
+        #endif
         _app = StateObject(wrappedValue: NativeAppModel(auth: auth, accountContext: auth.captureAccountContext()))
         _selectedTab = selectedTab
     }
@@ -90,6 +106,20 @@ private struct NativeAccountTabs: View {
         // A disappearing editor from A cannot save its draft into B's library.
         .environmentObject(library)
         .environmentObject(app)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let message = library.lastSaveError {
+                HStack(alignment: .top, spacing: 12) {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.footnote).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button("重试保存") { library.retrySave() }.frame(minHeight: 44)
+                }
+                .padding(.horizontal, 16)
+                .foregroundStyle(ShellTheme.danger)
+                .background(ShellTheme.surface)
+                .accessibilityIdentifier("library.saveError")
+            }
+        }
     }
 }
 

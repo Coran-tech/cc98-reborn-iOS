@@ -71,15 +71,11 @@ struct ProfileView: View {
                 }
                 .padding(.vertical, 4)
 
-                HStack(spacing: 8) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 12)], spacing: 16) {
                     statButton("发帖", NativeFormat.count(user.postCount), destination: .activity)
-                    statDivider
                     profileStat("威望", NativeFormat.count(user.prestige))
-                    statDivider
                     profileStat("风评", NativeFormat.count(user.popularity))
-                    statDivider
                     statButton("关注", NativeFormat.count(user.followCount), destination: .followings)
-                    statDivider
                     statButton("粉丝", NativeFormat.count(user.fanCount), destination: .fans)
                 }
             }
@@ -89,12 +85,23 @@ struct ProfileView: View {
             }
 
             Section("我的内容") {
-                NavigationLink("我的收藏") { FavoritesView() }
-                NavigationLink("稍后再看") { ReadLaterView() }
-                NavigationLink("浏览历史") { HistoryView() }
+                NavigationLink { MyActivityView() } label: { Label("我的主题与回复", systemImage: "text.bubble") }
+                    .accessibilityIdentifier("profile.activity")
+                NavigationLink { FavoritesView() } label: { Label("我的收藏", systemImage: "star") }
+                NavigationLink { DraftCenterView() } label: { Label("草稿中心", systemImage: "doc.text") }
+                    .accessibilityIdentifier("profile.drafts")
+                NavigationLink { ReadLaterView() } label: { Label("稍后再看", systemImage: "bookmark") }
+                NavigationLink { HistoryView() } label: { Label("浏览历史", systemImage: "clock") }
+            }
+
+            Section("资料与设置") {
                 NavigationLink("查看我的主页") { UserProfileView(userID: user.id, userName: user.name) }
                 NavigationLink("编辑资料") { ProfileSettingsView() }
-                NavigationLink("设置") { SettingsView() }
+                    .accessibilityIdentifier("profile.edit")
+                NavigationLink { LibraryTransferView(mode: .library) } label: { Label("本机备份与导入", systemImage: "externaldrive") }
+                    .accessibilityIdentifier("profile.library")
+                NavigationLink { SettingsView() } label: { Label("设置", systemImage: "gearshape") }
+                    .accessibilityIdentifier("profile.settings")
             }
 
             Section("资料") {
@@ -129,24 +136,17 @@ struct ProfileView: View {
         .buttonStyle(.plain)
     }
 
-    private var statDivider: some View {
-        Rectangle()
-            .fill(ShellTheme.separator)
-            .frame(width: 0.5, height: 28)
-    }
-
     private func profileStat(_ title: String, _ value: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.system(.footnote, design: .rounded).weight(.semibold))
+                .font(.system(.title3, design: .rounded).weight(.semibold))
                 .foregroundStyle(ShellTheme.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .fixedSize(horizontal: false, vertical: true)
             Text(title)
-                .font(ShellTheme.Fonts.caption)
+                .font(ShellTheme.Fonts.footnote)
                 .foregroundStyle(ShellTheme.secondaryText)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 56)
         .contentShape(Rectangle())
     }
 

@@ -108,6 +108,24 @@ test('both build modes must execute production native session behavior checks', 
   assert.match(script, /native_session_validation=%s/);
 });
 
+test('both build modes execute the production library migration and import checks', () => {
+  const start = script.indexOf('# BEGIN NATIVE_LIBRARY_VALIDATION');
+  const end = script.indexOf('# END NATIVE_LIBRARY_VALIDATION');
+  assert(start > script.indexOf('# END NATIVE_SESSION_VALIDATION'));
+  assert(end > start && end < script.indexOf('# BEGIN FULL_SIMULATOR_VALIDATION'));
+  const library = script.slice(start, end);
+  assert.match(library, /swiftc -D LIBRARY_HARNESS -parse-as-library/);
+  assert.deepEqual(library.match(/ios\/[^\s]+\.swift/g), [
+    'ios/CC98RebornShell/Native/NativeAPIModels.swift',
+    'ios/CC98RebornShell/Native/NativeLibraryCore.swift',
+    'ios/CC98RebornShell/Native/NativeLibrary.swift',
+    'ios/CC98RebornShellTests/NativeLibraryHarness.swift',
+  ]);
+  assert.match(library, /run_with_timeout 60 "\$RUN_DIR\/reborn-native-library-tests"/);
+  assert.doesNotMatch(library, /DEVICE_ONLY|simctl|xcodebuild|\|\| true|if \[\[/);
+  assert.match(script, /native_library_validation=%s/);
+});
+
 test('device-only is explicit, keeps device validation and cannot claim Simulator success', () => {
   assert.match(script, /DEVICE_ONLY=false/);
   assert.match(script, /\[\[ \$# -eq 1 && "\$1" == --device-only \]\]/);

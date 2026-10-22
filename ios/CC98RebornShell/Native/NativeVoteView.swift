@@ -34,13 +34,13 @@ struct NativeVoteCard: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(ShellTheme.primaryText)
                 Spacer()
-                Text("\(info.voteUserCount ?? 0) 人参与")
-                    .font(ShellTheme.Fonts.caption)
+                Text("\(NativeFormat.count(info.voteUserCount)) 人参与")
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
 
             Text("每人最多 \(maxVotes) 票")
-                .font(ShellTheme.Fonts.caption)
+                .font(ShellTheme.Fonts.metadata)
                 .foregroundStyle(ShellTheme.secondaryText)
 
             ForEach(items) { item in
@@ -49,25 +49,25 @@ struct NativeVoteCard: View {
 
             if let myRecord = info.myRecord, !((myRecord.items ?? []).isEmpty) {
                 Text("你已投票：\(chosenDescriptions(myRecord))")
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.accent)
             }
 
             if let expired = info.expiredTime {
                 Text("截止时间：\(NativeFormat.date(expired))")
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
 
             if !canSelect, auth.profile == nil, info.myRecord == nil {
                 Text("登录后可参与投票。")
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(ShellTheme.Fonts.caption)
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.danger)
             }
 
@@ -76,18 +76,18 @@ struct NativeVoteCard: View {
                     Task { await submit() }
                 } label: {
                     HStack {
-                        if submitting { ProgressView().tint(.white) }
+                        if submitting { ProgressView() }
                         Text(submitting ? "正在提交…" : "提交投票")
                             .font(ShellTheme.Fonts.footnote.weight(.medium))
                     }
-                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(ShellTheme.accent)
+                .buttonStyle(NativePrimaryButtonStyle())
+                .accessibilityIdentifier("topic.vote.submit")
                 .disabled(selected.isEmpty || submitting)
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: ShellTheme.Metrics.corner))
         .overlay(
@@ -112,18 +112,18 @@ struct NativeVoteCard: View {
                         .font(.footnote)
                         .foregroundStyle(selected.contains(item.id) || myItems.contains(item.id) ? ShellTheme.accent : ShellTheme.secondaryText)
                     Text(item.description ?? "选项 \(item.id)")
-                        .font(ShellTheme.Fonts.footnote)
+                        .font(ShellTheme.Fonts.body)
                         .foregroundStyle(ShellTheme.primaryText)
                         .multilineTextAlignment(.leading)
                     Spacer(minLength: 0)
                     if showResults {
-                        Text("\(item.count ?? 0) 票")
-                            .font(ShellTheme.Fonts.caption)
+                        Text("\(NativeFormat.count(item.count)) 票")
+                            .font(ShellTheme.Fonts.metadata)
                             .foregroundStyle(ShellTheme.secondaryText)
                     }
                 }
 
-                if showResults {
+                if showResults, item.count != nil, (info.voteUserCount ?? 0) > 0 {
                     GeometryReader { geometry in
                         ZStack(alignment: .leading) {
                             Capsule().fill(ShellTheme.secondarySurface)
@@ -135,11 +135,12 @@ struct NativeVoteCard: View {
                     .frame(height: 6)
 
                     Text(percent(item.count))
-                        .font(.system(size: 10))
+                        .font(ShellTheme.Fonts.metadata)
                         .foregroundStyle(ShellTheme.secondaryText)
                 }
             }
-            .padding(10)
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .background(
                 selected.contains(item.id) || myItems.contains(item.id)
                     ? ShellTheme.accentSoft
@@ -148,7 +149,10 @@ struct NativeVoteCard: View {
             )
         }
         .buttonStyle(.plain)
-        .disabled(!canSelect)
+        .disabled(!canSelect || submitting)
+        .accessibilityLabel(item.description ?? "选项 \(item.id)")
+        .accessibilityValue(selected.contains(item.id) ? "已选" : "未选")
+        .accessibilityIdentifier("topic.vote.option.\(item.id)")
     }
 
     private func chosenDescriptions(_ record: NativeVoteRecord) -> String {
@@ -174,8 +178,8 @@ struct NativeVoteCard: View {
     }
 
     private func percent(_ count: Int?) -> String {
-        let total = max(info.voteUserCount ?? 0, 1)
-        return String(format: "%.2f%%", Double(count ?? 0) / Double(total) * 100)
+        guard let count, let total = info.voteUserCount, total > 0 else { return "—" }
+        return String(format: "%.2f%%", Double(count) / Double(total) * 100)
     }
 
     private func toggle(_ id: Int) {

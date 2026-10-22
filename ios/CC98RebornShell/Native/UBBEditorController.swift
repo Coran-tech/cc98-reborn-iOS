@@ -20,20 +20,25 @@ final class UBBEditorController: ObservableObject {
     }
 
     func noteSelection(_ range: NSRange) {
-        if pendingSelection != nil { return }
         guard textView?.isFirstResponder == true else { return }
+        if let pendingSelection, range != pendingSelection {
+            pendingWorkItem?.cancel()
+            self.pendingSelection = nil
+        }
         lastSelection = range
     }
 
     @discardableResult
     func insert(_ snippet: String) -> Bool {
         guard let textView else { return false }
+        textView.unmarkText()
         let ns = textView.text as NSString
         let range = UBBEditorInsertion.clamped(
             textView.isFirstResponder ? textView.selectedRange : lastSelection,
             length: ns.length
         )
-        textView.text = ns.replacingCharacters(in: range, with: snippet)
+        textView.selectedRange = range
+        textView.insertText(snippet)
         let nextSelection = NSRange(
             location: range.location + (snippet as NSString).length,
             length: 0
@@ -58,6 +63,10 @@ final class UBBEditorController: ObservableObject {
 
     private func applyPendingSelection() {
         guard let textView, let pendingSelection else { return }
+        guard textView.markedTextRange == nil else {
+            self.pendingSelection = nil
+            return
+        }
         textView.selectedRange = pendingSelection
         textView.becomeFirstResponder()
         selectionBinding?.wrappedValue = pendingSelection
@@ -68,6 +77,7 @@ final class UBBEditorController: ObservableObject {
     @discardableResult
     func wrap(_ prefix: String, _ suffix: String) -> Bool {
         guard let textView else { return false }
+        textView.unmarkText()
         let ns = textView.text as NSString
         let range = UBBEditorInsertion.clamped(
             textView.isFirstResponder ? textView.selectedRange : lastSelection,
@@ -75,7 +85,8 @@ final class UBBEditorController: ObservableObject {
         )
         let selected = ns.substring(with: range)
         let replacement = prefix + selected + suffix
-        textView.text = ns.replacingCharacters(in: range, with: replacement)
+        textView.selectedRange = range
+        textView.insertText(replacement)
 
         let nextSelection: NSRange
         if selected.isEmpty {

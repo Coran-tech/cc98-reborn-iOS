@@ -21,22 +21,61 @@ struct BoardsView: View {
                     })
                 } else {
                     List {
+                        if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !library.pinnedBoards.isEmpty {
+                            Section("置顶版面") {
+                                ForEach(library.pinnedBoards.filter { !library.isBoardBlocked(id: $0.id, name: $0.name) }) { pinned in
+                                    HStack(spacing: 0) {
+                                        NavigationLink {
+                                            BoardTopicsView(board: allBoards.first { $0.id == pinned.id } ?? .placeholder(id: pinned.id))
+                                        } label: {
+                                            Label(pinned.name, systemImage: "pin.fill")
+                                                .font(ShellTheme.Fonts.body.weight(.medium))
+                                                .padding(.vertical, 8)
+                                        }
+                                        .accessibilityIdentifier("board.pinned.\(pinned.id)")
+                                        Button {
+                                            library.togglePinnedBoard(id: pinned.id, name: pinned.name)
+                                        } label: {
+                                            Image(systemName: "pin.slash").frame(width: 44, height: 44)
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .accessibilityLabel("取消置顶\(pinned.name)")
+                                    }
+                                }
+                            }
+                        }
+                        NativeLibraryStatusView()
+                        if let error { NativeInlineRetry(message: error) { Task { await load() } } }
+                        if filteredGroups.isEmpty { Text("没有匹配的版面").foregroundStyle(ShellTheme.secondaryText) }
                         ForEach(filteredGroups) { group in
                             Section {
                                 ForEach(visibleBoards(group)) { board in
-                                    NavigationLink {
-                                        BoardTopicsView(board: board)
-                                    } label: {
-                                        BoardRow(board: board)
+                                    HStack(alignment: .top, spacing: 0) {
+                                        NavigationLink {
+                                            BoardTopicsView(board: board)
+                                        } label: {
+                                            BoardRow(board: board)
+                                        }
+                                        .accessibilityIdentifier("board.\(board.id)")
+                                        Menu {
+                                            Button {
+                                                library.togglePinnedBoard(id: board.id, name: board.name)
+                                            } label: {
+                                                Label(library.isBoardPinned(board.id) ? "取消置顶" : "置顶版面", systemImage: "pin")
+                                            }
+                                        } label: {
+                                            Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                                        }
+                                        .accessibilityLabel("\(board.name)操作")
+                                        .accessibilityIdentifier("board.more.\(board.id)")
                                     }
                                 }
                             } header: {
-                                HStack {
+                                VStack(alignment: .leading, spacing: 4) {
                                     Text(group.name)
                                     if let masters = group.masters, !masters.isEmpty {
-                                        Spacer()
                                         Text(masters.joined(separator: " · "))
-                                            .font(ShellTheme.Fonts.caption)
+                                            .font(ShellTheme.Fonts.metadata)
                                             .foregroundStyle(ShellTheme.secondaryText)
                                     }
                                 }
@@ -56,13 +95,16 @@ struct BoardsView: View {
                     NavigationLink {
                         SearchView()
                     } label: {
-                        Image(systemName: "magnifyingglass")
+                        Image(systemName: "magnifyingglass").frame(minWidth: 44, minHeight: 44)
                     }
+                    .accessibilityLabel("搜索主题")
                 }
             }
         }
         .task { await load() }
     }
+
+    private var allBoards: [NativeBoard] { groups.flatMap { $0.boards ?? [] } }
 
     private func visibleBoards(_ group: NativeBoardGroup) -> [NativeBoard] {
         (group.boards ?? []).filter { !library.isBoardBlocked(id: $0.id, name: $0.name) }
@@ -120,10 +162,10 @@ private struct BoardRow: View {
                 Text("今日 \(NativeFormat.count(board.todayCount))")
                 Text("主题 \(NativeFormat.count(board.topicCount))")
             }
-            .font(ShellTheme.Fonts.caption)
+            .font(ShellTheme.Fonts.metadata)
             .foregroundStyle(ShellTheme.secondaryText)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
     }
 }
 
@@ -160,10 +202,10 @@ struct BoardTopicsView: View {
                 NativeStateView(icon: "list.bullet.rectangle", title: "主题无法加载", message: error, action: {
                     Task { await load(reset: true) }
                 })
-            } else if topics.isEmpty {
-                NativeStateView(icon: "tray", title: "本版暂无主题", message: nil)
             } else {
                 List {
+                    NativeLibraryStatusView()
+                    if let error { NativeInlineRetry(message: error) { Task { await load(reset: true) } } }
                     if let bigPaper = (boardDetail?.bigPaper ?? board.bigPaper)?
                         .trimmingCharacters(in: .whitespacesAndNewlines),
                        !bigPaper.isEmpty {
@@ -179,12 +221,17 @@ struct BoardTopicsView: View {
                         }
                     }
 
+                    if visibleTopics.isEmpty {
+                        Text(topics.isEmpty ? "本版暂无主题" : "当前已加载主题均被屏蔽规则筛选。")
+                            .font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.secondaryText)
+                    }
                     ForEach(visibleTopics) { topic in
                         NavigationLink {
                             TopicDetailView(topicID: topic.id, boardID: topic.boardId ?? board.id)
                         } label: {
                             TopicSummaryRow(topic: topic)
                         }
+                        .accessibilityIdentifier("board.topic.\(topic.id)")
                     }
                     if hasMore {
                         Button {
@@ -207,6 +254,7 @@ struct BoardTopicsView: View {
             }
         }
         .navigationTitle(resolvedBoard.name)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 NavigationLink {
@@ -216,19 +264,25 @@ struct BoardTopicsView: View {
                 }
                 .accessibilityLabel("版内搜索")
 
-                if resolvedBoard.canVote == true {
+                Menu {
                     Button {
-                        if auth.profile == nil {
-                            alertMessage = "请先在「我的」登录，再发表投票。"
-                            showAlert = true
-                        } else {
-                            showVoteCompose = true
-                        }
+                        library.togglePinnedBoard(id: resolvedBoard.id, name: resolvedBoard.name)
                     } label: {
-                        Image(systemName: "chart.bar.doc.horizontal")
+                        Label(library.isBoardPinned(resolvedBoard.id) ? "取消置顶" : "置顶版面", systemImage: "pin")
                     }
-                    .accessibilityLabel("发表投票")
+                    if resolvedBoard.canVote == true {
+                        Button {
+                            if auth.profile == nil {
+                                alertMessage = "请先在「我的」登录，再发表投票。"
+                                showAlert = true
+                            } else { showVoteCompose = true }
+                        } label: { Label("发表投票", systemImage: "chart.bar.doc.horizontal") }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
                 }
+                .accessibilityLabel("版面操作")
+                .accessibilityIdentifier("board.actions")
 
                 Button {
                     if auth.profile == nil {
@@ -238,8 +292,10 @@ struct BoardTopicsView: View {
                         showCompose = true
                     }
                 } label: {
-                    Image(systemName: "square.and.pencil")
+                    Image(systemName: "square.and.pencil").frame(minWidth: 44, minHeight: 44)
                 }
+                .accessibilityLabel("发表主题")
+                .accessibilityIdentifier("board.compose")
             }
         }
         .sheet(isPresented: $showVoteCompose) {
@@ -296,19 +352,17 @@ struct BoardTopicsView: View {
     private func load(reset: Bool) async {
         guard !loading else { return }
         loading = true
-        if reset {
-            page = 0
-            hasMore = true
-            error = nil
-        }
+        error = nil
+        let requestedPage = reset ? 0 : page
         do {
-            let fetched = try await app.api.topics(boardID: board.id, from: page * pageSize, size: pageSize)
+            let fetched = try await app.api.topics(boardID: board.id, from: requestedPage * pageSize, size: pageSize)
             if reset {
                 topics = fetched
             } else {
-                topics.append(contentsOf: fetched)
+                let existing = Set(topics.map(\.id))
+                topics.append(contentsOf: fetched.filter { !existing.contains($0.id) })
             }
-            page += 1
+            page = requestedPage + 1
             hasMore = fetched.count == pageSize
         } catch {
             self.error = error.localizedDescription
@@ -318,6 +372,7 @@ struct BoardTopicsView: View {
 }
 
 private struct TopicSummaryRow: View {
+    @EnvironmentObject private var library: NativeLibrary
     let topic: NativeTopicSummary
 
     var body: some View {
@@ -325,41 +380,37 @@ private struct TopicSummaryRow: View {
             HStack(spacing: 6) {
                 if (topic.topState ?? 0) > 0 {
                     Text("置顶")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(ShellTheme.accentSoft, in: Capsule())
                         .foregroundStyle(ShellTheme.accent)
                 }
                 if (topic.bestState ?? 0) > 0 {
                     Text("精华")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(ShellTheme.warning.opacity(0.15), in: Capsule())
                         .foregroundStyle(ShellTheme.warning)
                 }
                 if topic.isVote == true {
                     Text("投票")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(ShellTheme.link.opacity(0.15), in: Capsule())
                         .foregroundStyle(ShellTheme.link)
                 }
-                Text(topic.title ?? "主题 #\(topic.id)")
-                    .font(ShellTheme.Fonts.body.weight(.medium))
-                    .foregroundStyle(ShellTheme.primaryText)
-                    .lineLimit(2)
             }
-            HStack(spacing: 8) {
-                Text(topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"))
-                Text("回复 \(NativeFormat.count(topic.replyCount))")
-                Text("点击 \(NativeFormat.count(topic.hitCount))")
-                Spacer(minLength: 0)
-                Text(NativeFormat.date(topic.lastPostTime ?? topic.time))
-            }
-            .font(ShellTheme.Fonts.caption)
-            .foregroundStyle(ShellTheme.secondaryText)
-            .lineLimit(1)
+            Text(topic.title ?? "主题 #\(topic.id)")
+                .font(ShellTheme.Fonts.body.weight(.medium))
+                .foregroundStyle(ShellTheme.primaryText)
+                .lineLimit(3)
+            NativeTopicMetadata(
+                author: topic.isAnonymous == true ? "匿名" : (topic.userName ?? "未知作者"),
+                userNote: topic.isAnonymous == true ? nil : topic.userId.map { library.userNote(for: $0) },
+                replyCount: topic.replyCount, hitCount: topic.hitCount,
+                date: NativeFormat.date(topic.lastPostTime ?? topic.time)
+            )
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
     }
 }

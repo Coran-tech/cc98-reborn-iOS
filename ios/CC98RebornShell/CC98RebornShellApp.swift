@@ -6,7 +6,18 @@ import Combine
 @main
 struct CC98RebornShellApp: App {
     var body: some Scene {
-        WindowGroup { NativeRootView() }
+        WindowGroup {
+            #if DEBUG
+            if NativeUITestFixture.isEnabled {
+                NativeRootView()
+                    .frame(maxWidth: ProcessInfo.processInfo.arguments.contains("--fixture-compact") ? 320 : .infinity)
+                    .environment(\.dynamicTypeSize, ProcessInfo.processInfo.arguments.contains("--fixture-large-type") ? .accessibility1 : .large)
+                    .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("--fixture-dark") ? .dark : .light)
+            } else { NativeRootView() }
+            #else
+            NativeRootView()
+            #endif
+        }
     }
 }
 

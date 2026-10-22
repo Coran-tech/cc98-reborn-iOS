@@ -5,46 +5,35 @@ struct RatingRecordTable: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("评分记录")
                     .font(ShellTheme.Fonts.footnote.weight(.semibold))
                     .foregroundStyle(ShellTheme.primaryText)
-                Spacer(minLength: 0)
                 Text(formatDelta(reputationDelta))
                     .font(.system(.footnote, design: .rounded).weight(.semibold))
                     .foregroundStyle(deltaColor)
-                Text("风评合计")
-                    .font(.system(size: 10))
+                Text("所列风评合计")
+                    .font(ShellTheme.Fonts.metadata)
                     .foregroundStyle(ShellTheme.secondaryText)
             }
 
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
-                GridRow {
-                    Text("用户")
-                    Text("操作")
-                    Text("理由")
-                }
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(ShellTheme.secondaryText)
-
-                ForEach(awards.indices, id: \.self) { index in
-                    let award = awards[index]
-                    GridRow {
-                        Text(award.operatorName ?? "匿名")
-                            .font(.system(size: 11))
-                            .foregroundStyle(ShellTheme.primaryText)
-                            .lineLimit(1)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(award.content ?? "-")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(contentColor(award.content))
-                        }
-                        Text(award.reason ?? "-")
-                            .font(.system(size: 11))
-                            .foregroundStyle(ShellTheme.secondaryText)
-                            .lineLimit(2)
+            ForEach(awards.indices, id: \.self) { index in
+                let award = awards[index]
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(award.operatorName ?? "匿名")
+                        .font(ShellTheme.Fonts.metadata.weight(.medium))
+                        .foregroundStyle(ShellTheme.primaryText)
+                    Text(award.content ?? "—")
+                        .font(ShellTheme.Fonts.metadata.weight(.semibold))
+                        .foregroundStyle(contentColor(award.content))
+                    if let reason = award.reason, !reason.isEmpty {
+                        Text(reason).font(ShellTheme.Fonts.metadata).foregroundStyle(ShellTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
+                if index < awards.count - 1 { Divider() }
             }
         }
         .padding(10)
@@ -55,27 +44,20 @@ struct RatingRecordTable: View {
         )
     }
 
-    private var reputationDelta: Int {
-        awards.filter { isReputation($0.content) }
-            .compactMap { signedNumber(in: $0.content ?? "") }
-            .reduce(0, +)
-    }
-
-    private func isReputation(_ content: String?) -> Bool {
-        guard let content else { return false }
-        if content.contains("风评值") { return true }
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.range(of: "^[+-]?\\d+$", options: .regularExpression) != nil
+    private var reputationDelta: Int? {
+        let values = awards.compactMap { NativeReputation.delta(in: $0.content) }
+        return values.isEmpty ? nil : values.reduce(0, +)
     }
 
     private var deltaColor: Color {
+        guard let reputationDelta else { return ShellTheme.secondaryText }
         if reputationDelta > 0 { return ShellTheme.accent }
         if reputationDelta < 0 { return ShellTheme.danger }
         return ShellTheme.secondaryText
     }
 
     private func contentColor(_ content: String?) -> Color {
-        guard isReputation(content), let value = signedNumber(in: content ?? "") else {
+        guard let value = NativeReputation.delta(in: content) else {
             return ShellTheme.secondaryText
         }
         if value > 0 { return ShellTheme.accent }
@@ -83,17 +65,9 @@ struct RatingRecordTable: View {
         return ShellTheme.secondaryText
     }
 
-    private func signedNumber(in text: String) -> Int? {
-        guard let regex = try? NSRegularExpression(pattern: "([+-]?\\d+)") else { return nil }
-        let ns = text as NSString
-        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else {
-            return nil
-        }
-        return Int(ns.substring(with: match.range(at: 1)))
-    }
-
-    private func formatDelta(_ value: Int) -> String {
-        value > 0 ? "+\(value)" : String(value)
+    private func formatDelta(_ value: Int?) -> String {
+        guard let value else { return "—" }
+        return value > 0 ? "+\(value)" : String(value)
     }
 }
 
@@ -131,13 +105,13 @@ struct RatingStatsView: View {
                                     Text(formatDelta(reputationDelta))
                                         .font(.system(.title3, design: .rounded).weight(.semibold))
                                         .foregroundStyle(deltaColor)
-                                    Text("风评合计")
-                                        .font(ShellTheme.Fonts.caption)
+                                    Text("所列风评合计")
+                                        .font(ShellTheme.Fonts.metadata)
                                         .foregroundStyle(ShellTheme.secondaryText)
                                 }
                             }
                             Text("共 \(awards.count) 条")
-                                .font(ShellTheme.Fonts.caption)
+                                .font(ShellTheme.Fonts.metadata)
                                 .foregroundStyle(ShellTheme.secondaryText)
                         }
 
@@ -145,23 +119,22 @@ struct RatingStatsView: View {
                             ForEach(awards.indices, id: \.self) { index in
                                 let award = awards[index]
                                 VStack(alignment: .leading, spacing: 4) {
-                                    HStack(spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 4) {
                                         Text(award.operatorName ?? "匿名")
                                             .font(ShellTheme.Fonts.footnote.weight(.medium))
                                             .foregroundStyle(ShellTheme.primaryText)
-                                            .lineLimit(1)
+                                            .fixedSize(horizontal: false, vertical: true)
                                         Text(award.content ?? "-")
                                             .font(ShellTheme.Fonts.footnote.weight(.semibold))
                                             .foregroundStyle(contentColor(award.content))
-                                            .lineLimit(1)
-                                        Spacer(minLength: 0)
+                                            .fixedSize(horizontal: false, vertical: true)
                                         Text(NativeFormat.date(award.time))
-                                            .font(ShellTheme.Fonts.caption)
+                                            .font(ShellTheme.Fonts.metadata)
                                             .foregroundStyle(ShellTheme.secondaryText)
                                     }
                                     if let reason = award.reason, !reason.isEmpty {
                                         Text(reason)
-                                            .font(ShellTheme.Fonts.caption)
+                                            .font(ShellTheme.Fonts.metadata)
                                             .foregroundStyle(ShellTheme.secondaryText)
                                     }
                                 }
@@ -187,27 +160,20 @@ struct RatingStatsView: View {
 
     // Only operations that describe 风评值 (or a bare signed value) count
     // toward the total. Wealth/prestige changes remain visible but neutral.
-    private var reputationDelta: Int {
-        awards.filter { isReputation($0.content) }
-            .compactMap { signedNumber(in: $0.content ?? "") }
-            .reduce(0, +)
-    }
-
-    private func isReputation(_ content: String?) -> Bool {
-        guard let content else { return false }
-        if content.contains("风评值") { return true }
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.range(of: "^[+-]?\\d+$", options: .regularExpression) != nil
+    private var reputationDelta: Int? {
+        let values = awards.compactMap { NativeReputation.delta(in: $0.content) }
+        return values.isEmpty ? nil : values.reduce(0, +)
     }
 
     private var deltaColor: Color {
+        guard let reputationDelta else { return ShellTheme.secondaryText }
         if reputationDelta > 0 { return ShellTheme.accent }
         if reputationDelta < 0 { return ShellTheme.danger }
         return ShellTheme.secondaryText
     }
 
     private func contentColor(_ content: String?) -> Color {
-        guard isReputation(content), let value = signedNumber(in: content ?? "") else {
+        guard let value = NativeReputation.delta(in: content) else {
             return ShellTheme.secondaryText
         }
         if value > 0 { return ShellTheme.accent }
@@ -215,17 +181,9 @@ struct RatingStatsView: View {
         return ShellTheme.secondaryText
     }
 
-    private func signedNumber(in text: String) -> Int? {
-        guard let regex = try? NSRegularExpression(pattern: "([+-]?\\d+)") else { return nil }
-        let ns = text as NSString
-        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else {
-            return nil
-        }
-        return Int(ns.substring(with: match.range(at: 1)))
-    }
-
-    private func formatDelta(_ value: Int) -> String {
-        value > 0 ? "+\(value)" : String(value)
+    private func formatDelta(_ value: Int?) -> String {
+        guard let value else { return "—" }
+        return value > 0 ? "+\(value)" : String(value)
     }
 
     @MainActor

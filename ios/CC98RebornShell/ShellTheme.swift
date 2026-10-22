@@ -22,6 +22,8 @@ enum ShellTheme {
         static let navigationTitle = Font.headline
         static let pageTitle = Font.title2.weight(.semibold)
         static let body = Font.body
+        static let topicTitle = Font.title2.weight(.semibold)
+        static let metadata = Font.footnote
         static let footnote = Font.footnote
         static let caption = Font.caption
         static let mono = Font.system(.footnote, design: .monospaced)
@@ -34,12 +36,31 @@ enum ShellTheme {
         static let corner: CGFloat = 12
         static let compactCorner: CGFloat = 8
         static let groupSpacing: CGFloat = 24
+        static let maximumReadingWidth: CGFloat = 680
     }
 
     private static func color(light: UInt32, dark: UInt32) -> Color {
         Color(uiColor: UIColor { traits in
             UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
         })
+    }
+}
+
+// The light mint accent in dark mode needs dark text, not a white label.
+struct NativePrimaryButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(colorScheme == .dark ? Color(uiColor: UIColor(red: 0.09, green: 0.14, blue: 0.13, alpha: 1)) : .white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(minHeight: 48)
+            .background(ShellTheme.accent.opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45))
+            .clipShape(RoundedRectangle(cornerRadius: ShellTheme.Metrics.compactCorner))
     }
 }
 

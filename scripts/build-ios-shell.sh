@@ -12,6 +12,7 @@ fi
 BUILD_MODE=full
 OAUTH_PROTOCOL_VALIDATION=not_run
 NATIVE_SESSION_VALIDATION=not_run
+NATIVE_LIBRARY_VALIDATION=not_run
 SIMULATOR_VALIDATION=not_run
 DEVICE_PACKAGE=not_produced
 CANDIDATE_NAME=CC98RebornShell-unsigned-device.ipa
@@ -71,6 +72,7 @@ finish() {
   local status=$?
   if [[ "$OAUTH_PROTOCOL_VALIDATION" == running ]]; then OAUTH_PROTOCOL_VALIDATION=failed_or_incomplete; fi
   if [[ "$NATIVE_SESSION_VALIDATION" == running ]]; then NATIVE_SESSION_VALIDATION=failed_or_incomplete; fi
+  if [[ "$NATIVE_LIBRARY_VALIDATION" == running ]]; then NATIVE_LIBRARY_VALIDATION=failed_or_incomplete; fi
   if [[ "$SIMULATOR_VALIDATION" == running ]]; then SIMULATOR_VALIDATION=failed_or_incomplete; fi
   # Installation can fail after compilation. Preserve only the built app's plist,
   # not a simulator data container or any website/session data.
@@ -90,8 +92,8 @@ finish() {
     run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
       --output-path "$ARTIFACTS/screenshots" > "$ARTIFACTS/attachment-export.log" 2>&1 || true
   fi
-  printf 'exit_code=%s\nbuild_mode=%s\noauth_protocol_validation=%s\nnative_session_validation=%s\nsimulator_validation=%s\ndevice_package=%s\n' \
-    "$status" "$BUILD_MODE" "$OAUTH_PROTOCOL_VALIDATION" "$NATIVE_SESSION_VALIDATION" "$SIMULATOR_VALIDATION" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
+  printf 'exit_code=%s\nbuild_mode=%s\noauth_protocol_validation=%s\nnative_session_validation=%s\nnative_library_validation=%s\nsimulator_validation=%s\ndevice_package=%s\n' \
+    "$status" "$BUILD_MODE" "$OAUTH_PROTOCOL_VALIDATION" "$NATIVE_SESSION_VALIDATION" "$NATIVE_LIBRARY_VALIDATION" "$SIMULATOR_VALIDATION" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
   echo "Build evidence: $ARTIFACTS"
   exit "$status"
 }
@@ -158,6 +160,22 @@ run_with_timeout 60 "$RUN_DIR/reborn-native-session-tests" \
   2>&1 | tee "$ARTIFACTS/native-session-tests.log"
 NATIVE_SESSION_VALIDATION=passed
 # END NATIVE_SESSION_VALIDATION
+
+# BEGIN NATIVE_LIBRARY_VALIDATION
+# Exercise the same account-scoped library and backup parser used by the app.
+echo '=== Production native library tests (macOS, no Simulator) ==='
+NATIVE_LIBRARY_VALIDATION=running
+MACOSX_DEPLOYMENT_TARGET=12.0 run_with_timeout 120 xcrun --sdk macosx swiftc -D LIBRARY_HARNESS -parse-as-library \
+  ios/CC98RebornShell/Native/NativeAPIModels.swift \
+  ios/CC98RebornShell/Native/NativeLibraryCore.swift \
+  ios/CC98RebornShell/Native/NativeLibrary.swift \
+  ios/CC98RebornShellTests/NativeLibraryHarness.swift \
+  -o "$RUN_DIR/reborn-native-library-tests" \
+  2>&1 | tee "$ARTIFACTS/native-library-compile.log"
+run_with_timeout 60 "$RUN_DIR/reborn-native-library-tests" \
+  2>&1 | tee "$ARTIFACTS/native-library-tests.log"
+NATIVE_LIBRARY_VALIDATION=passed
+# END NATIVE_LIBRARY_VALIDATION
 
 # Resources must exist before XcodeGen resolves the folder reference.
 node scripts/package-ios-resources.cjs
@@ -342,7 +360,7 @@ PY
 
 printf '%s is a device candidate, NOT an install-ready signed app.\n' "$CANDIDATE_NAME" > "$ARTIFACTS/README.txt"
 if [[ "$DEVICE_ONLY" == true ]]; then
-  echo 'UNVERIFIED DEVICE-ONLY BUILD: Simulator selection, boot and Simulator-hosted unit/UI tests were NOT run. The host-side production OAuth and native session tests passed. Successful packaging does not establish app launch or real-service functionality.' >> "$ARTIFACTS/README.txt"
+  echo 'UNVERIFIED DEVICE-ONLY BUILD: Simulator selection, boot and Simulator-hosted unit/UI tests were NOT run. The host-side production OAuth, native session and native library tests passed. Successful packaging does not establish app launch or real-service functionality.' >> "$ARTIFACTS/README.txt"
 else
   echo 'Simulator tests passed. simulator-tests.xcresult and screenshots contain synthetic/offline evidence only.' >> "$ARTIFACTS/README.txt"
 fi
