@@ -3,280 +3,291 @@ import SwiftUI
 import UIKit
 
 enum NativeAuthState: Equatable {
-    case unknown
-    case signedOut
-    case signingIn
-    case signedIn
+    case unknown, signedOut, signingIn, signedIn
+    case requiresAuthorization(String)
     case unavailable(String)
 }
 
-enum NativeAuthError: LocalizedError {
-    case cancelled
-    case unavailable
-    case loginRequired
-    case profile
-    case network
-    case token
-    case storage
-
-    var errorDescription: String? {
-        switch self {
-        case .cancelled: return "登录已取消。"
-        case .unavailable: return "无法打开 CC98 登录窗口，请稍后重试。"
-        case .loginRequired: return "登录已过期，请重新登录。"
-        case .profile: return "无法读取 CC98 账号信息，请稍后重试。"
-        case .network: return "无法连接 CC98，请确认校园网或系统 VPN 可用。"
-        case .token: return "登录凭证无效，请重新登录。"
-        case .storage: return "登录状态无法安全保存，请重试。"
-        }
-    }
+struct NativeRequestAuthorization {
+    let accountID: Int?
+    let selectionID: UUID
+    let accessToken: String?
 }
 
-// Native OpenID session. Only the keychain stores tokens; no token is written
-// to logs, diagnostics or UserDefaults. The API token is issued by the same
-// CC98 OpenID client that the Reborn extension uses.
+// System authorization UI and published account identity. NativeSession owns
+// refresh serialization and credential persistence independently of selection.
 @MainActor
 final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentationContextProviding {
     @Published private(set) var state: NativeAuthState = .unknown
     @Published private(set) var profile: NativeUser?
     @Published private(set) var accounts: [NativeAccount] = []
     @Published private(set) var activeAccountID: Int?
+    @Published private(set) var isBusy = false
+    @Published private(set) var hasRefreshAuthorization = false
 
-    private var tokens: NativeTokenSet?
-    private var legacyTokens: NativeTokenSet?
+    private let store = NativeTokenStore.shared
+    private let sessions: NativeSession
+    private let identity = NativeAccountIdentity()
+    private var selectionID = UUID()
     private var session: ASWebAuthenticationSession?
     private var anchor: ASPresentationAnchor?
-    private var busy = false
-    private let store = NativeTokenStore.shared
-    private let decoder = JSONDecoder()
     private let accountsKey = "native.accounts"
     private let activeAccountKey = "native.activeAccountID"
 
     var isSignedIn: Bool { profile != nil }
 
     override init() {
+        sessions = NativeSession(storage: NativeTokenStore.shared, refresh: Self.refreshTokens)
         super.init()
         if let data = UserDefaults.standard.data(forKey: accountsKey),
-           let stored = try? JSONDecoder().decode([NativeAccount].self, from: data) {
-            accounts = stored
-        }
+           let stored = try? JSONDecoder().decode([NativeAccount].self, from: data) { accounts = stored }
         if UserDefaults.standard.object(forKey: activeAccountKey) != nil {
-            let value = UserDefaults.standard.integer(forKey: activeAccountKey)
-            activeAccountID = value > 0 ? value : nil
+            let id = UserDefaults.standard.integer(forKey: activeAccountKey)
+            activeAccountID = id > 0 ? id : nil
         }
-        if let activeAccountID {
-            tokens = store.load(accountID: activeAccountID)
-        }
-        legacyTokens = store.loadLegacy()
+        identity.select(activeAccountID)
     }
 
     func restore() async {
-        guard state == .unknown || state == .signedOut else { return }
-        guard let stored = tokens ?? legacyTokens else {
-            state = .signedOut
-            return
-        }
-        tokens = stored
+        guard !isBusy else { return }
+        // UID 0 is only the pre-multi-account legacy keychain item.
+        let accountID = activeAccountID ?? 0
+        isBusy = true
+        defer { isBusy = false }
         do {
-            let user: NativeUser
-            if activeAccountID != nil {
-                let access = try await validAccessToken()
-                user = try await fetchMe(token: access)
-            } else {
-                do {
-                    user = try await fetchMe(token: stored.accessToken)
-                } catch {
-                    guard let refresh = stored.refreshToken, !refresh.isEmpty else { throw error }
-                    let fresh = try await refreshTokens(refresh)
-                    tokens = fresh
-                    user = try await fetchMe(token: fresh.accessToken)
-                }
+            guard try sessions.stored(accountID: accountID) != nil else {
+                if activeAccountID == nil { state = .signedOut }
+                else { present(NativeAuthError.loginRequired, accountID: activeAccountID) }
+                return
             }
-            try adopt(
-                user: user,
-                tokens: tokens ?? stored,
-                clearLegacy: legacyTokens != nil || activeAccountID == nil
-            )
-            state = .signedIn
-        } catch NativeAuthError.loginRequired {
-            clearLocal()
-            state = .signedOut
+            let tokens = try await sessions.credential(accountID: accountID)
+            let user = try await verifiedUser(accountID: accountID, tokens: tokens)
+            let current = try sessions.stored(accountID: accountID) ?? tokens
+            if accountID == 0 {
+                try sessions.adopt(current, accountID: user.id)
+                sessions.remove(accountID: 0)
+            }
+            activate(user: user, tokens: current)
         } catch {
-            state = .unavailable(NativeAuthError.network.localizedDescription)
+            present(error, accountID: activeAccountID)
         }
+    }
+
+    func resume() async {
+        guard !isBusy else { return }
+        if profile == nil { await restore(); return }
+        _ = try? await requestAuthorization(required: true)
     }
 
     func signIn() async throws {
-        try await signIn(addingAccount: false)
+        try await signIn(addingAccount: false, expectedAccountID: activeAccountID)
     }
 
     func addAccount() async throws {
-        try await signIn(addingAccount: true)
+        try await signIn(addingAccount: true, expectedAccountID: nil)
     }
 
-    private func signIn(addingAccount: Bool) async throws {
-        guard !busy else { throw NativeAuthError.unavailable }
-        busy = true
+    func reauthorize(accountID: Int) async throws {
+        try await signIn(addingAccount: true, expectedAccountID: accountID)
+    }
+
+    private func signIn(addingAccount: Bool, expectedAccountID: Int?) async throws {
+        guard !isBusy else { throw NativeAuthError.unavailable }
+        isBusy = true
+        let previousState = state
         state = .signingIn
-        defer { busy = false }
+        selectionID = UUID() // Previously dispatched operations cannot commit into this transition.
+        defer { isBusy = false }
         do {
             let stateValue = OAuthProtocol.randomValue()
             let verifier = OAuthProtocol.randomValue()
-            let url = OAuthProtocol.authorizationURL(state: stateValue, verifier: verifier)
-            let callback = try await authorize(url: url, ephemeral: addingAccount)
+            let url = OAuthProtocol.nativeAuthorizationURL(state: stateValue, verifier: verifier)
+            let callback = try await authorize(url: url, ephemeral: addingAccount || expectedAccountID != nil)
             let code = try OAuthProtocol.callbackCode(callback, expectedState: stateValue)
-            let fresh = try await exchange(code: code, verifier: verifier)
-            let user = try await fetchMe(token: fresh.accessToken)
-            try adopt(user: user, tokens: fresh, clearLegacy: false)
-            profile = user
-            state = .signedIn
+            let fresh = try await Self.exchange(code: code, verifier: verifier)
+            let user = try await Self.fetchMe(token: fresh.accessToken)
+            if let expectedAccountID, user.id != expectedAccountID { throw NativeAuthError.accountMismatch }
+            try sessions.adopt(fresh, accountID: user.id)
+            activate(user: user, tokens: fresh)
         } catch {
-            if profile == nil { state = .signedOut }
-            else { state = .signedIn }
+            state = previousState
             throw map(error)
         }
     }
 
     func switchAccount(to accountID: Int) async throws {
-        guard accountID != activeAccountID else { return }
-        guard let stored = store.load(accountID: accountID) else {
-            throw NativeAuthError.loginRequired
+        guard !isBusy else { throw NativeAuthError.unavailable }
+        if accountID == activeAccountID {
+            await restore()
+            return
         }
-        if let activeAccountID, let current = tokens {
-            try? store.save(current, accountID: activeAccountID)
-        }
-        let previousID = activeAccountID
-        let previousTokens = tokens
-        let previousProfile = profile
+        isBusy = true
+        let previousState = state
         state = .signingIn
+        selectionID = UUID()
+        defer { isBusy = false }
         do {
-            tokens = stored
-            activeAccountID = accountID
-            persistAccounts()
-            let access = try await validAccessToken()
-            let user = try await fetchMe(token: access)
-            try adopt(user: user, tokens: tokens ?? stored, clearLegacy: false)
-            profile = user
-            state = .signedIn
+            let tokens = try await sessions.credential(accountID: accountID)
+            let user = try await verifiedUser(accountID: accountID, tokens: tokens)
+            activate(user: user, tokens: try sessions.stored(accountID: accountID) ?? tokens)
         } catch {
-            tokens = previousTokens
-            activeAccountID = previousID
-            profile = previousProfile
-            state = previousProfile == nil ? .signedOut : .signedIn
-            persistAccounts()
+            // Target UID never becomes active until credentials AND /me are verified.
+            state = previousState
             throw map(error)
         }
     }
 
     func removeAccount(_ accountID: Int) async {
-        store.clear(accountID: accountID)
+        guard !isBusy else { return }
+        sessions.remove(accountID: accountID)
         accounts.removeAll { $0.id == accountID }
         if activeAccountID == accountID {
+            selectionID = UUID()
             activeAccountID = nil
-            tokens = nil
+            identity.select(nil)
             profile = nil
-            persistAccounts()
-            if let next = accounts.first {
-                try? await switchAccount(to: next.id)
-            } else {
-                state = .signedOut
-            }
-        } else {
-            persistAccounts()
+            hasRefreshAuthorization = false
+            state = .signedOut
         }
+        persistAccounts()
     }
 
     func signOutCurrent() async {
-        guard let activeAccountID else {
-            signOut()
-            return
-        }
+        guard !isBusy, let activeAccountID else { return }
         await removeAccount(activeAccountID)
+        // This is an explicit user action; the confirmation describes switching
+        // to the next saved account. Credential expiry never takes this path.
+        if let next = accounts.first { try? await switchAccount(to: next.id) }
     }
 
     func signOut() {
+        guard !isBusy else { return }
+        for account in accounts { sessions.remove(accountID: account.id) }
+        sessions.remove(accountID: 0)
         store.clearAll()
-        accounts = []
-        activeAccountID = nil
-        tokens = nil
-        legacyTokens = nil
-        profile = nil
-        UserDefaults.standard.removeObject(forKey: activeAccountKey)
+        selectionID = UUID()
+        accounts = []; activeAccountID = nil; profile = nil
+        identity.select(nil)
+        hasRefreshAuthorization = false
         persistAccounts()
         state = .signedOut
     }
 
     func validAccessToken() async throws -> String {
-        guard let activeAccountID,
-              let current = tokens ?? store.load(accountID: activeAccountID) else {
+        guard let token = try await requestAuthorization(required: true).accessToken else {
             throw NativeAuthError.loginRequired
         }
-        tokens = current
-        if current.expiresAt.timeIntervalSinceNow > 60 { return current.accessToken }
-        guard let refresh = current.refreshToken, !refresh.isEmpty else { throw NativeAuthError.loginRequired }
-        let fresh = try await refreshTokens(refresh)
-        try store.save(fresh, accountID: activeAccountID)
-        tokens = fresh
-        return fresh.accessToken
+        return token
     }
 
     func optionalAccessToken() async -> String? {
-        try? await validAccessToken()
+        try? await requestAuthorization(required: false).accessToken
     }
 
-    func refreshIfPossible() async throws {
-        guard let activeAccountID,
-              let current = tokens ?? store.load(accountID: activeAccountID) else {
-            throw NativeAuthError.loginRequired
+    func captureAccountContext() -> NativeAccountContext { identity.current }
+
+    func requestAuthorization(required: Bool, accountContext: NativeAccountContext? = nil) async throws -> NativeRequestAuthorization {
+        if let accountContext { try identity.validate(accountContext) }
+        guard !isBusy else { throw NativeAuthError.unavailable }
+        let context = NativeRequestAuthorization(accountID: activeAccountID, selectionID: selectionID, accessToken: nil)
+        guard let id = context.accountID else {
+            if required { throw NativeAuthError.loginRequired }
+            return context
         }
-        guard let refresh = current.refreshToken, !refresh.isEmpty else { throw NativeAuthError.loginRequired }
-        let fresh = try await refreshTokens(refresh)
-        try store.save(fresh, accountID: activeAccountID)
-        tokens = fresh
+        do {
+            let tokens = try await sessions.credential(accountID: id)
+            if let accountContext { try identity.validate(accountContext) }
+            try validate(context)
+            hasRefreshAuthorization = tokens.refreshToken != nil
+            if profile != nil { state = .signedIn }
+            return NativeRequestAuthorization(accountID: id, selectionID: context.selectionID, accessToken: tokens.accessToken)
+        } catch {
+            try validate(context)
+            present(error, accountID: id)
+            if !required, error as? NativeAuthError == .loginRequired || error as? NativeAuthError == .refreshUnavailable {
+                return context
+            }
+            throw map(error)
+        }
     }
 
-    private func adopt(user: NativeUser, tokens: NativeTokenSet, clearLegacy: Bool) throws {
-        let id = user.id
-        try store.save(tokens, accountID: id)
-        self.tokens = tokens
-        activeAccountID = id
-        let avatar = user.avatarURL?.absoluteString
-        if let index = accounts.firstIndex(where: { $0.id == id }) {
-            accounts[index] = NativeAccount(id: id, name: user.name ?? "CC98 用户", avatarURL: avatar)
-        } else {
-            accounts.append(NativeAccount(id: id, name: user.name ?? "CC98 用户", avatarURL: avatar))
+    func recoverAuthorization(_ context: NativeRequestAuthorization) async throws -> NativeRequestAuthorization {
+        try validate(context)
+        guard let id = context.accountID, let rejected = context.accessToken else { throw NativeAuthError.loginRequired }
+        do {
+            let tokens = try await sessions.credential(accountID: id, rejectedToken: rejected)
+            try validate(context)
+            hasRefreshAuthorization = tokens.refreshToken != nil
+            return NativeRequestAuthorization(accountID: id, selectionID: context.selectionID, accessToken: tokens.accessToken)
+        } catch {
+            try validate(context)
+            present(error, accountID: id)
+            throw map(error)
         }
+    }
+
+    func validate(_ context: NativeRequestAuthorization) throws {
+        guard context.accountID == activeAccountID, context.selectionID == selectionID else {
+            throw NativeAuthError.accountChanged
+        }
+        try Task.checkCancellation()
+    }
+
+    func refreshProfile() async {
+        do {
+            let context = try await requestAuthorization(required: true)
+            guard let id = context.accountID, let token = context.accessToken else { return }
+            let user = try await Self.fetchMe(token: token)
+            try validate(context)
+            guard user.id == id else { throw NativeAuthError.accountMismatch }
+            profile = user
+        } catch { /* A profile refresh must not delete a usable session. */ }
+    }
+
+    private func verifiedUser(accountID: Int, tokens: NativeTokenSet) async throws -> NativeUser {
+        let user: NativeUser
+        do { user = try await Self.fetchMe(token: tokens.accessToken) }
+        catch NativeAuthError.loginRequired {
+            let fresh = try await sessions.credential(accountID: accountID, rejectedToken: tokens.accessToken)
+            user = try await Self.fetchMe(token: fresh.accessToken)
+        }
+        guard user.id > 0, accountID == 0 || user.id == accountID else { throw NativeAuthError.accountMismatch }
+        return user
+    }
+
+    private func activate(user: NativeUser, tokens: NativeTokenSet) {
+        if activeAccountID != user.id { selectionID = UUID() }
+        activeAccountID = user.id
+        identity.select(user.id)
+        profile = user
+        hasRefreshAuthorization = tokens.refreshToken != nil
+        let account = NativeAccount(id: user.id, name: user.name ?? "CC98 用户", avatarURL: user.avatarURL?.absoluteString)
+        if let index = accounts.firstIndex(where: { $0.id == user.id }) { accounts[index] = account }
+        else { accounts.append(account) }
         persistAccounts()
-        if clearLegacy {
-            store.clearLegacy()
-            legacyTokens = nil
-        }
+        state = .signedIn
     }
 
     private func persistAccounts() {
-        if let data = try? JSONEncoder().encode(accounts) {
-            UserDefaults.standard.set(data, forKey: accountsKey)
-        }
-        if let activeAccountID {
-            UserDefaults.standard.set(activeAccountID, forKey: activeAccountKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: activeAccountKey)
+        if let data = try? JSONEncoder().encode(accounts) { UserDefaults.standard.set(data, forKey: accountsKey) }
+        if let activeAccountID { UserDefaults.standard.set(activeAccountID, forKey: activeAccountKey) }
+        else { UserDefaults.standard.removeObject(forKey: activeAccountKey) }
+    }
+
+    private func present(_ error: Error, accountID: Int?) {
+        guard accountID == activeAccountID else { return }
+        let error = map(error)
+        switch error {
+        case .loginRequired, .refreshUnavailable:
+            profile = nil
+            hasRefreshAuthorization = false
+            state = .requiresAuthorization(error.localizedDescription)
+        case .cancelled, .accountChanged: break
+        default: state = .unavailable(error.localizedDescription)
         }
     }
 
-    private func clearLocal() {
-        if let activeAccountID {
-            store.clear(accountID: activeAccountID)
-            accounts.removeAll { $0.id == activeAccountID }
-        }
-        tokens = nil
-        profile = nil
-        activeAccountID = nil
-        persistAccounts()
-        state = .signedOut
-    }
-
-    // MARK: OAuth
+    // MARK: System authorization
 
     private func authorize(url: URL, ephemeral: Bool) async throws -> URL {
         guard let window = keyWindow() else { throw NativeAuthError.unavailable }
@@ -315,115 +326,65 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
         anchor ?? keyWindow() ?? ASPresentationAnchor()
     }
 
-    private func exchange(code: String, verifier: String) async throws -> NativeTokenSet {
-        var request = URLRequest(url: OAuthProtocol.token)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = OAuthProtocol.tokenBody(code: code, verifier: verifier)
-        let data = try await tokenRequest(request)
-        return try decodeTokens(data)
+    private static func exchange(code: String, verifier: String) async throws -> NativeTokenSet {
+        try await tokenRequest(body: OAuthProtocol.tokenBody(code: code, verifier: verifier))
     }
 
-    private func refreshTokens(_ refresh: String) async throws -> NativeTokenSet {
-        var request = URLRequest(url: OAuthProtocol.token)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+    private static func refreshTokens(_ refresh: String) async throws -> NativeTokenSet {
         let fields = [("grant_type", "refresh_token"), ("client_id", OAuthProtocol.clientID), ("refresh_token", refresh)]
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-        request.httpBody = Data(fields.map { $0.0 + "=" + $0.1.addingPercentEncoding(withAllowedCharacters: allowed)! }.joined(separator: "&").utf8)
-        let data = try await tokenRequest(request)
-        var fresh = try decodeTokens(data)
-        if fresh.refreshToken == nil { fresh.refreshToken = refresh }
-        return fresh
+        let body = Data(fields.map { $0.0 + "=" + $0.1.addingPercentEncoding(withAllowedCharacters: allowed)! }.joined(separator: "&").utf8)
+        return try await tokenRequest(body: body)
     }
 
-    private func tokenRequest(_ request: URLRequest) async throws -> Data {
+    private static func tokenRequest(body: Data) async throws -> NativeTokenSet {
+        var request = URLRequest(url: OAuthProtocol.token)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = body
+        let (data, response) = try await requestData(request)
+        return try NativeTokenResponse.decode(data, status: response.statusCode)
+    }
+
+    private static func fetchMe(token: String) async throws -> NativeUser {
+        var request = URLRequest(url: OAuthProtocol.me)
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await requestData(request)
+        if response.statusCode == 401 { throw NativeAuthError.loginRequired }
+        guard response.statusCode == 200 else { throw NativeAuthError.profile }
+        let decoder = JSONDecoder()
+        if let user = try? decoder.decode(NativeUser.self, from: data), user.id > 0 { return user }
+        if let envelope = try? decoder.decode(DataEnvelope<NativeUser>.self, from: data), envelope.data.id > 0 { return envelope.data }
+        throw NativeAuthError.profile
+    }
+
+    private static func requestData(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 30
-        let session = URLSession(configuration: configuration)
+        // Reuse the established redirect-denying delegate for both auth endpoints.
+        let delegate = OAuthHTTPClient()
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                throw NativeAuthError.token
-            }
-            return data
-        } catch let error as NativeAuthError {
-            throw error
-        } catch {
-            throw NativeAuthError.network
-        }
-    }
-
-    private func decodeTokens(_ data: Data) throws -> NativeTokenSet {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let access = json["access_token"] as? String,
-              !access.isEmpty,
-              access.count <= 16_384,
-              ((json["token_type"] as? String) ?? "Bearer").lowercased() == "bearer" else {
-            throw NativeAuthError.token
-        }
-        let lifetime: Int
-        if let number = json["expires_in"] as? NSNumber {
-            lifetime = number.intValue
-        } else if let text = json["expires_in"] as? String, let value = Int(text) {
-            lifetime = value
-        } else {
-            lifetime = 3600
-        }
-        return NativeTokenSet(
-            accessToken: access,
-            refreshToken: json["refresh_token"] as? String,
-            expiresAt: Date().addingTimeInterval(TimeInterval(max(60, lifetime))),
-            scope: json["scope"] as? String
-        )
-    }
-
-    func refreshProfile() async {
-        if let user = try? await fetchMe() {
-            profile = user
-        }
-    }
-
-    private func fetchMe(token: String? = nil) async throws -> NativeUser {        let access: String
-        if let token {
-            access = token
-        } else {
-            access = try await validAccessToken()
-        }
-        var request = URLRequest(url: OAuthProtocol.me)
-        request.setValue("Bearer " + access, forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpCookieStorage = nil
-        configuration.httpShouldSetCookies = false
-        configuration.urlCache = nil
-        configuration.timeoutIntervalForRequest = 20
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else { throw NativeAuthError.network }
-            if http.statusCode == 401 { throw NativeAuthError.loginRequired }
-            guard http.statusCode == 200 else { throw NativeAuthError.profile }
-            if let user = try? decoder.decode(NativeUser.self, from: data) { return user }
-            if let envelope = try? decoder.decode(DataEnvelope<NativeUser>.self, from: data) { return envelope.data }
-            throw NativeAuthError.profile
-        } catch let error as NativeAuthError {
-            throw error
-        } catch {
-            throw NativeAuthError.network
-        }
+            try Task.checkCancellation()
+            guard response.url == request.url, let http = response as? HTTPURLResponse else { throw NativeAuthError.network }
+            return (data, http)
+        } catch let error as NativeAuthError { throw error }
+        catch is CancellationError { throw NativeAuthError.cancelled }
+        catch { throw NativeAuthError.network }
     }
 
     private func map(_ error: Error) -> NativeAuthError {
         if let error = error as? NativeAuthError { return error }
+        if error is NativeTokenStoreError { return .storage }
+        if error is CancellationError { return .cancelled }
         if let error = error as? OAuthFailure {
             switch error {
             case .cancelled: return .cancelled

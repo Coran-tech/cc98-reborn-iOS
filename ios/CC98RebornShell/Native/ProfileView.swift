@@ -12,8 +12,6 @@ struct ProfileView: View {
     @EnvironmentObject private var auth: NativeAuth
     @State private var confirmSignOut = false
     @State private var destination: ProfileDestination?
-    @State private var switchingAccountID: Int?
-    @State private var accountError: String?
 
     var body: some View {
         NavigationStack {
@@ -21,18 +19,7 @@ struct ProfileView: View {
                 if let user = auth.profile {
                     profileList(user)
                 } else {
-                    VStack(spacing: 0) {
-                        LoginGateView()
-                        if case let .unavailable(message) = auth.state {
-                            Text(message)
-                                .font(ShellTheme.Fonts.footnote)
-                                .foregroundStyle(ShellTheme.danger)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 24)
-                                .padding(.bottom, 24)
-                        }
-                    }
-                    .background(ShellTheme.pageBackground)
+                    LoginGateView()
                 }
             }
             .navigationTitle("我的")
@@ -53,16 +40,9 @@ struct ProfileView: View {
                 Task { await auth.signOutCurrent() }
             }
         } message: {
-            Text("退出当前账号？其他已保存账号会保留。")
+            Text("将移除此账号的本机登录，并尝试切换到下一个已保存账号。草稿与历史不会删除。")
         }
-        .alert("账号切换失败", isPresented: Binding(
-            get: { accountError != nil },
-            set: { if !$0 { accountError = nil } }
-        )) {
-            Button("好", role: .cancel) { accountError = nil }
-        } message: {
-            Text(accountError ?? "")
-        }
+
     }
 
     private func profileList(_ user: NativeUser) -> some View {
@@ -104,58 +84,8 @@ struct ProfileView: View {
                 }
             }
 
-            Section("账号切换") {
-                ForEach(auth.accounts) { account in
-                    Button {
-                        guard account.id != auth.activeAccountID else { return }
-                        switchingAccountID = account.id
-                        Task {
-                            do {
-                                try await auth.switchAccount(to: account.id)
-                            } catch {
-                                accountError = error.localizedDescription
-                            }
-                            switchingAccountID = nil
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            NativeAvatar(
-                                url: URL(string: account.avatarURL ?? ""),
-                                name: account.name,
-                                size: 30
-                            )
-                            Text(account.name)
-                                .foregroundStyle(ShellTheme.primaryText)
-                            Spacer(minLength: 0)
-                            if switchingAccountID == account.id {
-                                ProgressView()
-                            } else if account.id == auth.activeAccountID {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(ShellTheme.accent)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        if account.id != auth.activeAccountID {
-                            Button("移除账号", role: .destructive) {
-                                Task { await auth.removeAccount(account.id) }
-                            }
-                        }
-                    }
-                }
-
-                Button {
-                    Task {
-                        do {
-                            try await auth.addAccount()
-                        } catch {
-                            accountError = error.localizedDescription
-                        }
-                    }
-                } label: {
-                    Label("添加账号", systemImage: "person.badge.plus")
-                }
+            Section("账号与登录") {
+                NativeAccountControls()
             }
 
             Section("我的内容") {

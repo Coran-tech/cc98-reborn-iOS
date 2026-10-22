@@ -6,66 +6,54 @@ final class NativeAppModel: ObservableObject {
     let auth: NativeAuth
     let api: CC98API
 
-    init() {
-        let auth = NativeAuth()
+    init(auth: NativeAuth? = nil, accountContext: NativeAccountContext? = nil) {
+        let auth = auth ?? NativeAuth()
         self.auth = auth
-        self.api = CC98API(auth: auth)
+        self.api = CC98API(auth: auth, accountContext: accountContext)
     }
 }
 
 struct NativeRootView: View {
     @StateObject private var app = NativeAppModel()
-    @StateObject private var library = NativeLibrary()
+
+    var body: some View {
+        NativeRootContent(auth: app.auth)
+            .environmentObject(app)
+    }
+}
+
+private struct NativeRootContent: View {
+    @ObservedObject var auth: NativeAuth
+    @EnvironmentObject private var app: NativeAppModel
     @StateObject private var notifications = NativeNotificationManager()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("native.appearance") private var appearance = "system"
     @State private var selectedTab = 0
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            HomeView()
-                .tag(0)
-                .tabItem { Label("首页", systemImage: "list.bullet.rectangle") }
-            BoardsView()
-                .tag(1)
-                .tabItem { Label("版面", systemImage: "square.grid.2x2") }
-            NewTopicsView()
-                .tag(2)
-                .tabItem { Label("新帖", systemImage: "newspaper") }
-            MessagesView()
-                .tag(3)
-                .tabItem { Label("消息", systemImage: "bubble.left.and.bubble.right") }
-            ProfileView()
-                .tag(4)
-                .tabItem { Label("我的", systemImage: "person.crop.circle") }
+        Group {
+            if auth.state == .unknown {
+                ProgressView("正在恢复本机登录")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                NativeAccountTabs(auth: auth, selectedTab: $selectedTab)
+                    .id(auth.activeAccountID)
+            }
         }
         .tint(ShellTheme.accent)
-        .background(
-            WatermarkInstaller(raw: app.auth.profile?.watermarkId)
-        )
-        .environmentObject(app)
-        .environmentObject(app.auth)
-        .environmentObject(library)
+        .background(WatermarkInstaller(raw: auth.profile?.watermarkId))
+        .environmentObject(auth)
         .preferredColorScheme(preferredColorScheme)
-        .task { @MainActor in await app.auth.restore() }
-        .task {
-            notifications.configure(auth: app.auth, api: app.api)
-        }
+        .task { await auth.restore() }
+        .task { notifications.configure(auth: auth, api: app.api) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                Task { await auth.resume() }
                 notifications.start()
-            } else {
-                notifications.stop()
-            }
+            } else { notifications.stop() }
         }
         .onReceive(notifications.$openMessages) { open in
-            if open {
-                selectedTab = 3
-                notifications.markMessagesOpened()
-            }
-        }
-        .onChange(of: app.auth.profile?.id) { _, accountID in
-            library.setAccount(accountID)
+            if open { selectedTab = 3; notifications.markMessagesOpened() }
         }
     }
 
@@ -78,13 +66,41 @@ struct NativeRootView: View {
     }
 }
 
+@MainActor
+private struct NativeAccountTabs: View {
+    @StateObject private var library: NativeLibrary
+    @StateObject private var app: NativeAppModel
+    @Binding var selectedTab: Int
+
+    init(auth: NativeAuth, selectedTab: Binding<Int>) {
+        _library = StateObject(wrappedValue: NativeLibrary(accountID: auth.activeAccountID))
+        _app = StateObject(wrappedValue: NativeAppModel(auth: auth, accountContext: auth.captureAccountContext()))
+        _selectedTab = selectedTab
+    }
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            HomeView().tag(0).tabItem { Label("首页", systemImage: "list.bullet.rectangle") }
+            BoardsView().tag(1).tabItem { Label("版面", systemImage: "square.grid.2x2") }
+            NewTopicsView().tag(2).tabItem { Label("新帖", systemImage: "newspaper") }
+            MessagesView().tag(3).tabItem { Label("消息", systemImage: "bubble.left.and.bubble.right") }
+            ProfileView().tag(4).tabItem { Label("我的", systemImage: "person.crop.circle") }
+        }
+        // The whole view tree and its local library belong to a fixed UID.
+        // A disappearing editor from A cannot save its draft into B's library.
+        .environmentObject(library)
+        .environmentObject(app)
+    }
+}
+
 struct LoginGateView: View {
     @EnvironmentObject private var auth: NativeAuth
     @State private var busy = false
     @State private var error: String?
 
     var body: some View {
-        VStack(spacing: 16) {
+        ScrollView {
+          VStack(spacing: 16) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.system(size: 46))
                 .foregroundStyle(ShellTheme.accent)
@@ -103,7 +119,10 @@ struct LoginGateView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(ShellTheme.accent)
-            .disabled(busy)
+            .disabled(busy || auth.isBusy)
+            if !auth.accounts.isEmpty {
+                NativeAccountControls().padding(.top, 12)
+            }
             if let error {
                 Text(error)
                     .font(ShellTheme.Fonts.footnote)
@@ -111,7 +130,8 @@ struct LoginGateView: View {
                     .multilineTextAlignment(.center)
             }
         }
-        .padding(28)
+          .padding(28)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ShellTheme.pageBackground)
     }

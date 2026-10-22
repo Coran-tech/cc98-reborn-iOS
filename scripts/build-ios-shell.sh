@@ -11,6 +11,7 @@ elif [[ $# -ne 0 ]]; then
 fi
 BUILD_MODE=full
 OAUTH_PROTOCOL_VALIDATION=not_run
+NATIVE_SESSION_VALIDATION=not_run
 SIMULATOR_VALIDATION=not_run
 DEVICE_PACKAGE=not_produced
 CANDIDATE_NAME=CC98RebornShell-unsigned-device.ipa
@@ -69,6 +70,7 @@ PY
 finish() {
   local status=$?
   if [[ "$OAUTH_PROTOCOL_VALIDATION" == running ]]; then OAUTH_PROTOCOL_VALIDATION=failed_or_incomplete; fi
+  if [[ "$NATIVE_SESSION_VALIDATION" == running ]]; then NATIVE_SESSION_VALIDATION=failed_or_incomplete; fi
   if [[ "$SIMULATOR_VALIDATION" == running ]]; then SIMULATOR_VALIDATION=failed_or_incomplete; fi
   # Installation can fail after compilation. Preserve only the built app's plist,
   # not a simulator data container or any website/session data.
@@ -88,8 +90,8 @@ finish() {
     run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
       --output-path "$ARTIFACTS/screenshots" > "$ARTIFACTS/attachment-export.log" 2>&1 || true
   fi
-  printf 'exit_code=%s\nbuild_mode=%s\noauth_protocol_validation=%s\nsimulator_validation=%s\ndevice_package=%s\n' \
-    "$status" "$BUILD_MODE" "$OAUTH_PROTOCOL_VALIDATION" "$SIMULATOR_VALIDATION" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
+  printf 'exit_code=%s\nbuild_mode=%s\noauth_protocol_validation=%s\nnative_session_validation=%s\nsimulator_validation=%s\ndevice_package=%s\n' \
+    "$status" "$BUILD_MODE" "$OAUTH_PROTOCOL_VALIDATION" "$NATIVE_SESSION_VALIDATION" "$SIMULATOR_VALIDATION" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
   echo "Build evidence: $ARTIFACTS"
   exit "$status"
 }
@@ -140,6 +142,22 @@ run_with_timeout 30 "$RUN_DIR/reborn-oauth-tests" \
   2>&1 | tee "$ARTIFACTS/oauth-protocol-tests.log"
 OAUTH_PROTOCOL_VALIDATION=passed
 # END OAUTH_PROTOCOL_VALIDATION
+
+# BEGIN NATIVE_SESSION_VALIDATION
+# Exercise the native production session coordinator with synthetic accounts,
+# deterministic time and injected transport/storage. Required in both modes.
+echo '=== Production native session tests (macOS, no Simulator) ==='
+NATIVE_SESSION_VALIDATION=running
+MACOSX_DEPLOYMENT_TARGET=12.0 run_with_timeout 120 xcrun --sdk macosx swiftc -D NATIVE_SESSION_HARNESS -parse-as-library \
+  ios/CC98RebornShell/OAuthProtocol.swift \
+  ios/CC98RebornShell/Native/NativeSession.swift \
+  ios/CC98RebornShellTests/NativeSessionHarness.swift \
+  -o "$RUN_DIR/reborn-native-session-tests" \
+  2>&1 | tee "$ARTIFACTS/native-session-compile.log"
+run_with_timeout 60 "$RUN_DIR/reborn-native-session-tests" \
+  2>&1 | tee "$ARTIFACTS/native-session-tests.log"
+NATIVE_SESSION_VALIDATION=passed
+# END NATIVE_SESSION_VALIDATION
 
 # Resources must exist before XcodeGen resolves the folder reference.
 node scripts/package-ios-resources.cjs
@@ -324,7 +342,7 @@ PY
 
 printf '%s is a device candidate, NOT an install-ready signed app.\n' "$CANDIDATE_NAME" > "$ARTIFACTS/README.txt"
 if [[ "$DEVICE_ONLY" == true ]]; then
-  echo 'UNVERIFIED DEVICE-ONLY BUILD: Simulator selection, boot, unit tests and UI tests were NOT run. Successful packaging does not establish app launch or functionality.' >> "$ARTIFACTS/README.txt"
+  echo 'UNVERIFIED DEVICE-ONLY BUILD: Simulator selection, boot and Simulator-hosted unit/UI tests were NOT run. The host-side production OAuth and native session tests passed. Successful packaging does not establish app launch or real-service functionality.' >> "$ARTIFACTS/README.txt"
 else
   echo 'Simulator tests passed. simulator-tests.xcresult and screenshots contain synthetic/offline evidence only.' >> "$ARTIFACTS/README.txt"
 fi
@@ -334,7 +352,7 @@ Self-sign it locally with your chosen signing tool before installing on your iPh
 No Apple account, provisioning profile, forum session or credentials were used by this build.
 Passing cloud tests does not establish school/VPN connectivity, real login or physical-device acceptance.
 TXT
-# Both modes require Node and production OAuth checks, device build and ZIP/platform validation.
+# Both modes require Node, production OAuth/native session checks, device build and ZIP/platform validation.
 # The default mode additionally requires the full Simulator validation above.
 mv "$RUN_DIR/candidate.zip" "$ARTIFACTS/$CANDIDATE_NAME"
 DEVICE_PACKAGE=validated_unsigned

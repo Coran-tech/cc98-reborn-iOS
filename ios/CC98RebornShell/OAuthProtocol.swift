@@ -82,6 +82,15 @@ enum OAuthProtocol {
         }
         return url.url!
     }
+    // Native business sessions need refresh authorization. The legacy webpage
+    // summary-binding flow above deliberately retains its original scope/SSO contract.
+    static func nativeAuthorizationURL(state: String, verifier: String) -> URL {
+        var url = URLComponents(url: authorizationURL(state: state, verifier: verifier), resolvingAgainstBaseURL: false)!
+        url.queryItems = url.queryItems?.filter { $0.name != "scope" }
+        url.queryItems! += [URLQueryItem(name: "scope", value: scopes + " offline_access"),
+                           URLQueryItem(name: "prompt", value: "consent")]
+        return url.url!
+    }
     static func callbackCode(_ url: URL, expectedState: String) throws -> String {
         guard url.absoluteString.split(separator: "?", maxSplits: 1).first.map(String.init) == callback,
               let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), parts.scheme == callbackScheme,

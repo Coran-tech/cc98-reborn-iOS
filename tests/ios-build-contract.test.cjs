@@ -85,6 +85,29 @@ test('both build modes must execute the real production Swift OAuth harness with
   assert.match(script, /oauth_protocol_validation=%s/);
 });
 
+test('both build modes must execute production native session behavior checks', () => {
+  const start = script.indexOf('# BEGIN NATIVE_SESSION_VALIDATION');
+  const end = script.indexOf('# END NATIVE_SESSION_VALIDATION');
+  assert(start > script.indexOf('# END OAUTH_PROTOCOL_VALIDATION'));
+  assert(end > start && end < script.indexOf('# BEGIN FULL_SIMULATOR_VALIDATION'));
+  const session = script.slice(start, end);
+  assert.match(session, /swiftc -D NATIVE_SESSION_HARNESS -parse-as-library/);
+  assert.deepEqual(session.match(/ios\/[^\s]+\.swift/g), [
+    'ios/CC98RebornShell/OAuthProtocol.swift',
+    'ios/CC98RebornShell/Native/NativeSession.swift',
+    'ios/CC98RebornShellTests/NativeSessionHarness.swift',
+  ]);
+  assert.match(session, /run_with_timeout 60 "\$RUN_DIR\/reborn-native-session-tests"/);
+  assert.match(session, /tee "\$ARTIFACTS\/native-session-compile\.log"/);
+  assert.match(session, /tee "\$ARTIFACTS\/native-session-tests\.log"/);
+  assert.doesNotMatch(session, /DEVICE_ONLY|simctl|xcodebuild|\|\| true|if \[\[/);
+  assert(session.indexOf('NATIVE_SESSION_VALIDATION=running') < session.indexOf('swiftc'));
+  assert(session.indexOf('NATIVE_SESSION_VALIDATION=passed') > session.indexOf('run_with_timeout 60'));
+  assert.match(script, /NATIVE_SESSION_VALIDATION=not_run/);
+  assert.match(script, /NATIVE_SESSION_VALIDATION=failed_or_incomplete/);
+  assert.match(script, /native_session_validation=%s/);
+});
+
 test('device-only is explicit, keeps device validation and cannot claim Simulator success', () => {
   assert.match(script, /DEVICE_ONLY=false/);
   assert.match(script, /\[\[ \$# -eq 1 && "\$1" == --device-only \]\]/);

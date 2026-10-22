@@ -61,12 +61,14 @@ final class CC98API {
     static let baseURLString = "https://api.cc98.org"
 
     private let auth: NativeAuth
+    private let accountContext: NativeAccountContext?
     private let session: URLSession
     private let decoder = JSONDecoder()
     private let redirectBlocker = RedirectBlocker()
 
-    init(auth: NativeAuth) {
+    init(auth: NativeAuth, accountContext: NativeAccountContext? = nil) {
         self.auth = auth
+        self.accountContext = accountContext
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
@@ -466,9 +468,9 @@ final class CC98API {
     func clearLike(postID: Int) async throws {
         do {
             try await send("/post/\(postID)/like", method: "DELETE", authenticated: true)
-        } catch {
-            // Some deployments expose cancellation only through the state
-            // endpoint; try 0 as a fallback before surfacing the error.
+        } catch CC98APIError.notFound {
+            // Only an explicit missing endpoint permits this alternate write.
+            // Never replay a write after a timeout, identity change or auth error.
             try await send(
                 "/post/\(postID)/like",
                 method: "PUT",
@@ -681,8 +683,7 @@ final class CC98API {
         method: String = "GET",
         body: Data? = nil,
         contentType: String? = nil,
-        authenticated: Bool,
-        allowRetry: Bool = true
+        authenticated: Bool
     ) async throws -> Data {
         guard path.hasPrefix("/"), !path.contains("://"), !path.contains("..") else {
             throw CC98APIError.invalidURL
@@ -700,53 +701,40 @@ final class CC98API {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("CC98Reborn/1.0 (iOS)", forHTTPHeaderField: "User-Agent")
 
-        let token: String?
-        do {
-            token = authenticated ? try await auth.validAccessToken() : await auth.optionalAccessToken()
-        } catch {
-            throw CC98APIError.unauthorized
-        }
-        if let token {
-            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
-        }
-
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else { throw CC98APIError.transport }
-            switch http.statusCode {
-            case 200..<300:
-                return data
-            case 401:
-                if allowRetry, token != nil {
-                    do {
-                        try await auth.refreshIfPossible()
-                        return try await self.data(
-                            path: path,
-                            query: query,
-                            method: method,
-                            body: body,
-                            contentType: contentType,
-                            authenticated: authenticated,
-                            allowRetry: false
-                        )
-                    } catch {
-                        throw CC98APIError.unauthorized
-                    }
-                }
-                throw CC98APIError.unauthorized
-            case 403:
-                throw CC98APIError.forbidden
-            case 404:
-                throw CC98APIError.notFound
-            default:
-                let message = (try? decoder.decode(NativeAPIErrorBody.self, from: data))?.message
-                throw CC98APIError.server(http.statusCode, message)
+        // Capture one identity for the entire request/recovery cycle. A late 401
+        // from A may neither refresh B nor replay a submission as B.
+        var authorization = try await auth.requestAuthorization(required: authenticated, accountContext: accountContext)
+        for attempt in 0...1 {
+            try await auth.validate(authorization)
+            if let token = authorization.accessToken {
+                request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
             }
-        } catch let error as CC98APIError {
-            throw error
-        } catch {
-            throw CC98APIError.transport
+            do {
+                let (data, response) = try await session.data(for: request)
+                try await auth.validate(authorization)
+                guard let http = response as? HTTPURLResponse else { throw CC98APIError.transport }
+                switch http.statusCode {
+                case 200..<300: return data
+                case 401:
+                    if attempt == 0, authorization.accessToken != nil {
+                        authorization = try await auth.recoverAuthorization(authorization)
+                        // 401 is a definite rejection. Only this response permits
+                        // replay; transport failures and unknown write outcomes do not.
+                        continue
+                    }
+                    throw CC98APIError.unauthorized
+                case 403: throw CC98APIError.forbidden
+                case 404: throw CC98APIError.notFound
+                default:
+                    let message = (try? decoder.decode(NativeAPIErrorBody.self, from: data))?.message
+                    throw CC98APIError.server(http.statusCode, message)
+                }
+            } catch let error as NativeAuthError { throw error }
+            catch let error as CC98APIError { throw error }
+            catch is CancellationError { throw CancellationError() }
+            catch { throw CC98APIError.transport }
         }
+        throw CC98APIError.unauthorized
     }
 
     private func json(_ object: [String: Any]) throws -> Data {

@@ -1,13 +1,6 @@
 import Foundation
 import Security
 
-struct NativeTokenSet: Codable {
-    var accessToken: String
-    var refreshToken: String?
-    var expiresAt: Date
-    var scope: String?
-}
-
 enum NativeTokenStoreError: LocalizedError {
     case keychain(OSStatus)
     case encoding
@@ -21,26 +14,30 @@ enum NativeTokenStoreError: LocalizedError {
 }
 
 // Each account gets its own keychain item. Passwords are never stored.
-final class NativeTokenStore {
+final class NativeTokenStore: NativeTokenStorage {
     static let shared = NativeTokenStore()
 
     private let service = "org.cc98.reborn.shell.native"
     private let legacyAccount = "oauth-token"
 
-    func load(accountID: Int) -> NativeTokenSet? {
-        load(account: "oauth-token.\(accountID)")
+    func load(accountID: Int) throws -> NativeTokenSet? {
+        try load(account: accountID == 0 ? legacyAccount : "oauth-token.\(accountID)")
     }
 
     func save(_ tokens: NativeTokenSet, accountID: Int) throws {
-        try save(tokens, account: "oauth-token.\(accountID)")
+        try save(tokens, account: accountID == 0 ? legacyAccount : "oauth-token.\(accountID)")
     }
 
     func clear(accountID: Int) {
-        clear(account: "oauth-token.\(accountID)")
+        clear(account: accountID == 0 ? legacyAccount : "oauth-token.\(accountID)")
     }
 
-    func loadLegacy() -> NativeTokenSet? {
-        load(account: legacyAccount)
+    func loadLegacy() throws -> NativeTokenSet? {
+        try load(account: legacyAccount)
+    }
+
+    func saveLegacy(_ tokens: NativeTokenSet) throws {
+        try save(tokens, account: legacyAccount)
     }
 
     func clearLegacy() {
@@ -54,14 +51,16 @@ final class NativeTokenStore {
         ] as CFDictionary)
     }
 
-    private func load(account: String) -> NativeTokenSet? {
+    private func load(account: String) throws -> NativeTokenSet? {
         var query = baseQuery(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
-        return try? JSONDecoder().decode(NativeTokenSet.self, from: data)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = item as? Data else { throw NativeTokenStoreError.keychain(status) }
+        do { return try JSONDecoder().decode(NativeTokenSet.self, from: data) }
+        catch { throw NativeTokenStoreError.encoding }
     }
 
     private func save(_ tokens: NativeTokenSet, account: String) throws {

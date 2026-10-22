@@ -59,13 +59,14 @@ final class NativeLibrary: ObservableObject {
     private let directory: URL
     private var accountID: Int?
 
-    init() {
+    init(accountID: Int? = nil) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let directory = support.appendingPathComponent("CC98Reborn", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         self.directory = directory
-        self.fileURL = directory.appendingPathComponent("library.json")
+        self.accountID = accountID
+        self.fileURL = directory.appendingPathComponent(accountID.map { "library-\($0).json" } ?? "library.json")
         load()
     }
 

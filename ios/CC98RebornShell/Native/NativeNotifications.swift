@@ -48,11 +48,14 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
 
     private func poll() async {
         guard let api, let accountID = auth?.profile?.id else { return }
+        let accountContext = auth?.captureAccountContext()
         if lastAccountID != accountID {
             lastAccountID = accountID
             lastCounts = nil
         }
         guard let counts = try? await api.messageCounts() else { return }
+        guard auth?.captureAccountContext() == accountContext,
+              auth?.profile?.id == accountID else { return }
 
         if let lastCounts {
             postIfIncreased(lastCounts.replyCount, counts.replyCount, title: "新回复", identifier: "reply")
