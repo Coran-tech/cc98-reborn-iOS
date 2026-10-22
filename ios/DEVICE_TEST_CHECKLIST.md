@@ -2,6 +2,8 @@
 
 目标设备：**iPhone 16 Pro / iOS 26.5.2**，App 最低支持 iOS 17。本轮验证分支为 `codex/ios-long-session`，以原生五栏界面为准。
 
+当前候选：**0.3.0 / Build 82**，源码 `0480d8f`，[云构建 39765933412](https://github.com/Coran-tech/cc98-reborn-iOS/actions/runs/39765933412)。2026-10-22 已通过生产会话 109 项、旧 OAuth 60 项、Node 31 项检查，以及设备编译和包校验；下表真实服务与真机状态仍待填写。
+
 本轮 `device_only` 云构建会检查生产 Swift 授权／会话逻辑、设备编译和 IPA 包结构，不运行原生 UI 模拟器验收。以下各项仍需真机记录；旧网页壳 Build 8 的“安装成功、功能正常”反馈不能代替这些结果。
 
 ## 安装与准备

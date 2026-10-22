@@ -6,6 +6,8 @@
 
 ## 安装本轮候选包
 
+**已生成 0.3.0 / Build 82**：[2026-10-22 成功构建与下载](https://github.com/Coran-tech/cc98-reborn-iOS/actions/runs/39765933412)，源码提交 `0480d8f`。109 项生产原生会话检查、60 项旧 OAuth 检查和 31 项 Node 检查通过，iPhoneOS arm64 编译及 IPA 校验通过。尚未完成本版真实 CC98 授权、跨有效期续期与原生 UI 真机验收。
+
 1. 打开 [GitHub Actions](https://github.com/Coran-tech/cc98-reborn-iOS/actions/workflows/ios-shell.yml)，选择 `codex/ios-long-session` 分支的成功构建。
 2. 下载 `ios-shell-运行编号-尝试次数` artifact。本轮使用 `device_only`，设备候选为 `CC98RebornShell-unsigned-unverified-device.ipa`。同包的 `build-status.txt` 和测试日志记录实际完成的检查。
 3. 沿用已成功使用的 Windows 自签方式签名并安装。Apple Account、密码、验证码只在你信任的签名工具中输入，不交给聊天或云构建。
@@ -55,6 +57,8 @@ bash scripts/build-ios-shell.sh --device-only
 不带 `--device-only` 的旧完整流程还会运行 Simulator 测试；其中 UI smoke 仍针对旧网页壳，需要另行迁移后才能用于当前原生界面验收。本轮不会把跳过该测试记为通过。
 
 GitHub 工作流支持手动触发，自动触发仍限于原有 `codex/ios-verification-shell` 分支。新分支不自动发布 Release、上传 TestFlight 或修改默认／DeepSeek 分支。构建不使用 Apple 分发凭据或学校 VPN。
+
+现有 AppIcon 资源仍有未分配图片及缺失尺寸警告；本轮未调整图标，真机安装后需检查显示。它不影响本次 Swift 会话检查通过，但正式分发前需完善资源配置。
 
 ## 数据与更新
 
