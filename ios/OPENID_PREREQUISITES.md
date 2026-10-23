@@ -55,6 +55,8 @@ org.cc98.reborn.shell:/oauth/callback
 5. 收到轮换凭证后，先保存新值再发布续期成功；迟到响应不能覆盖切换后账号或已更新凭据。刷新令牌轮换用于保护长期会话。[OAuth 安全要求](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.14)
 6. 网络错误保留凭据，恢复网络后重试；明确失效只要求对应账号重新授权，不删除该账号草稿、不切换身份代交业务请求。提交结果未知时不自动重发。
 
+当前账号重新授权尝试复用系统 CC98 登录会话；添加或授权其他账号使用隔离窗口。若系统已登录错误账号，可从账号菜单选择“重新输入账号”。两种方式都先核对 `/me` 的 UID 再采用凭据，站方所需的授权确认仍保留。[Apple 系统授权会话](https://developer.apple.com/documentation/authenticationservices/aswebauthenticationsession/prefersephemeralwebbrowsersession)
+
 旧账号可能只有访问令牌。它在有效期内仍可使用；要继续长期使用，需完成一次新的授权取得刷新凭证。新授权也可能受服务器策略限制而未取得刷新凭证，应显示实际状态，不能宣称已经启用永久登录。
 
 Keychain 仅属于当前设备与允许访问它的 App 身份。App 自签到期不等于 CC98 授权失效；重签换身份或卸载造成的数据／钥匙串访问变化，也不能用修改 token 解决。

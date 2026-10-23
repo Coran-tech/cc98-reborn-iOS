@@ -123,15 +123,21 @@ enum NativeUITestFixture {
                 return try json(object)
             }
             if parts.last == "post" {
-                return try json(page((1...15).map { floor -> [String: Any] in
-                    ["id": 92000 + floor, "topicId": id, "boardId": 182, "floor": floor,
-                     "content": floor == 1
-                        ? "最近的校园很适合散步。傍晚从图书馆出发，沿着湖边走一圈，风吹过树叶的声音很好听。\n\n[b]想收集一些大家喜欢的路线[/b]\n不必是热门地点，只要是让你觉得舒服的一小段路。也欢迎分享适合拍照的时间。\n\n[quote]生活里的小事，也值得被认真记录。[/quote]\n\n这是离线界面测试内容，不会发送到论坛。"
-                        : "第 \(floor) 楼：我推荐沿着湖边慢慢走。长一点的回复也应该保留舒适的行距，让中文段落在小屏幕上依然容易阅读。",
-                     "contentType": 0, "userId": floor == 2 ? userID : userID + 1,
-                     "userName": floor == 2 ? "林间风" : "晚风", "isLZ": floor == 1, "isAnonymous": false,
-                     "time": "2026-10-22T17:10:00+08:00", "likeCount": 12, "dislikeCount": 0, "likeState": 0]
-                }))
+                let postObjects: [[String: Any]] = (1...15).map { floor in
+                    let content: String
+                    if floor == 1 {
+                        content = "最近的校园很适合散步。傍晚从图书馆出发，沿着湖边走一圈，风吹过树叶的声音很好听。\n\n[b]想收集一些大家喜欢的路线[/b]\n不必是热门地点，只要是让你觉得舒服的一小段路。也欢迎分享适合拍照的时间。\n\n[quote]生活里的小事，也值得被认真记录。[/quote]\n\n这是离线界面测试内容，不会发送到论坛。"
+                    } else {
+                        content = "第 \(floor) 楼：我推荐沿着湖边慢慢走。长一点的回复也应该保留舒适的行距，让中文段落在小屏幕上依然容易阅读。"
+                    }
+                    let authorID = floor == 2 ? userID : userID + 1
+                    let authorName = floor == 2 ? "林间风" : "晚风"
+                    return ["id": 92000 + floor, "topicId": id, "boardId": 182, "floor": floor,
+                            "content": content, "contentType": 0, "userId": authorID,
+                            "userName": authorName, "isLZ": floor == 1, "isAnonymous": false,
+                            "time": "2026-10-22T17:10:00+08:00", "likeCount": 12, "dislikeCount": 0, "likeState": 0]
+                }
+                return try json(page(postObjects))
             }
             if parts.last == "hot-post" { return try json([]) }
             if parts.last == "isfavorite" { return Data("false".utf8) }
