@@ -237,8 +237,27 @@ if [[ "$SIMULATOR_STATE" != Booted ]]; then
 else
   echo 'Selected Simulator is already booted.' | tee "$ARTIFACTS/simulator-boot.log"
 fi
-run_with_timeout 180 xcrun simctl bootstatus "$SIMULATOR_UDID" -b 2>&1 | tee "$ARTIFACTS/simulator-bootstatus.log"
-# bootstatus is the readiness gate. A post-boot inventory is diagnostic only:
+if run_with_timeout 180 xcrun simctl bootstatus "$SIMULATOR_UDID" -b 2>&1 | tee "$ARTIFACTS/simulator-bootstatus.log"; then
+  echo 'Simulator bootstatus completed.'
+else
+  boot_status=$?
+  # Run 39907722798: bootstatus hung while this exact device was already Booted.
+  # Only a watchdog timeout may continue, after a fresh identity/state check.
+  # xcodebuild must still launch the app and pass every unit and UI test below.
+  [[ "$boot_status" -eq 124 ]] || exit "$boot_status"
+  run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulator-boot-timeout-state.json"
+# BEGIN BOOT_TIMEOUT_STATE
+python3 - "$SIMULATOR_UDID" "$ARTIFACTS/simulator-boot-timeout-state.json" <<'PY'
+import json, sys
+with open(sys.argv[2]) as source:
+    groups = json.load(source)["devices"]
+matches = [device for devices in groups.values() for device in devices if device.get("udid") == sys.argv[1]]
+assert len(matches) == 1 and matches[0].get("isAvailable") and matches[0].get("state") == "Booted", "Timed-out bootstatus requires the selected Simulator to be available and Booted"
+print("Bootstatus timed out with selected device Booted; proceeding to actual app tests.")
+PY
+# END BOOT_TIMEOUT_STATE
+fi
+# Actual tests remain the readiness gate. A post-boot inventory is diagnostic only:
 # run 39904036590 finished boot, then this inventory hung for 30 seconds.
 if ! run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulator-devices-after-boot.json" 2> "$ARTIFACTS/simulator-devices-after-boot.log"; then
   echo 'Post-boot inventory timed out; continuing to the actual Simulator tests.'

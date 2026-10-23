@@ -367,6 +367,7 @@ struct NewTopicComposer: View {
 
     private var composerScreen: some View {
         ScrollView { composerContents }
+        .accessibilityIdentifier("compose.scroll")
         .scrollDismissesKeyboard(.interactively)
         .background(ShellTheme.pageBackground)
         .navigationTitle(isVote ? "发表投票" : "发表主题")

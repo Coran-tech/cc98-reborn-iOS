@@ -242,6 +242,35 @@ print("5 Simulator selection cases passed")
   assert.match(result.stdout, /5 Simulator selection cases passed/);
 });
 
+test('bootstatus timeout recovery requires the same available Booted device', () => {
+  const match = script.match(/# BEGIN BOOT_TIMEOUT_STATE\npython3[^\n]*\n([\s\S]*?)\nPY\n# END BOOT_TIMEOUT_STATE/);
+  assert(match);
+  assert.match(script, /\[\[ "\$boot_status" -eq 124 \]\] \|\| exit "\$boot_status"/);
+  const harness = String.raw`
+import contextlib, io, json, os, sys, tempfile
+source = sys.stdin.read()
+with tempfile.TemporaryDirectory() as folder:
+    path = os.path.join(folder,"devices.json")
+    for mode in ("booted", "shutdown", "booting", "unavailable", "wrong-device", "duplicate"):
+        device = {"udid":"selected","isAvailable":True,"state":"Booted"}
+        if mode in ("shutdown", "booting"): device["state"] = mode.title()
+        if mode == "unavailable": device["isAvailable"] = False
+        if mode == "wrong-device": device["udid"] = "other"
+        devices = [device, dict(device)] if mode == "duplicate" else [device]
+        json.dump({"devices":{"runtime":devices}},open(path,"w"))
+        sys.argv = ["check","selected",path]
+        passed = True
+        try:
+            with contextlib.redirect_stdout(io.StringIO()): exec(source,{"__name__":"__main__"})
+        except AssertionError: passed = False
+        assert passed == (mode == "booted"), mode
+print("6 boot timeout state cases passed")
+`;
+  const result = spawnSync(pythonCommand(), ['-c', harness], { input: match[1], encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /6 boot timeout state cases passed/);
+});
+
 test('watchdog preserves exits and terminates only its owned group on timeout', () => {
   const match = script.match(/run_with_timeout\(\) \{\n[^\n]*\n  python3[^\n]*\n([\s\S]*?)\nPY\n\}/);
   assert(match);

@@ -65,7 +65,7 @@ final class ShellSmokeTests: XCTestCase {
         title.typeText("Offline draft")
         screenshot("07b-new-topic-keyboard")
         // Move the lower draft controls above the keyboard before opening the menu.
-        app.scrollViews.firstMatch.swipeUp()
+        app.scrollViews["compose.scroll"].swipeUp()
         for _ in 0..<4 where !element("compose.draft", in: app).isHittable { app.swipeUp() }
         tap("compose.draft", in: app)
         let save = app.buttons["保存当前草稿"]
