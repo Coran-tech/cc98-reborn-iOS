@@ -1,0 +1,11 @@
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+__pycache__/
+.venv/
+.edge-profile*/
+.tooling/

@@ -1,0 +1,131 @@
+name: TapSound iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - deepseek/tapsound
+      - deepseek/ios-agent-workspace
+    paths:
+      - 'ios/TapSound/**'
+      - '.github/workflows/tapsound-ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tapsound-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned TapSound
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Prepare build directory
+        run: mkdir -p build
+
+      - name: Record toolchain
+        run: |
+          set -o pipefail
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "ref=${GITHUB_REF}"
+            echo "run=${GITHUB_RUN_ID}"
+            echo "date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            xcodebuild -version
+          } | tee build/build-status.txt
+
+      - name: Validate project structure
+        run: |
+          set -o pipefail
+          python3 ios/TapSound/scripts/validate_project.py | tee build/static-validation.log
+          python3 -m py_compile ios/TapSound/scripts/*.py
+
+      - name: Build simulator app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ios/TapSound/TapSound.xcodeproj \
+            -scheme TapSound \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/simulator \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee build/simulator.log
+          test -d build/simulator/Build/Products/Debug-iphonesimulator/TapSound.app
+
+      - name: Package simulator app
+        run: |
+          set -o pipefail
+          ditto -c -k --norsrc --keepParent \
+            build/simulator/Build/Products/Debug-iphonesimulator/TapSound.app \
+            build/TapSound-simulator.zip
+
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ios/TapSound/TapSound.xcodeproj \
+            -scheme TapSound \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/device \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build/device.log
+          test -d build/device/Build/Products/Release-iphoneos/TapSound.app
+
+      - name: Package unsigned IPA
+        run: |
+          set -o pipefail
+          mkdir -p build/staging/Payload
+          ditto build/device/Build/Products/Release-iphoneos/TapSound.app \
+            build/staging/Payload/TapSound.app
+          ditto -c -k --norsrc --keepParent build/staging/Payload build/TapSound-unsigned.ipa
+          test ! -d build/staging/Payload/TapSound.app/_CodeSignature
+          python3 ios/TapSound/scripts/validate_ipa.py build/TapSound-unsigned.ipa \
+            | tee build/ipa-validation.json
+
+      - name: Add artifact notes
+        if: always()
+        run: |
+          {
+            echo "TapSound cloud build"
+            echo "Commit: $(git rev-parse HEAD)"
+            echo "This IPA is unsigned and not install-ready."
+            echo "Self-sign it locally with your chosen tool before installing."
+          } > build/README.txt
+          ls -lh build || true
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TapSound-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/TapSound-unsigned.ipa
+            build/TapSound-simulator.zip
+            build/build-status.txt
+            build/README.txt
+            build/static-validation.log
+            build/ipa-validation.json
+            build/simulator.log
+            build/device.log
+          if-no-files-found: warn
+          retention-days: 14
