@@ -6,10 +6,10 @@
 
 ## 安装本轮候选包
 
-当前 UI 候选版本为 **0.4.0 / Build 94**，分支 `codex/ios-mobile-ui`，源码 `613369f`。[设备构建已成功](https://github.com/Coran-tech/cc98-reborn-iOS/actions/runs/39917812876)：OAuth 60 项、原生会话 129 项、本机库 77 项行为检查及 iPhoneOS arm64 打包校验通过。此包采用 `device-only` 路径，**尚未完成模拟器界面验收**；完整验证仍在推进。
+当前版本为 **0.4.0 / Build 100**，分支 `codex/ios-mobile-ui`，源码 `fb69ab9`。[完整构建已成功（第 2 次运行）](https://github.com/Coran-tech/cc98-reborn-iOS/actions/runs/39932712005/attempts/2)：OAuth 60 项、原生会话 129 项、本机库 77 项行为检查、8 条原生 UI 流程及 iPhoneOS arm64 打包校验通过。模拟器单元测试保留并单列旧网页壳的已知 iframe 兼容限制，详情见下文。
 
-1. 打开上述 Build 94 构建。
-2. 下载轻量 artifact `ios-candidate-39917812876-1`，取出 `CC98RebornShell-unsigned-unverified-device.ipa`；同包 `build-status.txt` 明确记录模拟器未运行。
+1. 打开上述 Build 100 构建，选择第 2 次运行。
+2. 下载轻量 artifact `ios-candidate-39932712005-2`，取出 `CC98RebornShell-unsigned-device.ipa`；同包包含构建状态与设备包校验结果。
 3. 沿用已成功使用的 Windows 自签方式签名并安装。Apple Account、密码、验证码只在你信任的签名工具中输入。
 4. 保持原签名身份和 Bundle ID，优先覆盖安装，不先卸载含有草稿的版本。Keychain 访问权限受重签方式影响，不保证跨签名身份迁移。
 5. 连接校网／VPN，在“我的”核对账号，再按 [真机验证清单](DEVICE_TEST_CHECKLIST.md) 检查中文输入、上传、恢复和续期。
@@ -61,7 +61,7 @@ node --test tests/ios-*.test.cjs
 node scripts/package-ios-resources.cjs
 ```
 
-Windows 本地检查不编译 iOS SDK。macOS 使用仓库锁定的 Xcode 和 XcodeGen，通过同一脚本生成工程与设备包：
+Windows 本地检查不编译 iOS SDK。云端使用标准 Apple Silicon `macos-26`、固定 Xcode 26.6（17F113）及 XcodeGen 2.46.0；模拟器为 iPhone 17 Pro / iOS 26.5。通过同一脚本生成工程与设备包：
 
 ```sh
 bash scripts/build-ios-shell.sh
