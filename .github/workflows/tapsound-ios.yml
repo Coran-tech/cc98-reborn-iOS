@@ -7,7 +7,9 @@ on:
       - deepseek/tapsound
       - deepseek/ios-agent-workspace
     paths:
-      - 'ios/TapSound/**'
+      - 'ios/TapSound/TapSound/**'
+      - 'ios/TapSound/TapSound.xcodeproj/**'
+      - 'ios/TapSound/scripts/**'
       - '.github/workflows/tapsound-ios.yml'
 
 permissions:

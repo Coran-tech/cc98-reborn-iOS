@@ -27,7 +27,7 @@
 
 仓库已加入 GitHub Actions 工作流 [tapsound-ios.yml](../../.github/workflows/tapsound-ios.yml)：
 
-- 触发：推送到 `deepseek/tapsound` / `deepseek/ios-agent-workspace` 且改动 `ios/TapSound/**`，或手动运行。
+- 触发：推送到 `deepseek/tapsound` / `deepseek/ios-agent-workspace` 且改动 App、工程或校验脚本；工作流合并到默认分支后也可在 Actions 页面手动运行。
 - 构建：模拟器版 + 无签名 iPhoneOS arm64 版。
 - 产物：`TapSound-unsigned.ipa`、`TapSound-simulator.zip`、构建日志。
 - 构建页：<https://github.com/Coran-tech/cc98-reborn-iOS/actions/workflows/tapsound-ios.yml>
