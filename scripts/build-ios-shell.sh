@@ -204,8 +204,10 @@ xcodebuild -showBuildSettings -json \
 SIMULATOR_DESTINATION="${SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=26.0.1}"
 printf '%s\n' "$SIMULATOR_DESTINATION" | tee "$ARTIFACTS/simulator-destination.txt"
 echo '=== Simulator inventory and exact device selection ==='
-run_with_timeout 30 xcrun simctl list runtimes --json > "$ARTIFACTS/simulator-runtimes.json"
-run_with_timeout 30 xcrun simctl list devices available --json > "$ARTIFACTS/simulator-devices-before-boot.json"
+# A fresh runner may spend over 30s starting CoreSimulator before returning its
+# first inventory (observed in run 39904485698). Keep a finite cold-start bound.
+run_with_timeout 120 xcrun simctl list runtimes --json > "$ARTIFACTS/simulator-runtimes.json"
+run_with_timeout 120 xcrun simctl list devices available --json > "$ARTIFACTS/simulator-devices-before-boot.json"
 # BEGIN SIMULATOR_SELECTOR
 python3 - "$SIMULATOR_DESTINATION" "$ARTIFACTS/simulator-runtimes.json" "$ARTIFACTS/simulator-devices-before-boot.json" <<'PY' | tee "$ARTIFACTS/selected-simulator.json"
 import json, sys, uuid
