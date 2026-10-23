@@ -56,6 +56,7 @@ struct UBBTextEditor: UIViewRepresentable {
         textView.text = text
         textView.selectedRange = clamped(selection, in: text)
         controller.attach(textView, text: $text, selection: $selection)
+        context.coordinator.installKeyboardToolbar(on: textView)
         return textView
     }
 
@@ -63,6 +64,7 @@ struct UBBTextEditor: UIViewRepresentable {
         context.coordinator.parent = self
         controller.attach(textView, text: $text, selection: $selection)
         updateFont(of: textView)
+        context.coordinator.updateKeyboardToolbar(for: textView)
         // A SwiftUI refresh must not replace the IME's unfinished composition.
         guard textView.markedTextRange == nil else { return }
         if textView.text != text {
@@ -100,9 +102,39 @@ struct UBBTextEditor: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: UBBTextEditor
+        private var keyboardToolbar: UIToolbar?
+        private var dismissKeyboardItem: UIBarButtonItem?
 
         init(parent: UBBTextEditor) {
             self.parent = parent
+        }
+
+        func installKeyboardToolbar(on textView: UITextView) {
+            let toolbar = UIToolbar()
+            toolbar.sizeToFit()
+            toolbar.autoresizingMask = [.flexibleWidth]
+            let button = UIBarButtonItem(title: "收起键盘", style: .done,
+                                         target: self, action: #selector(dismissKeyboard))
+            button.accessibilityIdentifier = "compose.dismissKeyboard"
+            toolbar.items = [UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil), button]
+            keyboardToolbar = toolbar
+            dismissKeyboardItem = button
+            updateKeyboardToolbar(for: textView)
+            textView.inputAccessoryView = toolbar
+        }
+
+        func updateKeyboardToolbar(for textView: UITextView) {
+            guard let toolbar = keyboardToolbar, let font = textView.font else { return }
+            let height = max(44, ceil(font.lineHeight) + 16)
+            let heightChanged = toolbar.frame.height != height
+            toolbar.frame.size.height = height
+            toolbar.tintColor = UIColor(ShellTheme.accent)
+            dismissKeyboardItem?.setTitleTextAttributes([.font: font], for: .normal)
+            if heightChanged && textView.isFirstResponder { textView.reloadInputViews() }
+        }
+
+        @objc private func dismissKeyboard() {
+            parent.controller.dismissKeyboard()
         }
 
         func textViewDidChange(_ textView: UITextView) {

@@ -14,6 +14,7 @@ OAUTH_PROTOCOL_VALIDATION=not_run
 NATIVE_SESSION_VALIDATION=not_run
 NATIVE_LIBRARY_VALIDATION=not_run
 SIMULATOR_VALIDATION=not_run
+LEGACY_FILTER_COMPATIBILITY=not_run
 DEVICE_PACKAGE=not_produced
 CANDIDATE_NAME=CC98RebornShell-unsigned-device.ipa
 if [[ "$DEVICE_ONLY" == true ]]; then
@@ -92,8 +93,8 @@ finish() {
     run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
       --output-path "$ARTIFACTS/screenshots" > "$ARTIFACTS/attachment-export.log" 2>&1 || true
   fi
-  printf 'exit_code=%s\nbuild_mode=%s\noauth_protocol_validation=%s\nnative_session_validation=%s\nnative_library_validation=%s\nsimulator_validation=%s\ndevice_package=%s\n' \
-    "$status" "$BUILD_MODE" "$OAUTH_PROTOCOL_VALIDATION" "$NATIVE_SESSION_VALIDATION" "$NATIVE_LIBRARY_VALIDATION" "$SIMULATOR_VALIDATION" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
+  printf 'exit_code=%s\nbuild_mode=%s\noauth_protocol_validation=%s\nnative_session_validation=%s\nnative_library_validation=%s\nsimulator_validation=%s\nlegacy_filter_compatibility=%s\ndevice_package=%s\n' \
+    "$status" "$BUILD_MODE" "$OAUTH_PROTOCOL_VALIDATION" "$NATIVE_SESSION_VALIDATION" "$NATIVE_LIBRARY_VALIDATION" "$SIMULATOR_VALIDATION" "$LEGACY_FILTER_COMPATIBILITY" "$DEVICE_PACKAGE" > "$ARTIFACTS/build-status.txt"
   echo "Build evidence: $ARTIFACTS"
   exit "$status"
 }
@@ -282,6 +283,21 @@ SIMULATOR_VALIDATION=passed
 run_with_timeout 60 xcrun xcresulttool export attachments --path "$TEST_RESULTS" \
   --output-path "$ARTIFACTS/screenshots" \
   2>&1 | tee "$ARTIFACTS/attachment-export.log"
+LEGACY_FILTER_COMPATIBILITY="$(python3 - "$ARTIFACTS/screenshots" <<'PY'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+manifest = json.loads((root / "manifest.json").read_text())
+files = [a["exportedFileName"] for test in manifest for a in test["attachments"] if a.get("suggestedHumanReadableName", "").startswith("filter-worker-transport-result")]
+assert len(files) == 1, "Expected the legacy WebKit capability evidence"
+capability = json.loads((root / files[0]).read_text())["capability"]
+assert capability in ("supported", "known-unsupported-mixed-content"), "Unexpected legacy capability result"
+print(capability)
+PY
+)"
+if [[ "$LEGACY_FILTER_COMPATIBILITY" == known-unsupported-mixed-content ]]; then
+  SIMULATOR_VALIDATION=passed_native_known_legacy_filter_limitation
+  echo 'Native tests passed; retained legacy HTTPS-to-local-iframe transport is unsupported by WebKit. See its explicit expected failure and JSON evidence.'
+fi
 else
   echo '=== DEVICE-ONLY: Simulator selection, boot and tests explicitly skipped; candidate remains unverified ==='
 fi
@@ -387,7 +403,10 @@ printf '%s is a device candidate, NOT an install-ready signed app.\n' "$CANDIDAT
 if [[ "$DEVICE_ONLY" == true ]]; then
   echo 'UNVERIFIED DEVICE-ONLY BUILD: Simulator selection, boot and Simulator-hosted unit/UI tests were NOT run. The host-side production OAuth, native session and native library tests passed. Successful packaging does not establish app launch or real-service functionality.' >> "$ARTIFACTS/README.txt"
 else
-  echo 'Simulator tests passed. simulator-tests.xcresult and screenshots contain synthetic/offline evidence only.' >> "$ARTIFACTS/README.txt"
+  echo 'Native Simulator tests passed. simulator-tests.xcresult and screenshots contain synthetic/offline evidence only.' >> "$ARTIFACTS/README.txt"
+  if [[ "$LEGACY_FILTER_COMPATIBILITY" == known-unsupported-mixed-content ]]; then
+    echo 'KNOWN LEGACY LIMITATION: WebKit blocks the old HTTPS-to-local-iframe filter transport. That retained test records an expected failure, not working compatibility. The current native app does not use this transport.' >> "$ARTIFACTS/README.txt"
+  fi
 fi
 cat >> "$ARTIFACTS/README.txt" <<'TXT'
 It contains Payload/CC98RebornShell.app built for iPhoneOS arm64, minimum iOS 17.0.

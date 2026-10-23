@@ -24,10 +24,12 @@ enum NativePostingError {
 }
 
 struct ComposerKeyboardToolbar: ToolbarContent {
+    let editor: UBBEditorController
+
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .keyboard) {
             Spacer()
-            Button("收起键盘") { Self.dismissKeyboard() }
+            Button("收起键盘") { editor.dismissKeyboard(); Self.dismissKeyboard() }
                 .accessibilityIdentifier("compose.dismissKeyboard")
         }
     }
@@ -265,6 +267,8 @@ private struct NativeTopicDraftSnapshot: Equatable {
 }
 
 struct NewTopicComposer: View {
+    private enum FocusedField: Hashable { case title, voteOption(Int) }
+
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
     @EnvironmentObject private var library: NativeLibrary
@@ -305,7 +309,7 @@ struct NewTopicComposer: View {
     @State private var published = false
     @State private var showMentionWarning = false
     @State private var errorMessage: String? = nil
-    @FocusState private var focused: Bool
+    @FocusState private var focused: FocusedField?
 
     private var draftPrefix: String { isVote ? "newvote" : "newtopic" }
     private var titleKey: String { "\(draftPrefix).title:\(boardID)" }
@@ -387,7 +391,7 @@ struct NewTopicComposer: View {
         .navigationTitle(isVote ? "发表投票" : "发表主题")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ComposerKeyboardToolbar()
+            if focused != nil { ComposerKeyboardToolbar(editor: editor) }
             ToolbarItem(placement: .cancellationAction) {
                 Button("取消") { if hasInput { showExit = true } else { dismiss() } }
                     .frame(minHeight: 44)
@@ -449,9 +453,9 @@ struct NewTopicComposer: View {
             .font(ShellTheme.Fonts.body)
             .accessibilityIdentifier("compose.title")
             .textFieldStyle(.roundedBorder)
-            .focused($focused)
+            .focused($focused, equals: .title)
             .submitLabel(.done)
-            .onSubmit { ComposerKeyboardToolbar.dismissKeyboard() }
+            .onSubmit { editor.dismissKeyboard(); ComposerKeyboardToolbar.dismissKeyboard() }
     }
 
     @ViewBuilder
@@ -507,6 +511,7 @@ struct NewTopicComposer: View {
                 HStack {
                     TextField("选项 \(index + 1)", text: $voteItems[index])
                         .textFieldStyle(.roundedBorder)
+                        .focused($focused, equals: .voteOption(index))
                     if voteItems.count > 2 {
                         Button {
                             voteItems.remove(at: index)
@@ -831,6 +836,7 @@ struct EditPostComposer: View {
     @State private var showClear = false
     @State private var draftStatus = ""
     @State private var errorMessage: String? = nil
+    @FocusState private var titleFocused: Bool
 
     private var titleKey: String { "edit.title:\(post.id)" }
     private var bodyKey: String { "edit.body:\(post.id)" }
@@ -865,8 +871,9 @@ struct EditPostComposer: View {
                             .textFieldStyle(.roundedBorder)
                             .font(ShellTheme.Fonts.body)
                             .accessibilityIdentifier("compose.title")
+                            .focused($titleFocused)
                             .submitLabel(.done)
-                            .onSubmit { ComposerKeyboardToolbar.dismissKeyboard() }
+                            .onSubmit { editor.dismissKeyboard(); ComposerKeyboardToolbar.dismissKeyboard() }
                     }
 
                     Text(contentType == 0 ? "正文 · UBB 源码" : "正文 · Markdown 源码")
@@ -929,7 +936,7 @@ struct EditPostComposer: View {
             .scrollDismissesKeyboard(.interactively)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ComposerKeyboardToolbar()
+                if titleFocused { ComposerKeyboardToolbar(editor: editor) }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { if changed { showExit = true } else { dismiss() } }
                         .frame(minHeight: 44)

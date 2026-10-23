@@ -49,6 +49,8 @@
 
 仓库仍保留旧 `ShellView`、网页注入资源与同账号绑定代码，但当前 App 从 `NativeRootView` 启动。旧壳的“原站模式／Reborn 模式／恢复原站”不是当前主界面入口；旧壳的成功安装反馈也不代替本版原生客户端验收。
 
+旧网页壳的内容过滤 Worker 运输还有一个已确认的兼容限制：iOS WebKit 会阻止 HTTPS 父页面嵌入 `reborn-asset:` 本地 iframe。测试保留真实资源和权限检查，仅将这组明确的混合内容阻断记录为已知预期失败；它不代表旧网页过滤已可用。原生客户端的本机过滤不经过 iframe，由生产本机库检查覆盖；本轮没有重新启用旧壳入口或放宽网页安全策略。
+
 ## Windows 检查与云构建
 
 在仓库根目录运行本地检查：
@@ -64,7 +66,7 @@ Windows 本地检查不编译 iOS SDK。macOS 使用仓库锁定的 Xcode 和 Xc
 bash scripts/build-ios-shell.sh
 ```
 
-完整构建须通过 Node 合约检查、生产 OAuth／原生会话／本机库行为检查、Simulator 单元与原生 UI 测试、iPhoneOS arm64 编译及 IPA 结构校验。真实 SwiftUI 截图随 `.xcresult` 导出，覆盖五栏、读帖、编辑、私信、草稿、深色大字及 320 pt 容器。
+完整构建须通过 Node 合约检查、生产 OAuth／原生会话／本机库行为检查、原生 Simulator 单元与 UI 测试、iPhoneOS arm64 编译及 IPA 结构校验。旧壳 iframe 的已知限制单独记入 `legacy_filter_compatibility`，并将模拟器结果标为 `passed_native_known_legacy_filter_limitation`，不混称全部兼容测试通过。真实 SwiftUI 截图随 `.xcresult` 导出，覆盖五栏、读帖、编辑、私信、草稿、深色大字及 320 pt 容器。
 
 `--native-ui-fixture` 只在 Debug 存在，所有 API 请求由合成数据接管，未知路径本地失败；Release 不含此测试入口。测试不接入真实账号、不发送论坛内容。`--device-only` 仍可用于单独排查编译，但跳过模拟器时产物标为 unverified，不能作为本轮 UI 验收依据。
 

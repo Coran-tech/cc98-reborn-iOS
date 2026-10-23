@@ -28,6 +28,13 @@ final class UBBEditorController: ObservableObject {
         lastSelection = range
     }
 
+    func dismissKeyboard() {
+        pendingWorkItem?.cancel()
+        pendingWorkItem = nil
+        pendingSelection = nil
+        textView?.resignFirstResponder()
+    }
+
     @discardableResult
     func insert(_ snippet: String) -> Bool {
         guard let textView else { return false }

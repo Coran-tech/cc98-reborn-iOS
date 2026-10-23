@@ -72,17 +72,66 @@ final class ContentFilterWebKitTests: XCTestCase {
         // Async fulfillment leaves the main actor available for WebKit callbacks.
         await fulfillment(of: [started], timeout: 25)
         if probe.didStart { await fulfillment(of: [finished], timeout: 12) }
-        let evidence: [String: Any] = ["events": probe.events, "result": outcome ?? ["stage": "native-timeout"]]
+        let knownUnsupported = FilterTransportCapability.isKnownMixedContentBlock(outcome, events: probe.events)
+        let supported = outcome?["parentOrigin"] as? String == "https://www.cc98.org"
+            && outcome?["stage"] as? String == "result" && outcome?["index"] as? Int == 0 && outcome?["error"] as? Bool == false
+        let capability = knownUnsupported ? "known-unsupported-mixed-content" : supported ? "supported" : "failed"
+        let evidence: [String: Any] = ["capability": capability, "runtime": "iOS \(UIDevice.current.systemVersion)",
+                                       "events": probe.events, "result": outcome ?? ["stage": "native-timeout"]]
         let attachment = XCTAttachment(data: try JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys]), uniformTypeIdentifier: "public.json")
         attachment.name = "filter-worker-transport-result"
         attachment.lifetime = .keepAlways
         add(attachment)
         let report = try XCTUnwrap(outcome, "No terminal report; inspect filter-worker-transport-result for main-document/JavaScript stages")
         XCTAssertEqual(report["parentOrigin"] as? String, "https://www.cc98.org", "Synthetic parent origin must satisfy the real frame guard")
-        XCTAssertEqual(report["stage"] as? String, "result", "Frame/worker transport is not usable on this WebKit: \(report)")
-        XCTAssertEqual(report["index"] as? Int, 0, "Real bundled RegExp worker must match the rule; no main-thread fallback")
-        XCTAssertEqual(report["error"] as? Bool, false)
+        let assertRealWorker = {
+            XCTAssertEqual(report["stage"] as? String, "result", "Frame/worker transport is not usable on this WebKit: \(report)")
+            XCTAssertEqual(report["index"] as? Int, 0, "Real bundled RegExp worker must match the rule; no main-thread fallback")
+            XCTAssertEqual(report["error"] as? Bool, false)
+        }
+        if knownUnsupported {
+            // WebKit DocumentLoader checks iframe loads with IsUpgradable::No;
+            // MixedContentChecker's custom-scheme exception is only for upgradable loads.
+            // https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/DocumentLoader.cpp
+            // https://github.com/WebKit/WebKit/blob/main/Source/WebCore/loader/MixedContentChecker.cpp
+            let reason = "KNOWN UNSUPPORTED: legacy web-shell HTTPS to reborn-asset iframe is blocked before the scheme handler. NativeRoot does not use this transport; legacy filter compatibility remains incomplete."
+            print(reason)
+            XCTExpectFailure(reason, failingBlock: assertRealWorker)
+        } else {
+            assertRealWorker()
+        }
         withExtendedLifetime(probe) {}
+    }
+
+    func testKnownLimitationRequiresExactPreHandlerHTTPSFrameEvidence() {
+        let report: [String: Any] = ["parentOrigin": "https://www.cc98.org", "stage": "handshake-timeout"]
+        let events: [[String: Any]] = [
+            ["stage": "main-committed"], ["stage": "main-finished"],
+            ["stage": "frame-navigation-allowed", "scheme": "reborn-asset", "isMainFrame": false, "topIsForum": true]
+        ]
+        XCTAssertTrue(FilterTransportCapability.isKnownMixedContentBlock(report, events: events))
+        for stage in ["asset-start", "frame-load", "frame-ready", "navigation-denied", "web-process-terminated", "main-provisional-failed"] {
+            XCTAssertFalse(FilterTransportCapability.isKnownMixedContentBlock(report, events: events + [["stage": stage]]), stage)
+        }
+        XCTAssertFalse(FilterTransportCapability.isKnownMixedContentBlock(report, events: []))
+        XCTAssertFalse(FilterTransportCapability.isKnownMixedContentBlock(["parentOrigin": "http://www.cc98.org", "stage": "handshake-timeout"], events: events))
+        XCTAssertFalse(FilterTransportCapability.isKnownMixedContentBlock(["parentOrigin": "https://www.cc98.org", "stage": "worker-timeout"], events: events))
+        XCTAssertFalse(FilterTransportCapability.isKnownMixedContentBlock(["parentOrigin": "https://www.cc98.org", "stage": "result", "index": 0, "error": false], events: events))
+        XCTAssertFalse(FilterTransportCapability.isKnownMixedContentBlock(nil, events: events))
+    }
+}
+
+private enum FilterTransportCapability {
+    static func isKnownMixedContentBlock(_ report: [String: Any]?, events: [[String: Any]]) -> Bool {
+        guard report?["parentOrigin"] as? String == "https://www.cc98.org",
+              report?["stage"] as? String == "handshake-timeout" else { return false }
+        let stages = Set(events.compactMap { $0["stage"] as? String })
+        let unrelatedFailures: Set<String> = ["navigation-no-url", "navigation-denied", "main-provisional-failed", "main-navigation-failed", "web-process-terminated", "document-evaluation-failed"]
+        return stages.contains("main-committed") && stages.contains("main-finished")
+            && stages.isDisjoint(with: unrelatedFailures)
+            && !stages.contains("asset-start") && !stages.contains("frame-load") && !stages.contains("frame-ready")
+            && events.contains { $0["stage"] as? String == "frame-navigation-allowed"
+                && $0["scheme"] as? String == "reborn-asset" && $0["isMainFrame"] as? Bool == false && $0["topIsForum"] as? Bool == true }
     }
 }
 

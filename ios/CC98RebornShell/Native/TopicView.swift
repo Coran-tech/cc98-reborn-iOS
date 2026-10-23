@@ -872,7 +872,6 @@ struct ReplyComposer: View {
             .navigationTitle("回复")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ComposerKeyboardToolbar()
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") {
                         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { dismiss() }
