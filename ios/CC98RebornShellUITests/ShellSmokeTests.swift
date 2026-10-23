@@ -2,7 +2,11 @@ import XCTest
 
 // The shipping SwiftUI hierarchy, synthetic offline data, no OAuth or forum writes.
 final class ShellSmokeTests: XCTestCase {
-    override func setUpWithError() throws { continueAfterFailure = false }
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        // Cold simulator launch and complete draft round trips can exceed one minute.
+        executionTimeAllowance = 120
+    }
     private func launch(_ arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--native-ui-fixture"] + arguments
@@ -59,9 +63,15 @@ final class ShellSmokeTests: XCTestCase {
         let title = element("compose.title", in: app)
         title.tap()
         title.typeText("Offline draft")
+        screenshot("07b-new-topic-keyboard")
+        // Move the lower draft controls above the keyboard before opening the menu.
+        app.scrollViews.firstMatch.swipeUp()
         for _ in 0..<4 where !element("compose.draft", in: app).isHittable { app.swipeUp() }
         tap("compose.draft", in: app)
-        app.buttons["保存当前草稿"].tap()
+        let save = app.buttons["保存当前草稿"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        save.tap()
+        XCTAssertTrue(app.staticTexts["草稿已保存到本机"].waitForExistence(timeout: 5))
         screenshot("08-draft-saved")
         XCTAssertFalse(app.alerts["无法保存"].exists)
     }
@@ -91,6 +101,10 @@ final class ShellSmokeTests: XCTestCase {
         tap("topic.reply", in: app)
         XCTAssertTrue(element("reply.send", in: app).waitForExistence(timeout: 5))
         screenshot("15-editor-dark-large-type")
+        let body = element("reply.body", in: app)
+        body.tap()
+        body.typeText("Large text draft")
+        screenshot("15b-editor-dark-large-type-input")
     }
     func testCompactWidth() throws {
         let app = launch(["--fixture-compact"])
@@ -112,6 +126,7 @@ final class ShellSmokeTests: XCTestCase {
         screenshot("19-private-conversation")
         input.tap()
         input.typeText("Private offline draft")
+        screenshot("19b-private-keyboard")
         tap("message.back", in: app)
         app.tabBars.buttons["我的"].tap()
         let drafts = element("profile.drafts", in: app)
@@ -121,7 +136,13 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(element("message.input", in: app).waitForExistence(timeout: 5))
         XCTAssertEqual(element("message.input", in: app).value as? String, "Private offline draft")
         screenshot("20-private-draft-restored")
-        app.buttons["关闭"].firstMatch.tap()
+        XCTAssertFalse(app.buttons["关闭"].exists)
+        tap("message.back", in: app)
+        XCTAssertTrue(element("draft-center.list", in: app).waitForExistence(timeout: 5))
+        tap("draft-center.item.pm:900002", in: app)
+        XCTAssertTrue(element("message.input", in: app).waitForExistence(timeout: 5))
+        XCTAssertEqual(element("message.input", in: app).value as? String, "Private offline draft")
+        tap("message.back", in: app)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         let backup = element("profile.library", in: app)
         for _ in 0..<4 where !backup.isHittable { app.swipeUp() }

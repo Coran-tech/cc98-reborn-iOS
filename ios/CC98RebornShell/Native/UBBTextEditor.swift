@@ -32,6 +32,7 @@ enum UBBEditorInsertion {
 }
 
 struct UBBTextEditor: UIViewRepresentable {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var text: String
     @Binding var selection: NSRange
     let controller: UBBEditorController
@@ -44,7 +45,7 @@ struct UBBTextEditor: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
         textView.delegate = context.coordinator
-        textView.font = .preferredFont(forTextStyle: .body)
+        updateFont(of: textView)
         textView.adjustsFontForContentSizeCategory = true
         textView.textColor = .label
         textView.backgroundColor = .clear
@@ -61,6 +62,7 @@ struct UBBTextEditor: UIViewRepresentable {
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.parent = self
         controller.attach(textView, text: $text, selection: $selection)
+        updateFont(of: textView)
         // A SwiftUI refresh must not replace the IME's unfinished composition.
         guard textView.markedTextRange == nil else { return }
         if textView.text != text {
@@ -78,6 +80,15 @@ struct UBBTextEditor: UIViewRepresentable {
         let width = proposal.width ?? uiView.bounds.width
         let contentHeight = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
         return CGSize(width: width, height: max(minHeight, contentHeight))
+    }
+
+    private func updateFont(of textView: UITextView) {
+        // UIKit's global preferred size does not include a SwiftUI environment
+        // override. Use the same category as the surrounding editor controls.
+        let category = UIContentSizeCategory(dynamicTypeSize)
+        let traits = UITraitCollection(preferredContentSizeCategory: category)
+        let font = UIFont.preferredFont(forTextStyle: .body, compatibleWith: traits)
+        if textView.font != font { textView.font = font }
     }
 
     private func clamped(_ range: NSRange, in text: String) -> NSRange {

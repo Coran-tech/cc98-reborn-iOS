@@ -62,3 +62,16 @@ jobs:
           path: build/ios-shell/run.*/artifacts/
           if-no-files-found: warn
           retention-days: 14
+      - name: Retain lightweight install and preview bundle
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/ios-shell/run.*/artifacts/*.ipa
+            build/ios-shell/run.*/artifacts/build-status.txt
+            build/ios-shell/run.*/artifacts/ipa-validation.json
+            build/ios-shell/run.*/artifacts/README.txt
+            build/ios-shell/run.*/artifacts/screenshots/
+          if-no-files-found: error
+          retention-days: 14

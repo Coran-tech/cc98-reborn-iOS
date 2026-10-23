@@ -367,6 +367,7 @@ struct NewTopicComposer: View {
 
     private var composerScreen: some View {
         ScrollView { composerContents }
+        .scrollDismissesKeyboard(.interactively)
         .background(ShellTheme.pageBackground)
         .navigationTitle(isVote ? "发表投票" : "发表主题")
         .navigationBarTitleDisplayMode(.inline)
@@ -905,6 +906,7 @@ struct EditPostComposer: View {
             }
             .background(ShellTheme.pageBackground)
             .navigationTitle("编辑")
+            .scrollDismissesKeyboard(.interactively)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

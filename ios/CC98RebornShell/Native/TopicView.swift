@@ -313,6 +313,7 @@ struct TopicDetailView: View {
                 let nextPage = max(1, ((topic?.replyCount ?? 0) + 11) / pageSize)
                 requestPage(nextPage)
             }
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(isPresented: $showNote) {
             TopicNoteView(topicID: topicID, topicTitle: topic?.title ?? "主题 #\(topicID)")
@@ -829,6 +830,7 @@ struct ReplyComposer: View {
                 UBBFormatBar(text: $text, selection: $selection, editor: editor)
                     .disabled(sending)
                 UBBTextEditor(text: $text, selection: $selection, controller: editor, minHeight: 240)
+                    .accessibilityIdentifier("reply.body")
                     .frame(minHeight: 240)
                     .padding(4)
                     .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -1108,6 +1110,7 @@ struct PostCard: View {
             EditPostComposer(post: post, topicTitle: topicTitle) {
                 onChanged?()
             }
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(isPresented: $showRating) {
             RatingComposer(post: post)

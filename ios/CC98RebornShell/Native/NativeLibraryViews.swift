@@ -184,8 +184,9 @@ private struct DraftRecoveryView: View {
     var body: some View {
         Group {
             if let id = item.targetID, item.kind == .message {
-                NavigationStack { PrivateConversationView(contactID: id, contactName: nil, contactAvatar: nil)
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } } }
+                NavigationStack {
+                    PrivateConversationView(contactID: id, contactName: nil, contactAvatar: nil)
+                }
             } else if let board, item.kind == .topic || item.kind == .vote {
                 NewTopicComposer(boardID: board.id, boardName: board.name, anonymousState: board.anonymousState ?? 0,
                                  isVote: item.kind == .vote, onCreated: { dismiss() })
