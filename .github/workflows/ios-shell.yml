@@ -30,9 +30,10 @@ permissions:
 
 jobs:
   unsigned-device-candidate:
-    # Stable image/Xcode pair verified 2026-10-19:
+    # Stable Intel image/Xcode pair verified 2026-10-23. Use 14 GB RAM to address
+    # the repeated Simulator startup stalls observed on the 7 GB ARM image.
     # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 45
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer

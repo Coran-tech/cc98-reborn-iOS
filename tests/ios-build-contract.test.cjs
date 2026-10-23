@@ -25,7 +25,7 @@ test('both providers share one build entry point and stable Xcode', () => {
     assert.doesNotMatch(workflow, /xcodebuild\s+(?:test|build|archive)|(?:latest|beta|edge)\s*$/m);
     assert.doesNotMatch(workflow, /(?:app_store_connect|testflight|publishing|ios_signing):/i);
   }
-  assert.match(github, /runs-on: macos-15\s/);
+  assert.match(github, /runs-on: macos-15-intel\s/);
   assert.match(github, /DEVELOPER_DIR: \/Applications\/Xcode_26\.0\.1\.app\/Contents\/Developer/);
   assert.match(codemagic, /instance_type: mac_mini_m2/);
   assert.match(codemagic, /xcode: 26\.0\.1/);
