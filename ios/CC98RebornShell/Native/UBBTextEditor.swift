@@ -104,6 +104,8 @@ struct UBBTextEditor: UIViewRepresentable {
         var parent: UBBTextEditor
         private var keyboardToolbar: UIToolbar?
         private var dismissKeyboardItem: UIBarButtonItem?
+        private var configuredToolbarFont: UIFont?
+        private var configuredToolbarHeight: CGFloat?
 
         init(parent: UBBTextEditor) {
             self.parent = parent
@@ -119,6 +121,8 @@ struct UBBTextEditor: UIViewRepresentable {
             toolbar.items = [UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil), button]
             keyboardToolbar = toolbar
             dismissKeyboardItem = button
+            configuredToolbarFont = nil
+            configuredToolbarHeight = nil
             updateKeyboardToolbar(for: textView)
             textView.inputAccessoryView = toolbar
         }
@@ -126,11 +130,19 @@ struct UBBTextEditor: UIViewRepresentable {
         func updateKeyboardToolbar(for textView: UITextView) {
             guard let toolbar = keyboardToolbar, let font = textView.font else { return }
             let height = max(44, ceil(font.lineHeight) + 16)
-            let heightChanged = toolbar.frame.height != height
-            toolbar.frame.size.height = height
             toolbar.tintColor = UIColor(ShellTheme.accent)
-            dismissKeyboardItem?.setTitleTextAttributes([.font: font], for: .normal)
-            if heightChanged && textView.isFirstResponder { textView.reloadInputViews() }
+            if configuredToolbarFont != font {
+                configuredToolbarFont = font
+                dismissKeyboardItem?.setTitleTextAttributes([.font: font], for: .normal)
+            }
+            // UIKit owns the laid-out frame. It is not a configuration marker:
+            // typing can update SwiftUI while the keyboard adjusts that frame.
+            // Reload only for a genuinely changed target height, never per key.
+            if configuredToolbarHeight != height {
+                configuredToolbarHeight = height
+                toolbar.frame.size.height = height
+                if textView.isFirstResponder { textView.reloadInputViews() }
+            }
         }
 
         @objc private func dismissKeyboard() {

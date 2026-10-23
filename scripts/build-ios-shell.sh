@@ -296,9 +296,12 @@ fi
 if ! run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulator-devices-after-boot.json" 2> "$ARTIFACTS/simulator-devices-after-boot.log"; then
   echo 'Post-boot inventory timed out; continuing to the actual Simulator tests.'
 fi
-echo "=== Simulator tests: $SIMULATOR_UDID (600s process watchdog, 120s maximum per test) ==="
+# Run 39919199086 measured a successful 145s journey plus cold-start/recovery
+# overhead. Eight such journeys + 35s unit tests + 150s startup + 60s result
+# finalization fit within 1500s. Compilation has its separate 600s watchdog.
+echo "=== Simulator tests: $SIMULATOR_UDID (1500s process watchdog, 180s maximum per test) ==="
 SIMULATOR_VALIDATION=running
-run_with_timeout 600 xcodebuild test-without-building \
+run_with_timeout 1500 xcodebuild test-without-building \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
   -sdk iphonesimulator \
   -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
@@ -307,8 +310,8 @@ run_with_timeout 600 xcodebuild test-without-building \
   -resultBundlePath "$TEST_RESULTS" \
   -parallel-testing-enabled NO \
   -test-timeouts-enabled YES \
-  -default-test-execution-time-allowance 60 \
-  -maximum-test-execution-time-allowance 120 \
+  -default-test-execution-time-allowance 180 \
+  -maximum-test-execution-time-allowance 180 \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   2>&1 | tee "$ARTIFACTS/simulator-tests.log"

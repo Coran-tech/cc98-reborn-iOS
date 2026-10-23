@@ -10,6 +10,7 @@ const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 const script = read('scripts/build-ios-shell.sh');
 const github = read('.github/workflows/ios-shell.yml');
 const codemagic = read('codemagic.yaml');
+const project = read('ios/project.yml');
 function pythonCommand() {
   const command = ['python3', 'python'].find((name) => {
     const result = spawnSync(name, ['--version'], { encoding: 'utf8' });
@@ -56,6 +57,23 @@ test('resources are packaged before generating the exact Xcode project', () => {
   assert.match(script, /SCHEME=CC98RebornShell/);
   assert.match(script, /test -d "\$APP\/Reborn"/);
   assert.match(script, /test ! -e "\$APP\/Resources"/);
+});
+
+test('only the Debug Test action starts the app host with offline fixtures', () => {
+  const scheme = project.slice(project.indexOf('\nschemes:'));
+  const testAction = scheme.match(/\n    test:\n([\s\S]*?)(?=\n    archive:)/)?.[1];
+  assert(testAction, 'The shared scheme must retain its Test action');
+  assert.match(testAction, /      config: Debug/);
+  assert.match(testAction, /      commandLineArguments:\n        "--native-ui-fixture": true/);
+  assert.match(testAction, /      targets:\n        - CC98RebornShellTests\n        - CC98RebornShellUITests/);
+  assert.equal((scheme.match(/--native-ui-fixture/g) || []).length, 1, 'Run and Archive must not enable fixture data');
+  const fixture = read('ios/CC98RebornShell/Native/NativeUITestFixture.swift');
+  assert.match(fixture, /^#if DEBUG\r?\n/);
+  assert.match(fixture, /ProcessInfo\.processInfo\.arguments\.contains\("--native-ui-fixture"\)/);
+  const api = read('ios/CC98RebornShell/Native/CC98API.swift');
+  assert.match(api, /#if DEBUG\s+if NativeUITestFixture\.isEnabled \{\s+return try NativeUITestFixture\.response\(path: path, query: query, method: method\)\s+\}\s+#endif\s+guard path/);
+  const hostTest = read('ios/CC98RebornShellTests/NativeTestHostTests.swift');
+  assert.match(hostTest, /XCTAssertTrue\(\s+NativeUITestFixture\.isEnabled,/);
 });
 
 test('both build modes must execute the real production Swift OAuth harness without a Simulator', () => {
@@ -152,7 +170,7 @@ test('device-only is explicit, keeps device validation and cannot claim Simulato
 test('bounded simulator compilation and full tests precede the separate arm64 iPhoneOS device build', () => {
   const simulatorBuildIndex = script.indexOf('\nrun_with_timeout 600 xcodebuild build-for-testing \\\n');
   const bootIndex = script.indexOf('\n  run_with_timeout 60 xcrun simctl boot ');
-  const testIndex = script.indexOf('\nrun_with_timeout 600 xcodebuild test-without-building \\\n');
+  const testIndex = script.indexOf('\nrun_with_timeout 1500 xcodebuild test-without-building \\\n');
   const buildIndex = script.indexOf('\nxcodebuild build \\\n');
   assert(simulatorBuildIndex > 0 && bootIndex > simulatorBuildIndex && testIndex > bootIndex && buildIndex > testIndex);
   const simulatorBuild = script.slice(simulatorBuildIndex, bootIndex);
@@ -176,8 +194,9 @@ test('bounded simulator compilation and full tests precede the separate arm64 iP
   assert.match(script, /run_with_timeout 180 xcrun simctl bootstatus "\$SIMULATOR_UDID" -b/);
   assert(script.indexOf('simctl bootstatus') < testIndex);
   assert.match(tests, /-test-timeouts-enabled YES/);
-  assert.match(tests, /-default-test-execution-time-allowance 60/);
-  assert.match(tests, /-maximum-test-execution-time-allowance 120/);
+  assert.match(tests, /-default-test-execution-time-allowance 180/);
+  assert.match(tests, /-maximum-test-execution-time-allowance 180/);
+  assert.match(read('ios/CC98RebornShellUITests/ShellSmokeTests.swift'), /executionTimeAllowance = 180/);
   assert.match(tests, /simulator-derived-data/);
   assert.match(tests, /-resultBundlePath "\$TEST_RESULTS"/);
   assert.match(tests, /xcresulttool export attachments/);

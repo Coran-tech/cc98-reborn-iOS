@@ -64,6 +64,10 @@ schemes:
       config: Debug
     test:
       config: Debug
+      # The app-hosted unit tests must not start real forum or token requests.
+      # Fixture support is compiled only in Debug; Run and Archive stay normal.
+      commandLineArguments:
+        "--native-ui-fixture": true
       gatherCoverageData: true
       targets:
         - CC98RebornShellTests

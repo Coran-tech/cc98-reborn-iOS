@@ -4,8 +4,8 @@ import XCTest
 final class ShellSmokeTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
-        // Cold simulator launch and complete draft round trips can exceed one minute.
-        executionTimeAllowance = 120
+        // A complete draft round trip took 145 seconds on the hosted simulator.
+        executionTimeAllowance = 180
     }
     private func launch(_ arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
@@ -118,8 +118,9 @@ final class ShellSmokeTests: XCTestCase {
         body.tap()
         body.typeText("Large text draft")
         let completeText = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Large text draft"), object: body)
-        XCTAssertEqual(XCTWaiter.wait(for: [completeText], timeout: 5), .completed)
+        let inputResult = XCTWaiter.wait(for: [completeText], timeout: 5)
         screenshot("15b-editor-dark-large-type-input")
+        XCTAssertEqual(inputResult, .completed, "Actual editor value: \(String(describing: body.value))")
         dismissKeyboard(in: app)
     }
     func testCompactWidth() throws {
