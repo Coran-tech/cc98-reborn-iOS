@@ -236,7 +236,11 @@ else
   echo 'Selected Simulator is already booted.' | tee "$ARTIFACTS/simulator-boot.log"
 fi
 run_with_timeout 180 xcrun simctl bootstatus "$SIMULATOR_UDID" -b 2>&1 | tee "$ARTIFACTS/simulator-bootstatus.log"
-run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulator-devices-after-boot.json"
+# bootstatus is the readiness gate. A post-boot inventory is diagnostic only:
+# run 39904036590 finished boot, then this inventory hung for 30 seconds.
+if ! run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulator-devices-after-boot.json" 2> "$ARTIFACTS/simulator-devices-after-boot.log"; then
+  echo 'Post-boot inventory timed out; continuing to the actual Simulator tests.'
+fi
 echo "=== Simulator tests: $SIMULATOR_UDID (600s process watchdog, 120s maximum per test) ==="
 SIMULATOR_VALIDATION=running
 run_with_timeout 600 xcodebuild test \
