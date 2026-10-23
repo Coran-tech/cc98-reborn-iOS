@@ -206,10 +206,16 @@ final class SoundBoardStore: ObservableObject {
                 throw SoundImportError.downloadFailed("HTTP \(http.statusCode)")
             }
 
-            let extensionName = audioFileExtension(for: url, mimeType: response.mimeType)
+            let extensionName = audioFileExtension(
+                for: url,
+                suggestedFilename: response.suggestedFilename,
+                mimeType: response.mimeType
+            )
+            let title = displayTitle(forFilename: response.suggestedFilename)
+                ?? displayTitle(for: url)
             let item = try addSound(
                 copying: temporaryURL,
-                title: displayTitle(for: url),
+                title: title,
                 fileExtension: extensionName
             )
             sounds.append(item)
@@ -278,28 +284,57 @@ final class SoundBoardStore: ObservableObject {
 
     private func displayTitle(for url: URL) -> String {
         let rawName = url.deletingPathExtension().lastPathComponent
-        let decoded = rawName.removingPercentEncoding ?? rawName
+        return cleanTitle(rawName) ?? url.host ?? "未命名音效"
+    }
+
+    private func displayTitle(forFilename filename: String?) -> String? {
+        guard let filename, !filename.isEmpty else { return nil }
+        let base = (filename as NSString).deletingPathExtension
+        return cleanTitle(base)
+    }
+
+    private func cleanTitle(_ raw: String) -> String? {
+        let decoded = raw.removingPercentEncoding ?? raw
+        let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "/"))
         let cleaned = decoded
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: separators)
 
-        let fallback = cleaned.isEmpty ? (url.host ?? "未命名音效") : cleaned
-        return String(fallback.prefix(30))
+        guard !cleaned.isEmpty else { return nil }
+        return String(cleaned.prefix(30))
     }
 
-    private func audioFileExtension(for url: URL, mimeType: String? = nil) -> String {
+    private func audioFileExtension(
+        for url: URL,
+        suggestedFilename: String? = nil,
+        mimeType: String? = nil
+    ) -> String {
         let knownExtensions: Set<String> = [
             "mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "caf", "mp4", "m4b", "flac"
         ]
+
+        var candidates: [String] = []
         let pathExtension = url.pathExtension.lowercased()
-        if knownExtensions.contains(pathExtension) {
-            return pathExtension
+        if !pathExtension.isEmpty {
+            candidates.append(pathExtension)
+        }
+        if let suggestedFilename, !suggestedFilename.isEmpty {
+            let suggestedExtension = URL(fileURLWithPath: suggestedFilename)
+                .pathExtension
+                .lowercased()
+            if !suggestedExtension.isEmpty, !candidates.contains(suggestedExtension) {
+                candidates.append(suggestedExtension)
+            }
         }
 
-        if !pathExtension.isEmpty,
-           UTType(filenameExtension: pathExtension)?.conforms(to: .audio) == true {
-            return pathExtension
+        for candidate in candidates {
+            if knownExtensions.contains(candidate) {
+                return candidate
+            }
+            if UTType(filenameExtension: candidate)?.conforms(to: .audio) == true {
+                return candidate
+            }
         }
 
         if let mimeType,

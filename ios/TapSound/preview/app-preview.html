@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=393, initial-scale=1">
-<title>响一下 · 设计预览</title>
+<title>响一下 · 界面预览</title>
 <style>
   * { box-sizing: border-box; }
   :root {
@@ -40,57 +40,38 @@
   }
   .status-icons { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
   .status-icons svg { display: block; }
-  .content {
-    padding: 12px 20px 0;
-  }
-  .app-header { display: flex; align-items: flex-start; gap: 12px; }
-  .title-stack { flex: 1; min-width: 0; }
+  .content { padding: 14px 20px 0; }
+  .app-header { display: flex; align-items: center; gap: 10px; }
   h1 {
+    flex: 1;
     margin: 0;
     font-size: 38px;
     line-height: 1.08;
     font-weight: 850;
     letter-spacing: -1.2px;
   }
-  .subtitle {
-    margin-top: 6px;
-    font-size: 15px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, .55);
-  }
-  .mute {
-    flex: none;
+  .circle-btn {
     width: 48px;
     height: 48px;
-    border: 1px solid rgba(255, 255, 255, .12);
-    background: rgba(255, 255, 255, .07);
-    border-radius: 50%;
+    flex: none;
     display: grid;
     place-items: center;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, .12);
+    background: rgba(255, 255, 255, .07);
     color: #fff;
   }
-  .meta {
-    margin-top: 18px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: rgba(255, 255, 255, .38);
-    font-size: 12px;
-    font-weight: 500;
-  }
-  .meta span { display: flex; align-items: center; gap: 4px; }
-  .meta .dot { opacity: .5; }
   .grid {
-    margin-top: 24px;
+    margin-top: 22px;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
   }
   .card {
     position: relative;
-    min-height: 138px;
+    min-height: 118px;
     border-radius: 24px;
-    padding: 16px;
+    padding: 15px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -113,91 +94,71 @@
     inset: 0;
     z-index: -1;
     background:
-      radial-gradient(circle 82px at 110% -10%, rgba(255, 255, 255, .24), transparent 70%),
+      radial-gradient(circle 80px at 110% -10%, rgba(255, 255, 255, .24), transparent 70%),
       linear-gradient(180deg, transparent 35%, rgba(0, 0, 0, .24) 100%);
   }
-  .card .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .icon {
-    width: 44px;
-    height: 44px;
-    flex: none;
-    border-radius: 14px;
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
     display: grid;
     place-items: center;
     background: rgba(255, 255, 255, .16);
     border: 1px solid rgba(255, 255, 255, .18);
   }
-  .icon svg { width: 22px; height: 22px; display: block; }
-  .code {
-    padding-top: 7px;
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 1.6px;
-    color: rgba(255, 255, 255, .66);
-    white-space: nowrap;
+  .icon svg { width: 21px; height: 21px; display: block; }
+  .more {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, .16);
+    color: rgba(255, 255, 255, .9);
   }
-  .card .bottom { margin-top: auto; padding-top: 14px; }
+  .more svg { width: 15px; height: 15px; display: block; }
   .card h2 {
-    margin: 0;
-    font-size: 25px;
-    line-height: 1.15;
+    margin: auto 0 0;
+    padding-top: 12px;
+    font-size: 21px;
+    line-height: 1.2;
     font-weight: 750;
-    letter-spacing: -.3px;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, .08);
-  }
-  .hint {
-    margin-top: 2px;
-    font-size: 12px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, .72);
+    letter-spacing: -.2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .08);
   }
-  .card.pop { --bg: linear-gradient(135deg, #22d3ee, #2563eb); }
+  .card.waveform { --bg: linear-gradient(135deg, #22d3ee, #2563eb); }
   .card.bell { --bg: linear-gradient(135deg, #fbbf24, #d97706); }
-  .card.coin { --bg: linear-gradient(135deg, #fde047, #ca8a04); }
-  .card.laser { --bg: linear-gradient(135deg, #c084fc, #7c3aed); }
-  .card.boing { --bg: linear-gradient(135deg, #fb7185, #be123c); }
-  .card.drum { --bg: linear-gradient(135deg, #fb923c, #b91c1c); }
-  .card.whoosh { --bg: linear-gradient(135deg, #5eead4, #0f766e); }
-  .card.shutter { --bg: linear-gradient(135deg, #94a3b8, #334155); }
+  .card.sparkles { --bg: linear-gradient(135deg, #c084fc, #7c3aed); }
+  .card.bolt { --bg: linear-gradient(135deg, #fb7185, #be123c); }
+  .card.music { --bg: linear-gradient(135deg, #86efac, #15803d); }
   .card.bubble { --bg: linear-gradient(135deg, #7dd3fc, #0369a1); }
-  .card.success { --bg: linear-gradient(135deg, #86efac, #15803d); }
-  .card.error { --bg: linear-gradient(135deg, #fca5a5, #b91c1c); }
-  .card.magic { --bg: linear-gradient(135deg, #f0abfc, #7e22ce); }
+  .card.camera { --bg: linear-gradient(135deg, #94a3b8, #334155); }
+  .card.flame { --bg: linear-gradient(135deg, #fb923c, #b91c1c); }
+  .card.leaf { --bg: linear-gradient(135deg, #5eead4, #0f766e); }
+  .card.moon { --bg: linear-gradient(135deg, #f0abfc, #6d28d9); }
   .card.active {
     transform: scale(1.025);
     border-color: rgba(255, 255, 255, .8);
     box-shadow:
       0 0 0 1px rgba(255, 255, 255, .20),
-      0 12px 30px rgba(202, 138, 4, .46),
+      0 12px 30px rgba(94, 234, 212, .42),
       0 12px 24px rgba(0, 0, 0, .30);
-  }
-  .card.active::after {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .02)),
-      radial-gradient(circle 82px at 110% -10%, rgba(255, 255, 255, .30), transparent 70%),
-      linear-gradient(180deg, transparent 35%, rgba(0, 0, 0, .20) 100%);
-  }
-  .footer-note {
-    margin-top: 24px;
-    text-align: center;
-    font-size: 11px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, .26);
   }
   .bottom-fade {
     position: absolute;
     left: 0; right: 0; bottom: 0;
-    height: 145px;
-    background: linear-gradient(180deg, transparent 0%, rgba(8, 8, 18, .58) 54%, rgba(8, 8, 18, .86) 100%);
+    height: 130px;
+    background: linear-gradient(180deg, transparent 0%, rgba(8, 8, 18, .50) 55%, rgba(8, 8, 18, .85) 100%);
     pointer-events: none;
   }
   .now-playing {
     position: absolute;
     left: 20px; right: 20px; bottom: 38px;
-    height: 64px;
+    height: 54px;
     border-radius: 22px;
     border: 1px solid rgba(255, 255, 255, .10);
     background: rgba(33, 33, 48, .58);
@@ -207,25 +168,23 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 0 14px;
+    padding: 0 16px;
   }
-  .np-icon {
-    width: 42px; height: 42px; flex: none;
-    border-radius: 50%;
-    background: rgba(253, 224, 71, .16);
-    display: grid; place-items: center;
-    color: #fde047;
-  }
-  .np-icon svg { width: 20px; height: 20px; }
-  .np-text { flex: 1; min-width: 0; }
-  .np-title { font-size: 14px; font-weight: 650; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .np-detail { margin-top: 2px; font-size: 12px; color: rgba(255, 255, 255, .48); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .eq { display: flex; align-items: center; gap: 3px; height: 18px; padding-right: 2px; }
-  .eq i { display: block; width: 3px; border-radius: 999px; background: #fde047; }
+  .eq { display: flex; align-items: center; gap: 3px; height: 18px; width: 26px; }
+  .eq i { display: block; width: 3px; border-radius: 999px; background: #5eead4; }
   .eq i:nth-child(1) { height: 8px; }
   .eq i:nth-child(2) { height: 15px; }
   .eq i:nth-child(3) { height: 6px; }
   .eq i:nth-child(4) { height: 12px; }
+  .np-title { flex: 1; font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stop {
+    width: 32px; height: 32px; flex: none;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(255, 255, 255, .10);
+    color: rgba(255, 255, 255, .85);
+  }
+  .stop svg { width: 12px; height: 12px; display: block; }
   .home-indicator {
     position: absolute;
     left: 50%; bottom: 9px;
@@ -240,33 +199,23 @@
 <body>
 <svg class="sr-only" aria-hidden="true">
   <defs>
-    <symbol id="i-pop" viewBox="0 0 24 24">
-      <path fill="currentColor" d="M12 2.4c3.8 4.6 6.4 7.5 6.4 10.6a6.4 6.4 0 1 1-12.8 0C5.6 9.9 8.2 7 12 2.4Z"/>
+    <symbol id="i-waveform" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M4 9.5v5M8.7 5.8v12.4M13.4 8.3v7.4M18.1 4.5v15M22 10v4"/>
     </symbol>
     <symbol id="i-bell" viewBox="0 0 24 24">
       <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M18 8.4a6 6 0 0 0-12 0c0 6.6-2.7 6.6-2.7 8.6h17.4c0-2-2.7-2-2.7-8.6ZM9.6 20.4h4.8"/>
     </symbol>
-    <symbol id="i-coin" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
-      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 6.4v11.2M15 9.6c-.7-.9-1.8-1.4-3-1.4-1.7 0-3 .9-3 2.1 0 3 6 1.5 6 4.5 0 1.2-1.3 2.1-3 2.1-1.2 0-2.3-.5-3-1.4"/>
+    <symbol id="i-sparkles" viewBox="0 0 24 24">
+      <path fill="currentColor" d="m12 2.5 1.8 4.9 4.9 1.8-4.9 1.8L12 15.9l-1.8-4.9-4.9-1.8 4.9-1.8L12 2.5Z"/>
+      <path fill="currentColor" d="m19.1 14.5 1 2.7 2.7 1-2.7 1-1 2.7-1-2.7-2.7-1 2.7-1 1-2.7Z"/>
     </symbol>
-    <symbol id="i-laser" viewBox="0 0 24 24">
+    <symbol id="i-bolt" viewBox="0 0 24 24">
       <path fill="currentColor" d="M13.4 1.8 4 13.3h6.5L9.6 22 20 10.3h-6.6l0-8.5Z"/>
     </symbol>
-    <symbol id="i-boing" viewBox="0 0 24 24">
-      <path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M2.2 12h3.2L8 5.7l4.5 12.6 3.1-9.5 2 3.2h4.2"/>
-    </symbol>
-    <symbol id="i-drum" viewBox="0 0 24 24">
+    <symbol id="i-music" viewBox="0 0 24 24">
       <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9.2 18V5.4l11-2.1v12.8"/>
       <circle cx="6.5" cy="18.2" r="2.7" fill="none" stroke="currentColor" stroke-width="1.8"/>
       <circle cx="17.5" cy="16.2" r="2.7" fill="none" stroke="currentColor" stroke-width="1.8"/>
-    </symbol>
-    <symbol id="i-whoosh" viewBox="0 0 24 24">
-      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M2.6 7.8h11.2a3 3 0 1 0-3-3M2.6 12.1h15.6a2.9 2.9 0 1 1-2.9 2.9M2.6 16.4h7.9"/>
-    </symbol>
-    <symbol id="i-shutter" viewBox="0 0 24 24">
-      <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M3.4 7.8h3.4L8.4 5.5h7.2l1.6 2.3h3.4a1.2 1.2 0 0 1 1.2 1.2v8.8a1.2 1.2 0 0 1-1.2 1.2H3.4a1.2 1.2 0 0 1-1.2-1.2V9a1.2 1.2 0 0 1 1.2-1.2Z"/>
-      <circle cx="12" cy="13.4" r="3.7" fill="none" stroke="currentColor" stroke-width="1.7"/>
     </symbol>
     <symbol id="i-bubble" viewBox="0 0 24 24">
       <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M21.2 11.5A8.5 8.5 0 0 1 12.7 20a8.9 8.9 0 0 1-3.5-.7L4.1 21l1.7-4.3a8.5 8.5 0 1 1 15.4-5.2Z"/>
@@ -274,29 +223,40 @@
       <circle cx="12.2" cy="11.5" r="1" fill="currentColor"/>
       <circle cx="15.7" cy="11.5" r="1" fill="currentColor"/>
     </symbol>
-    <symbol id="i-success" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
-      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m7.8 12.1 2.8 2.7 5.6-6"/>
+    <symbol id="i-camera" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M3.4 7.8h3.4L8.4 5.5h7.2l1.6 2.3h3.4a1.2 1.2 0 0 1 1.2 1.2v8.8a1.2 1.2 0 0 1-1.2 1.2H3.4a1.2 1.2 0 0 1-1.2-1.2V9a1.2 1.2 0 0 1 1.2-1.2Z"/>
+      <circle cx="12" cy="13.4" r="3.7" fill="none" stroke="currentColor" stroke-width="1.7"/>
     </symbol>
-    <symbol id="i-error" viewBox="0 0 24 24">
-      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M7.7 3.2h8.6l4.7 4.7v8.2l-4.7 4.7H7.7L3 16.1V7.9l4.7-4.7Z"/>
-      <path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" d="m9.2 9.2 5.6 5.6M14.8 9.2l-5.6 5.6"/>
+    <symbol id="i-flame" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M13.2 2.2c.3 3.3-1.9 4.7-3.5 6.5-1.4 1.6-2.4 3.2-2.4 5.3a5.7 5.7 0 0 0 11.4 0c0-2.5-1.3-4.5-2.8-6.3-.8 1.2-1.8 1.8-2.7 2 .2-2.8-.5-5.4 0-7.5Z"/>
     </symbol>
-    <symbol id="i-magic" viewBox="0 0 24 24">
-      <path fill="currentColor" d="m12 2.5 1.8 4.9 4.9 1.8-4.9 1.8L12 15.9l-1.8-4.9-4.9-1.8 4.9-1.8L12 2.5Z"/>
-      <path fill="currentColor" d="m19.1 14.5 1 2.7 2.7 1-2.7 1-1 2.7-1-2.7-2.7-1 2.7-1 1-2.7Z"/>
+    <symbol id="i-leaf" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20.5 3.5C11.8 3.4 4 7.4 4 14.1c0 3.1 2.4 5.4 5.4 5.4 6.4 0 10.5-7.2 11.1-16Z"/>
+      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.2 20.2c3-5 7.3-8.4 12.5-11.3"/>
     </symbol>
-    <symbol id="i-waveform" viewBox="0 0 24 24">
-      <path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M4 9.5v5M8.7 5.8v12.4M13.4 8.3v7.4M18.1 4.5v15M22 10v4"/>
+    <symbol id="i-moon" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M20.3 14.2A8.6 8.6 0 0 1 9.8 3.7 8.9 8.9 0 1 0 20.3 14.2Z"/>
+      <path fill="currentColor" d="m18.4 2.5.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7.7-1.9Z"/>
+    </symbol>
+    <symbol id="i-ellipsis" viewBox="0 0 24 24">
+      <circle cx="5" cy="12" r="2" fill="currentColor"/>
+      <circle cx="12" cy="12" r="2" fill="currentColor"/>
+      <circle cx="19" cy="12" r="2" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/>
     </symbol>
     <symbol id="i-speaker" viewBox="0 0 24 24">
       <path fill="currentColor" d="M3.5 9v6h4l5 4V5l-5 4h-4Z"/>
       <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M15.5 8.5a5 5 0 0 1 0 7M18.2 6a9 9 0 0 1 0 12"/>
     </symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24">
+      <rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/>
+    </symbol>
   </defs>
 </svg>
 
-<main class="screen" aria-label="响一下 App 设计预览">
+<main class="screen" aria-label="响一下 App 界面预览">
   <div class="status">
     <span>9:41</span>
     <span class="status-icons">
@@ -320,133 +280,88 @@
 
   <div class="content">
     <header class="app-header">
-      <div class="title-stack">
-        <h1>响一下</h1>
-        <div class="subtitle">轻点卡片，听见声音</div>
+      <h1>响一下</h1>
+      <div class="circle-btn" aria-label="添加音效">
+        <svg width="19" height="19" viewBox="0 0 24 24"><use href="#i-plus"/></svg>
       </div>
-      <div class="mute" aria-label="静音">
-        <svg width="21" height="21"><use href="#i-speaker"/></svg>
+      <div class="circle-btn" aria-label="静音">
+        <svg width="20" height="20" viewBox="0 0 24 24"><use href="#i-speaker"/></svg>
       </div>
     </header>
 
-    <div class="meta">
-      <span><svg width="13" height="13" viewBox="0 0 24 24"><use href="#i-waveform"/></svg>12 个声音</span>
-      <span class="dot">·</span>
-      <span>全部离线</span>
-    </div>
-
-    <section class="grid" aria-label="音效网格">
-      <article class="card pop">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-pop"/></svg></div>
-          <div class="code">POP</div>
+    <section class="grid" aria-label="音效">
+      <article class="card waveform">
+        <div class="card-top">
+          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-waveform"/></svg></div>
+          <div class="more"><svg viewBox="0 0 24 24"><use href="#i-ellipsis"/></svg></div>
         </div>
-        <div class="bottom"><h2>啵</h2><div class="hint">短促的泡泡破裂声</div></div>
+        <h2>声波</h2>
       </article>
 
       <article class="card bell">
-        <div class="top">
+        <div class="card-top">
           <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-bell"/></svg></div>
-          <div class="code">BELL</div>
+          <div class="more"><svg viewBox="0 0 24 24"><use href="#i-ellipsis"/></svg></div>
         </div>
-        <div class="bottom"><h2>叮</h2><div class="hint">清亮的小铃铛</div></div>
+        <h2>叮咚</h2>
       </article>
 
-      <article class="card coin active">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-coin"/></svg></div>
-          <div class="code">COIN</div>
+      <article class="card sparkles">
+        <div class="card-top">
+          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-sparkles"/></svg></div>
+          <div class="more"><svg viewBox="0 0 24 24"><use href="#i-ellipsis"/></svg></div>
         </div>
-        <div class="bottom"><h2>金币</h2><div class="hint">金币叮当入袋</div></div>
+        <h2>魔法</h2>
       </article>
 
-      <article class="card laser">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-laser"/></svg></div>
-          <div class="code">LASER</div>
+      <article class="card bolt">
+        <div class="card-top">
+          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-bolt"/></svg></div>
+          <div class="more"><svg viewBox="0 0 24 24"><use href="#i-ellipsis"/></svg></div>
         </div>
-        <div class="bottom"><h2>激光</h2><div class="hint">咻——的高能射线</div></div>
+        <h2>能量</h2>
       </article>
 
-      <article class="card boing">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-boing"/></svg></div>
-          <div class="code">BOING</div>
+      <article class="card music">
+        <div class="card-top">
+          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-music"/></svg></div>
+          <div class="more"><svg viewBox="0 0 24 24"><use href="#i-ellipsis"/></svg></div>
         </div>
-        <div class="bottom"><h2>弹簧</h2><div class="hint">duang～地弹一下</div></div>
-      </article>
-
-      <article class="card drum">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-drum"/></svg></div>
-          <div class="code">DRUM</div>
-        </div>
-        <div class="bottom"><h2>鼓点</h2><div class="hint">一记干脆的低音鼓</div></div>
-      </article>
-
-      <article class="card whoosh">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-whoosh"/></svg></div>
-          <div class="code">WHOOSH</div>
-        </div>
-        <div class="bottom"><h2>风过</h2><div class="hint">呼——一阵风掠过</div></div>
-      </article>
-
-      <article class="card shutter">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-shutter"/></svg></div>
-          <div class="code">SHUTTER</div>
-        </div>
-        <div class="bottom"><h2>快门</h2><div class="hint">干净利落的咔嚓</div></div>
+        <h2>旋律</h2>
       </article>
 
       <article class="card bubble">
-        <div class="top">
+        <div class="card-top">
           <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-bubble"/></svg></div>
-          <div class="code">BUBBLE</div>
+          <div class="more"><svg viewBox="0 0 24 24"><use href="#i-ellipsis"/></svg></div>
         </div>
-        <div class="bottom"><h2>气泡</h2><div class="hint">咕嘟咕嘟冒出水面</div></div>
+        <h2>泡泡</h2>
       </article>
 
-      <article class="card success">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-success"/></svg></div>
-          <div class="code">SUCCESS</div>
+      <article class="card camera">
+        <div class="card-top">
+          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-camera"/></svg></div>
+          <div class="more"><svg viewBox="0 0 24 24"><use href="#i-ellipsis"/></svg></div>
         </div>
-        <div class="bottom"><h2>成功</h2><div class="hint">任务完成的奖励音</div></div>
+        <h2>快门</h2>
       </article>
 
-      <article class="card error">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-error"/></svg></div>
-          <div class="code">ERROR</div>
+      <article class="card leaf active">
+        <div class="card-top">
+          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-leaf"/></svg></div>
+          <div class="more"><svg viewBox="0 0 24 24"><use href="#i-ellipsis"/></svg></div>
         </div>
-        <div class="bottom"><h2>错误</h2><div class="hint">不太妙的提示声</div></div>
-      </article>
-
-      <article class="card magic">
-        <div class="top">
-          <div class="icon"><svg viewBox="0 0 24 24"><use href="#i-magic"/></svg></div>
-          <div class="code">MAGIC</div>
-        </div>
-        <div class="bottom"><h2>魔法</h2><div class="hint">闪亮登场的魔法</div></div>
+        <h2>掌声</h2>
       </article>
     </section>
-
-    <div class="footer-note">全部音效由代码合成 · 无第三方采样</div>
   </div>
 
   <div class="bottom-fade"></div>
 
   <div class="now-playing">
-    <div class="np-icon">
-      <svg viewBox="0 0 24 24"><use href="#i-waveform"/></svg>
-    </div>
-    <div class="np-text">
-      <div class="np-title">正在播放 · 金币</div>
-      <div class="np-detail">金币叮当入袋</div>
-    </div>
     <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div class="np-title">掌声</div>
+    <div class="stop"><svg viewBox="0 0 24 24"><use href="#i-stop"/></svg></div>
   </div>
 
   <div class="home-indicator"></div>
