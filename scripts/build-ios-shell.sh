@@ -26,7 +26,7 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 if [[ "$(uname -s)" != Darwin ]]; then
-  echo "This build requires macOS with Xcode 26.0.1; use the cloud workflow." >&2
+  echo "This build requires macOS with Xcode 26.6 (17F113); use the cloud workflow." >&2
   exit 1
 fi
 
@@ -118,10 +118,13 @@ for tool in node python3 xcodebuild xcrun ditto curl; do
   command -v "$tool" >/dev/null || { echo "Missing tool: $tool" >&2; exit 1; }
 done
 xcodebuild -version | tee "$ARTIFACTS/xcode-version.txt"
-grep -Fxq 'Xcode 26.0.1' "$ARTIFACTS/xcode-version.txt" || {
-  echo "Select stable Xcode 26.0.1; this workflow does not silently change toolchains." >&2
+# Xcode 26.4 fixed simdiskimaged hangs (172343027); pin a stable image with that
+# fix rather than retrying the pre-device inventory stall from run 39917133393.
+# https://developer.apple.com/documentation/xcode-release-notes/xcode-26_4-release-notes
+if ! grep -Fxq 'Xcode 26.6' "$ARTIFACTS/xcode-version.txt" || ! grep -Fxq 'Build version 17F113' "$ARTIFACTS/xcode-version.txt"; then
+  echo "Select stable Xcode 26.6 (17F113); this workflow does not silently change toolchains." >&2
   exit 1
-}
+fi
 # Official release layout includes bin/ and share/xcodegen/SettingPresets.
 # https://github.com/yonaskolb/XcodeGen/releases/tag/2.46.0
 mkdir -p "$RUN_DIR/tools"
@@ -214,10 +217,10 @@ xcodebuild -showBuildSettings -json \
   | tee "$ARTIFACTS/generated-build-identity.json"
 
 # Simulator tests are evidence only, never the source of the device IPA.
-# Run 39914900974 lists iPhone 16 / iOS 18.6 as available. Explicitly isolate
-# the repeated iOS 26.0.1 startup stalls while keeping the same Xcode/SDK.
+# Both pinned provider images list iPhone 17 Pro / iOS 26.5. This is the actual
+# automated acceptance destination, not the user's iPhone 16 Pro / iOS 26.5.2.
 # A provider may explicitly override this only after checking its destinations.
-SIMULATOR_DESTINATION="${SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=18.6}"
+SIMULATOR_DESTINATION="${SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5}"
 printf '%s\n' "$SIMULATOR_DESTINATION" | tee "$ARTIFACTS/simulator-destination.txt"
 echo '=== Simulator inventory and exact device selection ==='
 # A fresh runner may spend over 30s starting CoreSimulator before returning its

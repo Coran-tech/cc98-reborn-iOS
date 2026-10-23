@@ -25,11 +25,12 @@ test('both providers share one build entry point and stable Xcode', () => {
     assert.doesNotMatch(workflow, /xcodebuild\s+(?:test|build|archive)|(?:latest|beta|edge)\s*$/m);
     assert.doesNotMatch(workflow, /(?:app_store_connect|testflight|publishing|ios_signing):/i);
   }
-  assert.match(github, /runs-on: macos-15-intel\s/);
-  assert.match(github, /DEVELOPER_DIR: \/Applications\/Xcode_26\.0\.1\.app\/Contents\/Developer/);
+  assert.match(github, /runs-on: macos-26-intel\s/);
+  assert.match(github, /DEVELOPER_DIR: \/Applications\/Xcode_26\.6\.app\/Contents\/Developer/);
   assert.match(codemagic, /instance_type: mac_mini_m2/);
-  assert.match(codemagic, /xcode: 26\.0\.1/);
-  assert.match(script, /grep -Fxq 'Xcode 26\.0\.1'/);
+  assert.match(codemagic, /xcode: '26\.6'\s/);
+  assert.match(script, /grep -Fxq 'Xcode 26\.6'/);
+  assert.match(script, /grep -Fxq 'Build version 17F113'/);
   assert.match(script, /node --test tests\/ios-\*\.test\.cjs/);
   assert.match(script, /releases\/download\/2\.46\.0\/xcodegen\.zip/);
   assert.match(script, /XCODEGEN="\$RUN_DIR\/tools\/xcodegen\/bin\/xcodegen"/);
@@ -167,7 +168,7 @@ test('bounded simulator compilation and full tests precede the separate arm64 iP
     assert.doesNotMatch(phase, /only-testing|skip-testing/); // Full shared scheme in both phases.
   }
   assert.match(simulatorBuild, /tee "\$ARTIFACTS\/simulator-build-for-testing\.log"/);
-  assert.match(script, /SIMULATOR_DESTINATION="\$\{SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=18\.6\}"/);
+  assert.match(script, /SIMULATOR_DESTINATION="\$\{SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro,OS=26\.5\}"/);
   assert.match(script, /printf '%s\\n' "\$SIMULATOR_DESTINATION" \| tee "\$ARTIFACTS\/simulator-destination\.txt"/);
   assert.match(script, /printf 'Native Simulator tests passed on %s\.[^\n]+"\$SIMULATOR_DESTINATION" >> "\$ARTIFACTS\/README\.txt"/);
   assert.match(tests, /-destination "platform=iOS Simulator,id=\$SIMULATOR_UDID"/);
@@ -226,18 +227,18 @@ test('exact available Simulator selection does not fall back to another OS or de
   const harness = String.raw`
 import contextlib, io, json, os, sys, tempfile
 source = sys.stdin.read()
-runtime = "com.apple.CoreSimulator.SimRuntime.iOS-18-6"
+runtime = "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
 selected = "11111111-1111-4111-8111-111111111111"
 with tempfile.TemporaryDirectory(prefix="cc98-simulator-contract-") as folder:
     runtime_file, device_file = os.path.join(folder,"runtimes.json"), os.path.join(folder,"devices.json")
-    json.dump({"runtimes":[{"identifier":runtime,"version":"18.6","isAvailable":True}]},open(runtime_file,"w"))
-    valid = {"name":"iPhone 16","udid":selected,"state":"Shutdown","isAvailable":True}
+    json.dump({"runtimes":[{"identifier":runtime,"version":"26.5","isAvailable":True}]},open(runtime_file,"w"))
+    valid = {"name":"iPhone 17 Pro","udid":selected,"state":"Shutdown","isAvailable":True}
     for mode in ("exact", "wrong-os", "wrong-name", "unavailable", "duplicate"):
         devices = [dict(valid)]
         if mode == "unavailable": devices[0]["isAvailable"] = False
         if mode == "duplicate": devices.append(dict(valid,udid="22222222-2222-4222-8222-222222222222"))
         json.dump({"devices":{runtime:devices}},open(device_file,"w"))
-        destination = "platform=iOS Simulator,name=%s,OS=%s" % ("iPhone 17" if mode == "wrong-name" else "iPhone 16", "26.0.1" if mode == "wrong-os" else "18.6")
+        destination = "platform=iOS Simulator,name=%s,OS=%s" % ("iPhone 16" if mode == "wrong-name" else "iPhone 17 Pro", "26.0.1" if mode == "wrong-os" else "26.5")
         sys.argv = ["selector",destination,runtime_file,device_file]
         output = io.StringIO()
         succeeded = True
