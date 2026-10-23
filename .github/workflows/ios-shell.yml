@@ -62,7 +62,7 @@ jobs:
           path: build/ios-shell/run.*/artifacts/
           if-no-files-found: warn
           retention-days: 14
-      - name: Retain lightweight install and preview bundle
+      - name: Retain lightweight install bundle
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -72,6 +72,19 @@ jobs:
             build/ios-shell/run.*/artifacts/build-status.txt
             build/ios-shell/run.*/artifacts/ipa-validation.json
             build/ios-shell/run.*/artifacts/README.txt
-            build/ios-shell/run.*/artifacts/screenshots/
           if-no-files-found: error
+          retention-days: 14
+      - name: Retain lightweight visual diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/ios-shell/run.*/artifacts/*.log
+            build/ios-shell/run.*/artifacts/*.txt
+            build/ios-shell/run.*/artifacts/*.json
+            build/ios-shell/run.*/artifacts/screenshots/*.png
+            build/ios-shell/run.*/artifacts/screenshots/*.json
+            build/ios-shell/run.*/artifacts/screenshots/*.txt
+          if-no-files-found: warn
           retention-days: 14

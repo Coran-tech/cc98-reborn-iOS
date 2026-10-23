@@ -29,6 +29,11 @@ final class ShellSmokeTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+    private func dismissKeyboard(in app: XCUIApplication) {
+        tap("compose.dismissKeyboard", in: app)
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+    }
     func testHomeAndReadingNavigation() throws {
         let app = launch()
         screenshot("01-home-light")
@@ -64,7 +69,8 @@ final class ShellSmokeTests: XCTestCase {
         title.tap()
         title.typeText("Offline draft")
         screenshot("07b-new-topic-keyboard")
-        // Move the lower draft controls above the keyboard before opening the menu.
+        dismissKeyboard(in: app)
+        // Move the lower draft controls fully into the unobscured viewport.
         app.scrollViews["compose.scroll"].swipeUp()
         for _ in 0..<4 where !element("compose.draft", in: app).isHittable { app.swipeUp() }
         tap("compose.draft", in: app)
@@ -74,6 +80,13 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["草稿已保存到本机"].waitForExistence(timeout: 5))
         screenshot("08-draft-saved")
         XCTAssertFalse(app.alerts["无法保存"].exists)
+        app.buttons["取消"].firstMatch.tap()
+        let leave = app.buttons["保存草稿并退出"]
+        XCTAssertTrue(leave.waitForExistence(timeout: 5))
+        leave.tap()
+        tap("board.compose", in: app)
+        XCTAssertTrue(element("compose.title", in: app).waitForExistence(timeout: 5))
+        XCTAssertEqual(element("compose.title", in: app).value as? String, "Offline draft")
     }
     func testNewTopicsMessagesAndProfile() throws {
         let app = launch()
@@ -104,7 +117,10 @@ final class ShellSmokeTests: XCTestCase {
         let body = element("reply.body", in: app)
         body.tap()
         body.typeText("Large text draft")
+        let completeText = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Large text draft"), object: body)
+        XCTAssertEqual(XCTWaiter.wait(for: [completeText], timeout: 5), .completed)
         screenshot("15b-editor-dark-large-type-input")
+        dismissKeyboard(in: app)
     }
     func testCompactWidth() throws {
         let app = launch(["--fixture-compact"])

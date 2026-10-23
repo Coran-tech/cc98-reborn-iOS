@@ -23,6 +23,20 @@ enum NativePostingError {
     }
 }
 
+struct ComposerKeyboardToolbar: ToolbarContent {
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("收起键盘") { Self.dismissKeyboard() }
+                .accessibilityIdentifier("compose.dismissKeyboard")
+        }
+    }
+
+    static func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
 struct ComposerImageButton: View {
     @EnvironmentObject private var app: NativeAppModel
     @Binding var text: String
@@ -373,6 +387,7 @@ struct NewTopicComposer: View {
         .navigationTitle(isVote ? "发表投票" : "发表主题")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ComposerKeyboardToolbar()
             ToolbarItem(placement: .cancellationAction) {
                 Button("取消") { if hasInput { showExit = true } else { dismiss() } }
                     .frame(minHeight: 44)
@@ -435,6 +450,8 @@ struct NewTopicComposer: View {
             .accessibilityIdentifier("compose.title")
             .textFieldStyle(.roundedBorder)
             .focused($focused)
+            .submitLabel(.done)
+            .onSubmit { ComposerKeyboardToolbar.dismissKeyboard() }
     }
 
     @ViewBuilder
@@ -848,6 +865,8 @@ struct EditPostComposer: View {
                             .textFieldStyle(.roundedBorder)
                             .font(ShellTheme.Fonts.body)
                             .accessibilityIdentifier("compose.title")
+                            .submitLabel(.done)
+                            .onSubmit { ComposerKeyboardToolbar.dismissKeyboard() }
                     }
 
                     Text(contentType == 0 ? "正文 · UBB 源码" : "正文 · Markdown 源码")
@@ -910,6 +929,7 @@ struct EditPostComposer: View {
             .scrollDismissesKeyboard(.interactively)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ComposerKeyboardToolbar()
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { if changed { showExit = true } else { dismiss() } }
                         .frame(minHeight: 44)

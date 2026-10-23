@@ -12,9 +12,9 @@ final class ContentFilterWebKitTests: XCTestCase {
         let finished = expectation(description: "bundled frame + MessageChannel + Worker")
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
-        config.setURLSchemeHandler(RebornAssetHandler(assets: assets), forURLScheme: "reborn-asset")
         var outcome: [String: Any]?
         let probe = FilterFrameProbe(started: { started.fulfill() }) { result in outcome = result; finished.fulfill() }
+        config.setURLSchemeHandler(FilterAssetProbe(assets: assets, record: probe.record), forURLScheme: "reborn-asset")
         config.userContentController.add(probe, name: "filterTestResult")
         let browser = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: config)
         browser.navigationDelegate = probe
@@ -65,7 +65,9 @@ final class ContentFilterWebKitTests: XCTestCase {
         })();
         </script></body>
         """
-        browser.loadHTMLString(html, baseURL: ShellPolicy.home)
+        // Model an HTTPS response directly rather than assigning a base URL to a
+        // substitute-data document. The request is simulated; no network load occurs.
+        browser.loadSimulatedRequest(URLRequest(url: ShellPolicy.home), responseHTML: html)
         // WebContent cold launch is separate from the six-second transport deadline.
         // Async fulfillment leaves the main actor available for WebKit callbacks.
         await fulfillment(of: [started], timeout: 25)
@@ -94,8 +96,8 @@ private final class FilterFrameProbe: NSObject, WKNavigationDelegate, WKScriptMe
     init(started: @escaping () -> Void, completion: @escaping ([String: Any]) -> Void) {
         self.started = started; self.completion = completion
     }
-    private func record(_ event: [String: Any]) {
-        if events.count < 40 { events.append(event) }
+    fileprivate func record(_ event: [String: Any]) {
+        if events.count < 80 { events.append(event) }
     }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard !completed, message.frameInfo.isMainFrame, let result = message.body as? [String: Any] else { return }
@@ -106,7 +108,7 @@ private final class FilterFrameProbe: NSObject, WKNavigationDelegate, WKScriptMe
     }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { record(["stage": "navigation-no-url"]); decisionHandler(.cancel); return }
-        // loadHTMLString may ask for the synthetic main-document URL; it never performs a network load.
+        // loadSimulatedRequest asks for the synthetic main-document URL, without fetching it.
         if action.targetFrame?.isMainFrame == true && (url == ShellPolicy.home || url.absoluteString == "about:blank") {
             record(["stage": "main-navigation-allowed", "scheme": url.scheme ?? "none"])
             decisionHandler(.allow); return
@@ -130,4 +132,51 @@ private final class FilterFrameProbe: NSObject, WKNavigationDelegate, WKScriptMe
         record(["stage": "main-navigation-failed", "code": (error as NSError).code])
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { record(["stage": "web-process-terminated"]) }
+}
+
+/// Observe the real bundle handler without replacing its bytes, responses or errors.
+/// All recorded paths are local allowlisted asset names; no credentials or network URLs.
+@MainActor
+private final class FilterAssetProbe: NSObject, WKURLSchemeHandler {
+    private let handler: RebornAssetHandler
+    private let record: ([String: Any]) -> Void
+    init(assets: RebornAssets, record: @escaping ([String: Any]) -> Void) {
+        handler = RebornAssetHandler(assets: assets)
+        self.record = record
+    }
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        let path = urlSchemeTask.request.url.flatMap(ShellPolicy.assetPath) ?? "invalid"
+        record(["stage": "asset-start", "path": path])
+        handler.webView(webView, start: FilterAssetTask(task: urlSchemeTask, path: path, record: record))
+    }
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        let path = urlSchemeTask.request.url.flatMap(ShellPolicy.assetPath) ?? "invalid"
+        record(["stage": "asset-stop", "path": path])
+        handler.webView(webView, stop: urlSchemeTask)
+    }
+}
+
+@MainActor
+private final class FilterAssetTask: NSObject, WKURLSchemeTask {
+    private let task: WKURLSchemeTask
+    private let path: String
+    private let record: ([String: Any]) -> Void
+    var request: URLRequest { task.request }
+    init(task: WKURLSchemeTask, path: String, record: @escaping ([String: Any]) -> Void) {
+        self.task = task; self.path = path; self.record = record
+    }
+    func didReceive(_ response: URLResponse) {
+        record(["stage": "asset-response", "path": path, "mime": response.mimeType ?? "none",
+                "status": (response as? HTTPURLResponse)?.statusCode ?? 0])
+        task.didReceive(response)
+    }
+    func didReceive(_ data: Data) { task.didReceive(data) }
+    func didFinish() {
+        record(["stage": "asset-finished", "path": path])
+        task.didFinish()
+    }
+    func didFailWithError(_ error: Error) {
+        record(["stage": "asset-failed", "path": path, "code": (error as NSError).code])
+        task.didFailWithError(error)
+    }
 }
