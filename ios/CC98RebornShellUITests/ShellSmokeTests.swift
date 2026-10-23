@@ -30,23 +30,17 @@ final class ShellSmokeTests: XCTestCase {
         add(attachment)
     }
     private func dismissKeyboard(in app: XCUIApplication) {
-        // iOS can retain an off-screen Keyboard accessibility node after the
-        // dismissal animation. Verify an on-screen, usable key before/after,
-        // rather than requiring the accessibility object itself to be deleted.
-        func isKeyboardVisible() -> Bool {
-            let keyboard = app.keyboards.firstMatch
-            guard keyboard.exists else { return false }
-            let overlap = keyboard.frame.intersection(app.frame)
-            guard !overlap.isNull, overlap.width > 0, overlap.height > 0 else { return false }
-            let key = keyboard.keys.firstMatch
-            return key.exists && key.isHittable
-        }
-        XCTAssertTrue(isKeyboardVisible(), "The input keyboard must be visible before dismissal")
+        // This accessory exists only while the editor's keyboard is presented.
+        // iOS 26 Keyboard/Key accessibility nodes do not reliably describe its
+        // visible state. Check our actual, hittable accessory before and after.
+        let accessory = element("compose.dismissKeyboard", in: app)
         tap("compose.dismissKeyboard", in: app)
-        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !isKeyboardVisible() }, object: nil)
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !accessory.exists || !accessory.isHittable
+        }, object: nil)
         _ = XCTWaiter.wait(for: [hidden], timeout: 5)
         screenshot("keyboard-after-dismiss")
-        XCTAssertFalse(isKeyboardVisible(), "The keyboard must leave the usable viewport")
+        XCTAssertFalse(accessory.exists && accessory.isHittable, "The keyboard accessory must leave the usable viewport")
     }
     func testHomeAndReadingNavigation() throws {
         let app = launch()
@@ -136,6 +130,7 @@ final class ShellSmokeTests: XCTestCase {
         // accessibility query managed to finish inside a five-second timer.
         XCTAssertEqual(body.value as? String, "Large text draft")
         dismissKeyboard(in: app)
+        XCTAssertEqual(body.value as? String, "Large text draft")
     }
     func testCompactWidth() throws {
         let app = launch(["--fixture-compact"])
