@@ -357,199 +357,225 @@ struct NewTopicComposer: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        Text("使用账号：")
-                            .font(ShellTheme.Fonts.footnote)
-                            .foregroundStyle(ShellTheme.secondaryText)
-                        NativeAvatar(
-                            url: auth.profile?.avatarURL ?? NativeAvatarURLs.defaultURL(gender: auth.profile?.gender),
-                            name: auth.profile?.name,
-                            size: 24
-                        )
-                        Text(auth.profile?.name ?? "CC98 用户")
-                            .font(ShellTheme.Fonts.footnote.weight(.medium))
-                            .foregroundStyle(ShellTheme.primaryText)
-                    }
+            publishingDialogs
+                .task { await prepareDraft() }
+                .onChange(of: title) { _, _ in saveDraftIfChanged() }
+                .onChange(of: content) { _, _ in saveDraftIfChanged() }
+                .onChange(of: settings) { _, _ in saveDraftIfChanged() }
+        }
+    }
 
-                    Text(boardName)
-                        .font(ShellTheme.Fonts.footnote)
-                        .foregroundStyle(ShellTheme.secondaryText)
-
-                    Text("主题标题").font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
-                    TextField("输入主题标题", text: $title)
-                        .font(ShellTheme.Fonts.body)
-                        .accessibilityIdentifier("compose.title")
-                        .textFieldStyle(.roundedBorder)
-                        .focused($focused)
-
-                    Text(contentType == 0 ? "正文 · UBB 源码" : "正文 · Markdown 源码")
-                        .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
-                    if contentType == 0 {
-                        UBBFormatBar(text: $content, selection: $selection, editor: editor)
-                    } else {
-                        MarkdownFormatBar(text: $content, selection: $selection, editor: editor)
-                    }
-                    UBBTextEditor(text: $content, selection: $selection, controller: editor, minHeight: 260)
-                        .accessibilityIdentifier("compose.body")
-                        .frame(minHeight: 260)
-                        .padding(4)
-                        .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(ShellTheme.separator, lineWidth: 0.5)
-                        )
-
-                    ComposerAttachmentsBar(text: $content, selection: $selection, editor: editor) { uploading = $0 }
-                    Text("\(content.count) / 8000")
-                        .font(ShellTheme.Fonts.footnote)
-                        .foregroundStyle(content.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        DisclosureGroup("预览") {
-                            UBBContentView(source: content, markdown: contentType == 1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .font(ShellTheme.Fonts.body)
-                        .accessibilityIdentifier("compose.preview")
-                    }
-
-                    if isVote {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("投票设置")
-                                .font(ShellTheme.Fonts.footnote.weight(.semibold))
-                                .foregroundStyle(ShellTheme.primaryText)
-                            Stepper("有效天数：\(expiredDays)", value: $expiredDays, in: 1...1000)
-                                .font(ShellTheme.Fonts.footnote)
-                            Stepper(
-                                "最多可投：\(maxVoteCount)",
-                                value: $maxVoteCount,
-                                in: 1...max(1, voteItems.count)
-                            )
-                            .font(ShellTheme.Fonts.footnote)
-
-                            ForEach(voteItems.indices, id: \.self) { index in
-                                HStack {
-                                    TextField("选项 \(index + 1)", text: $voteItems[index])
-                                        .textFieldStyle(.roundedBorder)
-                                    if voteItems.count > 2 {
-                                        Button {
-                                            voteItems.remove(at: index)
-                                            maxVoteCount = min(maxVoteCount, max(1, voteItems.count))
-                                        } label: {
-                                            Image(systemName: "minus.circle")
-                                                .foregroundStyle(ShellTheme.danger)
-                                                .frame(width: 44, height: 44)
-                                                .accessibilityLabel("删除选项 \(index + 1)")
-                                        }
-                                    }
-                                }
-                            }
-
-                            if voteItems.count < 20 {
-                                Button {
-                                    voteItems.append("")
-                                } label: {
-                                    Label("添加选项", systemImage: "plus.circle")
-                                        .frame(minHeight: 44)
-                                        .font(ShellTheme.Fonts.footnote)
-                                        .foregroundStyle(ShellTheme.accent)
-                                }
-                            }
-
-                            Toggle("投票后结果可见", isOn: $needVote)
-                                .font(ShellTheme.Fonts.footnote)
-                        }
-                        .padding(12)
-                        .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
-                    }
-
-                    draftControls
-                    NativeLibraryStatusView()
-
-                    Button(contentType == 0 ? "格式：UBB · 切换为 Markdown" : "格式：Markdown · 切换为 UBB") {
-                        showModeChange = true
-                    }
-                    .font(ShellTheme.Fonts.footnote)
+    private var composerScreen: some View {
+        ScrollView { composerContents }
+        .background(ShellTheme.pageBackground)
+        .navigationTitle(isVote ? "发表投票" : "发表主题")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") { if hasInput { showExit = true } else { dismiss() } }
                     .frame(minHeight: 44)
-                    .accessibilityIdentifier("compose.format")
+                    .disabled(sending || uploading || published)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(sending ? "发布中…" : "发布") { Task { await submit() } }
+                    .font(ShellTheme.Fonts.body.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("compose.submit")
+                    .disabled(sending || uploading || published || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .interactiveDismissDisabled(hasInput || uploading || sending || published)
+    }
 
-                    if let tagGroup = tags, tagGroup.layers > 0 {
-                        HStack(spacing: 8) {
-                            tagMenu(
-                                "一级标签",
-                                options: tagGroup.tags,
-                                selected: $tag1ID
-                            ) {
-                                tag2ID = nil
-                            }
-                            if tagGroup.layers == 2 {
-                                tagMenu(
-                                    "二级标签",
-                                    options: tagGroup.tags.first { $0.id == tag1ID }?.subTags ?? [],
-                                    selected: $tag2ID
-                                ) {}
-                            }
+    private var composerContents: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            titleFields
+            sourceFields
+            if isVote { voteSettings }
+            draftControls
+            NativeLibraryStatusView()
+            publishingOptions
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.danger)
+            }
+        }
+        .disabled(sending || published)
+        .padding(16)
+        .frame(maxWidth: 680)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private var titleFields: some View {
+        HStack(spacing: 8) {
+            Text("使用账号：")
+                .font(ShellTheme.Fonts.footnote)
+                .foregroundStyle(ShellTheme.secondaryText)
+            NativeAvatar(
+                url: auth.profile?.avatarURL ?? NativeAvatarURLs.defaultURL(gender: auth.profile?.gender),
+                name: auth.profile?.name,
+                size: 24
+            )
+            Text(auth.profile?.name ?? "CC98 用户")
+                .font(ShellTheme.Fonts.footnote.weight(.medium))
+                .foregroundStyle(ShellTheme.primaryText)
+        }
+
+        Text(boardName)
+            .font(ShellTheme.Fonts.footnote)
+            .foregroundStyle(ShellTheme.secondaryText)
+
+        Text("主题标题").font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+        TextField("输入主题标题", text: $title)
+            .font(ShellTheme.Fonts.body)
+            .accessibilityIdentifier("compose.title")
+            .textFieldStyle(.roundedBorder)
+            .focused($focused)
+    }
+
+    @ViewBuilder
+    private var sourceFields: some View {
+        Text(contentType == 0 ? "正文 · UBB 源码" : "正文 · Markdown 源码")
+            .font(ShellTheme.Fonts.footnote).foregroundStyle(ShellTheme.secondaryText)
+        if contentType == 0 {
+            UBBFormatBar(text: $content, selection: $selection, editor: editor)
+        } else {
+            MarkdownFormatBar(text: $content, selection: $selection, editor: editor)
+        }
+        UBBTextEditor(text: $content, selection: $selection, controller: editor, minHeight: 260)
+            .accessibilityIdentifier("compose.body")
+            .frame(minHeight: 260)
+            .padding(4)
+            .background(ShellTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(ShellTheme.separator, lineWidth: 0.5)
+            )
+
+        ComposerAttachmentsBar(text: $content, selection: $selection, editor: editor) { uploading = $0 }
+        Text("\(content.count) / 8000")
+            .font(ShellTheme.Fonts.footnote)
+            .foregroundStyle(content.count > 8000 ? ShellTheme.danger : ShellTheme.secondaryText)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+
+        if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            DisclosureGroup("预览") {
+                UBBContentView(source: content, markdown: contentType == 1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(ShellTheme.Fonts.body)
+            .accessibilityIdentifier("compose.preview")
+        }
+    }
+
+    private var voteSettings: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("投票设置")
+                .font(ShellTheme.Fonts.footnote.weight(.semibold))
+                .foregroundStyle(ShellTheme.primaryText)
+            Stepper("有效天数：\(expiredDays)", value: $expiredDays, in: 1...1000)
+                .font(ShellTheme.Fonts.footnote)
+            Stepper(
+                "最多可投：\(maxVoteCount)",
+                value: $maxVoteCount,
+                in: 1...max(1, voteItems.count)
+            )
+            .font(ShellTheme.Fonts.footnote)
+
+            ForEach(voteItems.indices, id: \.self) { index in
+                HStack {
+                    TextField("选项 \(index + 1)", text: $voteItems[index])
+                        .textFieldStyle(.roundedBorder)
+                    if voteItems.count > 2 {
+                        Button {
+                            voteItems.remove(at: index)
+                            maxVoteCount = min(maxVoteCount, max(1, voteItems.count))
+                        } label: {
+                            Image(systemName: "minus.circle")
+                                .foregroundStyle(ShellTheme.danger)
+                                .frame(width: 44, height: 44)
+                                .accessibilityLabel("删除选项 \(index + 1)")
                         }
                     }
+                }
+            }
 
-                    Toggle("接收新回复通知", isOn: $notifyPoster)
+            if voteItems.count < 20 {
+                Button {
+                    voteItems.append("")
+                } label: {
+                    Label("添加选项", systemImage: "plus.circle")
+                        .frame(minHeight: 44)
                         .font(ShellTheme.Fonts.footnote)
-
-                    if !isVote {
-                        if effectiveAnonymousState == 1 {
-                            Text("本版强制匿名发帖")
-                                .font(ShellTheme.Fonts.footnote)
-                                .foregroundStyle(ShellTheme.secondaryText)
-                        } else if effectiveAnonymousState == 2 || effectiveAnonymousState == 3 {
-                            Toggle("匿名发布（消耗 10000 财富值）", isOn: $anonymous)
-                                .font(ShellTheme.Fonts.footnote)
-                        }
-                    }
-
-                    if !isVote {
-                        Picker("帖子类型", selection: $postKind) {
-                            Text("普通帖").tag(0)
-                            Text("学术通知").tag(2)
-                            if canPostActivity {
-                                Text("校园活动").tag(1)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(ShellTheme.Fonts.footnote)
-                            .foregroundStyle(ShellTheme.danger)
-                    }
-
-                }
-                .disabled(sending || published)
-                .padding(16)
-                .frame(maxWidth: 680)
-                .frame(maxWidth: .infinity)
-            }
-            .background(ShellTheme.pageBackground)
-            .navigationTitle(isVote ? "发表投票" : "发表主题")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { if hasInput { showExit = true } else { dismiss() } }
-                        .frame(minHeight: 44)
-                        .disabled(sending || uploading || published)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(sending ? "发布中…" : "发布") { Task { await submit() } }
-                        .font(ShellTheme.Fonts.body.weight(.semibold))
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("compose.submit")
-                        .disabled(sending || uploading || published || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .foregroundStyle(ShellTheme.accent)
                 }
             }
-            .interactiveDismissDisabled(hasInput || uploading || sending || published)
+
+            Toggle("投票后结果可见", isOn: $needVote)
+                .font(ShellTheme.Fonts.footnote)
+        }
+        .padding(12)
+        .background(ShellTheme.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private var publishingOptions: some View {
+        Button(contentType == 0 ? "格式：UBB · 切换为 Markdown" : "格式：Markdown · 切换为 UBB") {
+            showModeChange = true
+        }
+        .font(ShellTheme.Fonts.footnote)
+        .frame(minHeight: 44)
+        .accessibilityIdentifier("compose.format")
+
+        if let tagGroup = tags, tagGroup.layers > 0 {
+            HStack(spacing: 8) {
+                tagMenu(
+                    "一级标签",
+                    options: tagGroup.tags,
+                    selected: $tag1ID
+                ) {
+                    tag2ID = nil
+                }
+                if tagGroup.layers == 2 {
+                    tagMenu(
+                        "二级标签",
+                        options: tagGroup.tags.first { $0.id == tag1ID }?.subTags ?? [],
+                        selected: $tag2ID
+                    ) {}
+                }
+            }
+        }
+
+        Toggle("接收新回复通知", isOn: $notifyPoster)
+            .font(ShellTheme.Fonts.footnote)
+
+        if !isVote {
+            if effectiveAnonymousState == 1 {
+                Text("本版强制匿名发帖")
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.secondaryText)
+            } else if effectiveAnonymousState == 2 || effectiveAnonymousState == 3 {
+                Toggle("匿名发布（消耗 10000 财富值）", isOn: $anonymous)
+                    .font(ShellTheme.Fonts.footnote)
+            }
+        }
+
+        if !isVote {
+            Picker("帖子类型", selection: $postKind) {
+                Text("普通帖").tag(0)
+                Text("学术通知").tag(2)
+                if canPostActivity {
+                    Text("校园活动").tag(1)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var draftDialogs: some View {
+        composerScreen
             .confirmationDialog("退出当前任务？", isPresented: $showExit, titleVisibility: .visible) {
                 Button("保存草稿并退出") { if saveDraft() { dismiss() } }
                 Button("丢弃本任务草稿并退出", role: .destructive) { if clearDraft() { dismiss() } }
@@ -563,6 +589,10 @@ struct NewTopicComposer: View {
                 Button("取消", role: .cancel) { }
                 Button("仅清除已保存草稿", role: .destructive) { clearDraft() }
             } message: { Text("当前编辑区保留；下次修改会重新自动保存。") }
+    }
+
+    private var publishingDialogs: some View {
+        draftDialogs
             .alert("切换源码格式？", isPresented: $showModeChange) {
                 Button("取消", role: .cancel) { }
                 Button("切换并检查预览") { contentType = contentType == 0 ? 1 : 0 }
@@ -570,25 +600,26 @@ struct NewTopicComposer: View {
             .alert("主题已发布，部分提醒未完成", isPresented: $showMentionWarning) {
                 Button("完成") { onCreated(); dismiss() }
             } message: { Text("请到主题内核对 @ 提醒。不要重新发布主题。") }
-            .task {
-                guard !draftReady else { return }
-                anonymous = effectiveAnonymousState == 1
-                restoreDraft()
-                if isVote { postKind = 0; anonymous = false }
-                savedSnapshot = snapshot
-                draftReady = true
-                if let detail = try? await app.api.board(id: boardID) {
-                    boardAnonymousState = detail.anonymousState ?? 0
-                    boardMasters = detail.boardMasters ?? []
-                    if detail.anonymousState == 1 { anonymous = true }
-                }
-                if let tagGroup = try? await app.api.boardTags(boardID: boardID) { tags = tagGroup }
-            }
-            .onChange(of: title) { _, _ in if draftReady && !published && snapshot != savedSnapshot { saveDraft() } }
-            .onChange(of: content) { _, _ in if draftReady && !published && snapshot != savedSnapshot { saveDraft() } }
-            .onChange(of: settings) { _, _ in if draftReady && !published && snapshot != savedSnapshot { saveDraft() } }
+    }
 
+    @MainActor
+    private func prepareDraft() async {
+        guard !draftReady else { return }
+        anonymous = effectiveAnonymousState == 1
+        restoreDraft()
+        if isVote { postKind = 0; anonymous = false }
+        savedSnapshot = snapshot
+        draftReady = true
+        if let detail = try? await app.api.board(id: boardID) {
+            boardAnonymousState = detail.anonymousState ?? 0
+            boardMasters = detail.boardMasters ?? []
+            if detail.anonymousState == 1 { anonymous = true }
         }
+        if let tagGroup = try? await app.api.boardTags(boardID: boardID) { tags = tagGroup }
+    }
+
+    private func saveDraftIfChanged() {
+        if draftReady && !published && snapshot != savedSnapshot { saveDraft() }
     }
 
     private var draftControls: some View {
