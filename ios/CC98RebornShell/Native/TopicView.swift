@@ -273,7 +273,10 @@ struct TopicDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            bottomBars
+            VStack(spacing: 0) {
+                if library.readLaterUndo?.topic.id == topicID { NativeReadLaterUndoView() }
+                bottomBars
+            }
         }
         .refreshable { await load() }
         .task(id: paging.requestedPage) { await load() }

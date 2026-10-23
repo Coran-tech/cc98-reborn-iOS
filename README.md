@@ -1,67 +1,39 @@
-# CC98 Reborn iOS 真机验证壳
+# CC98 Reborn 原生 iOS 客户端
 
-在 iPhone 上直接打开 CC98 原站，并从 App 包加载固定版本的 Reborn。没有页面代理服务器；原站登录、权限、编辑和上传继续由官方网页执行。
+基于 DeepSeek 原生分支的非官方 CC98 客户端，使用 SwiftUI 提供首页、版面、新帖、消息、我的五个入口，直接访问 CC98 API。**需要校网或覆盖 App 与系统授权窗口的系统 VPN；不提供公网代理。**
 
-本轮验证设备是 **iPhone 16 Pro / iOS 26.5.2**，最低支持 iOS 17。0.2.0 加入原生 OpenID 授权，复用现有 Reborn 客户端，在系统授权窗口完成同账号绑定。原站模式、本地 Reborn 注入和模式恢复继续保留。
+当前开发分支为 `codex/ios-mobile-ui`，候选版本 **0.4.0**。在 Build 82 长时登录版上整理手机界面，并接入版面／联系人置顶、用户备注、私信草稿、草稿中心、搜索历史、稍后再看管理及本机增强备份。代码接入、云端验证与真机可用分别记录，不以其中一项代替其他验收。
 
-## 从 Windows 取得 iPhone 候选包
+## 安装与使用
 
-1. 在 [GitHub Actions](https://github.com/Coran-tech/cc98-reborn-iOS/actions/workflows/ios-shell.yml) 打开 `iOS verification shell`。
-2. 选择验证分支运行工作流。默认先跑 Node、原生 OAuth 协议检查和 iOS Simulator 测试，再编译 **iPhoneOS arm64** 应用。若要先取得真机候选包，可勾选 `device_only`：保留 Node、原生 OAuth 协议检查、设备编译和包校验，跳过模拟器启动与测试。
-3. 构建成功后下载 `ios-shell-运行编号-尝试次数` artifact。默认产物为 `CC98RebornShell-unsigned-device.ipa`；`device_only` 产物为 `CC98RebornShell-unsigned-unverified-device.ipa`，尚未完成模拟器验证。同包的 `README.txt`、`build-status.txt` 记录实际验证状态。
-4. 按 [AltStore Windows 官方指南](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows) 在本机配置签名工具，把候选 IPA 用自己的 Apple Account 签名安装。Apple Account 密码、验证码不交给本项目或云构建。
-5. iPhone 开启开发者模式，并连接校网或能覆盖本 App 的系统 VPN，然后按 [真机检查表](https://github.com/Coran-tech/cc98-reborn-iOS/blob/codex/ios-verification-shell/ios/DEVICE_TEST_CHECKLIST.md) 验证。
+- [当前版本说明与安装步骤](ios/README.md)：候选 IPA、构建状态、Windows 自签、功能范围与数据边界。
+- [真机验证清单](ios/DEVICE_TEST_CHECKLIST.md)：以 **iPhone 16 Pro / iOS 26.5.2** 验证登录、中文输入、上传、草稿与续期；App 最低支持 iOS 17。
+- [OpenID 配置与限制](ios/OPENID_PREREQUISITES.md)：官方授权、回调及需要站方配合的条件。
+- [手机端 UI 设计规范](ios/MOBILE_UI_SPEC.md)：页面、交互、功能保留、已接入能力与后续范围。
 
-**下载的 IPA 尚未签名，不能直接安装。** 免费个人签名通常 7 天到期，需要续签；Windows 编写代码不等于 Windows 能编译 iOS SDK。云端不使用 Apple 分发凭据，也不会访问论坛账号或学校 VPN。
+登录从“我的”进入官方 OpenID 系统授权窗口，不需要先在内嵌网页登录或进行旧壳同账号绑定。凭据按账号存入本机 Keychain；自动续期受实际刷新授权与站方策略约束，不承诺永久登录。
 
-## 本地检查与云构建
+IPA 需自行签名后安装。沿用已成功使用的 Windows 签名方式，优先保持原签名身份和 Bundle ID 覆盖安装，不要先卸载含有草稿的版本。Apple Account、密码与验证码只在你信任的签名工具中输入，不交给本项目或云构建。也可参考 [AltStore Windows 官方安装指南](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows)。
 
-Windows 安装 Node.js 22 后，在仓库根目录运行：
+## 检查与云构建
 
-```powershell
-node --test tests/ios-*.test.cjs
-node scripts/package-ios-resources.cjs
-```
+Windows 可运行仓库的 Node 检查；iOS SDK 编译在 macOS 完成。完整步骤、实际测试范围与设备包说明见 [开发与云构建说明](ios/README.md#windows-检查与云构建)。
 
-脚本按 manifest 与资源引用白名单打包 Reborn，生成的资源不提交到仓库。macOS 构建采用 XcodeGen 生成工程，GitHub Actions 和备用 Codemagic 共用同一构建入口：
+- [GitHub Actions](https://github.com/Coran-tech/cc98-reborn-iOS/actions/workflows/ios-shell.yml) 提供手动构建，下载对应分支的 artifact。
+- 构建入口为 [`scripts/build-ios-shell.sh`](scripts/build-ios-shell.sh)，产物的 `README.txt`、`build-status.txt`、日志和截图记录实际验证结果。
+- `device_only` 只生成未经模拟器验证的设备候选，不能作为本轮 UI 验收依据。
+- 云端使用合成数据，不接入真实论坛账号或学校 VPN，也不自动发布 Release、上传 TestFlight。
 
-```sh
-bash scripts/build-ios-shell.sh
-```
+## 数据范围与未接入能力
 
-该脚本需要匹配配置的 macOS/Xcode 环境，不能在 Windows 上生成 iPhone 可执行程序。默认流程要求模拟器测试、设备编译及包校验都通过，并保留日志、xcresult 和截图。
+本机增强备份只包含置顶、用户／主题备注、屏蔽规则及稍后再看；不含凭据、草稿、私信正文、搜索／浏览历史、阅读进度和外观设置。重要草稿请另行复制保存，不能把该文件当作完整设备迁移。
 
-需先取得未经模拟器验证的设备候选时，显式运行 `bash scripts/build-ios-shell.sh --device-only`。该路径不生成模拟器测试结果；设备编译或包校验失败仍不会产出 IPA。它不改变后续完整验证要求，也不改变原站登录及同账号绑定边界。
+问号、AI、本地语义服务、远程推送和部分桌面增强仍待独立接入。前台本地消息提醒不等于应用关闭后的推送。
 
-GitHub 工作流只在 `codex/ios-verification-shell` 的相关文件变动或手动触发时运行，使用标准 macOS runner。没有自动 TestFlight 上传、App Store 发布或 Release 创建。Codemagic 只保留手动备用配置，不需要同时启用两套 CI。
+仓库保留 `ShellView`、网页注入资源及同账号绑定代码作为历史兼容实现，**当前 App 入口为 `NativeRootView`，不提供旧壳的原站／Reborn 模式切换**。旧壳的 HTTPS 页面嵌入本地过滤 iframe 受 WebKit 混合内容规则限制，测试中明确记录为已知兼容失败；不代表旧网页过滤已经可用。历史壳的安装反馈不能替代本版原生验收。
 
-## 壳内操作
+## 来源与许可
 
-- **原站模式**：不注入 Reborn，适合先验证官方登录、编辑和上传。
-- **Reborn 模式**：从包内按固定顺序注入增强脚本、样式和资源；不执行远程 Reborn 更新。
-- **切换与重载**：可能中断当前网页的未提交编辑，必须确认；操作前自行保存重要草稿。模式切换保留同一网站数据仓库，不顺便清除登录。
-- **诊断**：区分容器状态、注入状态和不支持能力。诊断不应包含帖子正文、密码、Cookie、token 或完整 OAuth 回调。
+项目保留 [CC98 Reborn](https://github.com/Coran-tech/cc98-reborn) 0.4.1 工作副本的资源源码快照及 [MIT 许可](LICENSE)，并保留 Showdown、KaTeX 等包内依赖许可。旧壳资源按本仓库快照打包，不执行远程 Reborn 更新；不假定快照等同上游同名发布版本。
 
-## 绑定同一个 CC98 账号
-
-先在原站模式登录，再切到 Reborn 模式，使用页面里的“绑定同一账号”按钮。App 打开官方 OpenID 系统授权窗口；授权账号必须与当前论坛页面的 UID 一致，且官方 `/me` 返回有效水印，才保存绑定。系统窗口可能需要再登录一次，它与论坛 WebView 的登录状态并不相同。
-
-也可从“状态与诊断 → 同账号 OpenID 绑定”发起授权、查看状态或解除本机绑定。解除绑定不退出论坛账号，也不撤销站方已授予客户端的权限。
-
-现有客户端已追加回调 `org.cc98.reborn.shell:/oauth/callback`；用户于 2026-10-19 确认后台保存成功。绑定时不使用客户端密钥，不导入桌面扩展的 token，也不代理论坛请求。授权取消或失败后可以重试，原站模式仍可使用。完整配置和真机验收见 [OpenID 配置](https://github.com/Coran-tech/cc98-reborn-iOS/blob/codex/ios-verification-shell/ios/OPENID_PREREQUISITES.md)。
-
-## 本轮边界
-
-- 只对精确登记的官方 HTTPS 主页面启用增强与有限原生桥。外部页面、OpenID 页面和未登记子框架不获得特权。
-- 先验证主页面；侧窗子框架的完整增强、浏览器后台服务、问号、AI 和本地语义服务尚未作为本轮交付。
-- 官方网页业务请求保留在网页身份边界；不把论坛 Bearer 提取到 Swift。原生授权只临时使用本次独立授权的 access token 获取 `/me`，不持久保存 token，不暴露任意网络、文件或脚本执行能力。
-- 云端协议检查和离线 UI smoke 不连接真实论坛账号。Build 8 已获得用户“安装成功、功能正常”的反馈；新增 OpenID 的系统窗口、校网连通性和授权闭环需要在新版 IPA 上验证。
-- 原站模式是故障恢复手段，不是完整 Reborn 功能验收的替代品。App 后台可被系统挂起，不承诺后台持续扫描或离线推送。
-
-## 源码与后续更新
-
-此仓库包含验证壳和构建所需的 Reborn 资源源码快照，来源于 [CC98 Reborn](https://github.com/Coran-tech/cc98-reborn) 当前 0.4.1 工作副本。资源版本以本库快照为准，不假定等同上游已发布的同名 tag。只同步打包器列出的输入，不复制服务器、凭据、真实论坛运行数据或整个开发目录。
-
-App 更新通过重新构建和自签完成。转 TestFlight 时若 Bundle ID 或数据容器改变，应按新安装处理；现有配置备份不含草稿、稍后再看或登录凭据。
-
-保留 Reborn MIT 许可与 Showdown、KaTeX 等包内依赖许可。独立 App 的内容、品牌与分发许可，以及 OpenID 客户端用途，仍按相应服务方要求确认。
+内容、品牌、公开分发和 OpenID 客户端用途仍按相应服务方要求确认。

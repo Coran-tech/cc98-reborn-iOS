@@ -5,6 +5,9 @@ import Foundation
 // All API paths are intercepted while enabled: unknown paths fail locally.
 enum NativeUITestFixture {
     static var isEnabled: Bool { ProcessInfo.processInfo.arguments.contains("--native-ui-fixture") }
+    static var isLoginRecoveryEnabled: Bool {
+        isEnabled && ProcessInfo.processInfo.arguments.contains("--fixture-login-recovery")
+    }
     static let userID = 900001
     static let libraryDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("Reborn-UIFixture-" + UUID().uuidString, isDirectory: true)

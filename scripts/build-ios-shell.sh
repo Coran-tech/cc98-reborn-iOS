@@ -47,24 +47,38 @@ run_with_timeout() {
 import os, signal, subprocess, sys
 seconds = int(sys.argv[1])
 process = subprocess.Popen(sys.argv[2:], start_new_session=True)
+
+def signal_owned_process_group(value):
+    # Once the command exits, its former group may contain only system-owned
+    # helpers. Never signal that group after reaping the command.
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, value)
+    except ProcessLookupError:
+        pass
+    except PermissionError as error:
+        print("[watchdog] cannot signal owned group: %s" % error, file=sys.stderr, flush=True)
+        # A protected helper can prevent a group signal. Only the original
+        # command is eligible for this narrower fallback; never elevate access.
+        try:
+            process.send_signal(value)
+        except (ProcessLookupError, PermissionError) as error:
+            print("[watchdog] cannot signal owned command: %s" % error, file=sys.stderr, flush=True)
+
 try:
     sys.exit(process.wait(timeout=seconds))
 except subprocess.TimeoutExpired:
-    print("[watchdog] timeout after %ss: %s" % (seconds, sys.argv[2]), flush=True)
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
+    print("[watchdog] timeout after %ss: %s" % (seconds, sys.argv[2]), file=sys.stderr, flush=True)
+    signal_owned_process_group(signal.SIGTERM)
     try:
         process.wait(timeout=10)
     except subprocess.TimeoutExpired:
-        pass
-    # Also close any owned child that outlived the xcodebuild/simctl process.
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    process.wait()
+        signal_owned_process_group(signal.SIGKILL)
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            print("[watchdog] owned command did not exit within cleanup bounds", file=sys.stderr, flush=True)
     sys.exit(124)
 PY
 }
@@ -200,9 +214,10 @@ xcodebuild -showBuildSettings -json \
   | tee "$ARTIFACTS/generated-build-identity.json"
 
 # Simulator tests are evidence only, never the source of the device IPA.
-# GitHub run 39146315001 lists this exact OS version; Xcode remains 26.0.1.
+# Run 39914900974 lists iPhone 16 / iOS 18.6 as available. Explicitly isolate
+# the repeated iOS 26.0.1 startup stalls while keeping the same Xcode/SDK.
 # A provider may explicitly override this only after checking its destinations.
-SIMULATOR_DESTINATION="${SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=26.0.1}"
+SIMULATOR_DESTINATION="${SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=18.6}"
 printf '%s\n' "$SIMULATOR_DESTINATION" | tee "$ARTIFACTS/simulator-destination.txt"
 echo '=== Simulator inventory and exact device selection ==='
 # A fresh runner may spend over 30s starting CoreSimulator before returning its
@@ -232,6 +247,21 @@ PY
 # END SIMULATOR_SELECTOR
 SIMULATOR_UDID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["udid"])' "$ARTIFACTS/selected-simulator.json")"
 SIMULATOR_STATE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state"])' "$ARTIFACTS/selected-simulator.json")"
+
+# Keep compilation out of the test-execution budget and boot no Simulator while
+# compiling. Run 39908390086 spent 152s compiling before its 312s test phase.
+# https://developer.apple.com/library/archive/technotes/tn2339/_index.html
+echo "=== Simulator build for testing: $SIMULATOR_UDID (600s process watchdog) ==="
+run_with_timeout 600 xcodebuild build-for-testing \
+  -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
+  -sdk iphonesimulator \
+  -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+  -destination-timeout 120 \
+  -derivedDataPath "$RUN_DIR/simulator-derived-data" \
+  CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+  2>&1 | tee "$ARTIFACTS/simulator-build-for-testing.log"
+
 echo "=== Simulator boot: $SIMULATOR_UDID (initial state: $SIMULATOR_STATE) ==="
 if [[ "$SIMULATOR_STATE" != Booted ]]; then
   run_with_timeout 60 xcrun simctl boot "$SIMULATOR_UDID" 2>&1 | tee "$ARTIFACTS/simulator-boot.log"
@@ -265,7 +295,7 @@ if ! run_with_timeout 30 xcrun simctl list devices --json > "$ARTIFACTS/simulato
 fi
 echo "=== Simulator tests: $SIMULATOR_UDID (600s process watchdog, 120s maximum per test) ==="
 SIMULATOR_VALIDATION=running
-run_with_timeout 600 xcodebuild test \
+run_with_timeout 600 xcodebuild test-without-building \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
   -sdk iphonesimulator \
   -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
@@ -403,7 +433,7 @@ printf '%s is a device candidate, NOT an install-ready signed app.\n' "$CANDIDAT
 if [[ "$DEVICE_ONLY" == true ]]; then
   echo 'UNVERIFIED DEVICE-ONLY BUILD: Simulator selection, boot and Simulator-hosted unit/UI tests were NOT run. The host-side production OAuth, native session and native library tests passed. Successful packaging does not establish app launch or real-service functionality.' >> "$ARTIFACTS/README.txt"
 else
-  echo 'Native Simulator tests passed. simulator-tests.xcresult and screenshots contain synthetic/offline evidence only.' >> "$ARTIFACTS/README.txt"
+  printf 'Native Simulator tests passed on %s. simulator-tests.xcresult and screenshots contain synthetic/offline evidence only.\n' "$SIMULATOR_DESTINATION" >> "$ARTIFACTS/README.txt"
   if [[ "$LEGACY_FILTER_COMPATIBILITY" == known-unsupported-mixed-content ]]; then
     echo 'KNOWN LEGACY LIMITATION: WebKit blocks the old HTTPS-to-local-iframe filter transport. That retained test records an expected failure, not working compatibility. The current native app does not use this transport.' >> "$ARTIFACTS/README.txt"
   fi

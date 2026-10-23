@@ -21,6 +21,7 @@ final class NativeLibrary: ObservableObject {
     @Published private(set) var userNotes: [String: String] = [:]
     @Published private(set) var searchHistory: [NativeSearchEntry] = []
     @Published private(set) var readLaterReadIDs: [Int] = []
+    @Published private(set) var readLaterUndo: NativeReadLaterRemoval?
     @Published private(set) var lastSaveError: String?
     @Published private(set) var lastSavedAt: Date?
     @Published private(set) var draftItems: [NativeDraftItem] = []
@@ -50,6 +51,7 @@ final class NativeLibrary: ObservableObject {
 
     func setAccount(_ id: Int?) {
         guard accountID != id, save() else { return }
+        readLaterUndo = nil
         accountID = id
         fileURL = directory.appendingPathComponent(id.map { "library-\($0).json" } ?? "library.json")
         apply(NativeLibraryData())
@@ -67,16 +69,17 @@ final class NativeLibrary: ObservableObject {
 
     func toggleReadLater(_ topic: NativeTopic) {
         if isReadLater(topic.id) {
-            readLater.removeAll { $0.id == topic.id }
-            readLaterReadIDs.removeAll { $0 == topic.id }
+            removeReadLater(topic.id)
         } else {
+            if readLaterUndo?.topic.id == topic.id { readLaterUndo = nil }
             readLater.insert(saved(topic), at: 0)
+            save()
         }
-        save()
     }
 
     func addReadLater(topicID: Int, title: String?, boardID: Int?) {
         guard topicID > 0, !isReadLater(topicID) else { return }
+        if readLaterUndo?.topic.id == topicID { readLaterUndo = nil }
         readLater.insert(
             NativeSavedTopic(
                 id: topicID,
@@ -90,12 +93,44 @@ final class NativeLibrary: ObservableObject {
     }
 
     func removeReadLater(_ topicID: Int) {
+        guard let index = readLater.firstIndex(where: { $0.id == topicID }) else { return }
+        readLaterUndo = NativeReadLaterRemoval(topic: readLater[index], index: index, wasRead: isReadLaterRead(topicID))
         readLater.removeAll { $0.id == topicID }
         readLaterReadIDs.removeAll { $0 == topicID }
         save()
     }
 
+    @discardableResult
+    func undoReadLaterRemoval(_ id: UUID, now: Date = Date()) -> Bool {
+        guard let removed = readLaterUndo, removed.id == id else { return false }
+        guard removed.expiresAt.map({ $0 > now }) ?? true, !isReadLater(removed.topic.id) else {
+            readLaterUndo = nil
+            return false
+        }
+        var candidate = snapshot()
+        candidate.readLater.insert(removed.topic, at: min(removed.index, candidate.readLater.count))
+        var readIDs = candidate.readLaterReadIDs ?? []
+        readIDs.removeAll { $0 == removed.topic.id }
+        if removed.wasRead { readIDs.append(removed.topic.id) }
+        candidate.readLaterReadIDs = readIDs
+        guard persist(candidate) else { return false }
+        apply(candidate)
+        readLaterUndo = nil
+        return true
+    }
+
+    func dismissReadLaterUndo(_ id: UUID) {
+        if readLaterUndo?.id == id { readLaterUndo = nil }
+    }
+
+    func keepReadLaterUndoAvailable(_ id: UUID) {
+        guard var removed = readLaterUndo, removed.id == id else { return }
+        removed.expiresAt = nil
+        readLaterUndo = removed
+    }
+
     func clearReadLater() {
+        readLaterUndo = nil
         readLater = []
         readLaterReadIDs = []
         save()
@@ -469,6 +504,9 @@ final class NativeLibrary: ObservableObject {
     private func apply(_ decoded: NativeLibraryData) {
         data = decoded
         readLater = decoded.readLater
+        if let removed = readLaterUndo, readLater.contains(where: { $0.id == removed.topic.id }) {
+            readLaterUndo = nil
+        }
         history = decoded.history
         notes = decoded.notes
         blockedUsers = decoded.blockedUsers

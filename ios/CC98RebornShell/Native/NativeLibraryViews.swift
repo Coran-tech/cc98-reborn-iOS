@@ -1,6 +1,46 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct NativeReadLaterUndoView: View {
+    @EnvironmentObject private var library: NativeLibrary
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var body: some View {
+        if let removed = library.readLaterUndo {
+            HStack(spacing: 12) {
+                Text("已移除 1 个主题")
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.primaryText)
+                Spacer(minLength: 0)
+                Button("撤销") { library.undoReadLaterRemoval(removed.id) }
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityIdentifier("read-later.undo")
+                Button { library.dismissReadLaterUndo(removed.id) } label: {
+                    Image(systemName: "xmark").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("关闭撤销提示")
+                .accessibilityIdentifier("read-later.undo-dismiss")
+            }
+            .padding(.leading, 16)
+            .padding(.trailing, 4)
+            .background(ShellTheme.surface)
+            .overlay(alignment: .top) { Rectangle().fill(ShellTheme.separator).frame(height: 0.5) }
+            .task(id: "\(removed.id)-\(voiceOverEnabled)-\(dynamicTypeSize.isAccessibilitySize)") {
+                if voiceOverEnabled || dynamicTypeSize.isAccessibilitySize {
+                    library.keepReadLaterUndoAvailable(removed.id)
+                    return
+                }
+                guard let expiresAt = removed.expiresAt else { return }
+                let delay = max(0, expiresAt.timeIntervalSinceNow)
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled else { return }
+                library.dismissReadLaterUndo(removed.id)
+            }
+        }
+    }
+}
+
 struct NativeLibraryStatusView: View {
     @EnvironmentObject private var library: NativeLibrary
     var body: some View {

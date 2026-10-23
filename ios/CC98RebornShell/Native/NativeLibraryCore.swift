@@ -7,6 +7,15 @@ struct NativeSavedTopic: Identifiable, Codable, Hashable {
     let savedAt: Date
 }
 
+// A single, transient undo opportunity. Never persisted or included in backups.
+struct NativeReadLaterRemoval: Identifiable {
+    let id = UUID()
+    let topic: NativeSavedTopic
+    let index: Int
+    let wasRead: Bool
+    var expiresAt: Date? = Date().addingTimeInterval(12)
+}
+
 struct NativeReadPosition: Codable, Hashable {
     let page: Int
     let floor: Int?

@@ -148,15 +148,28 @@ test('device-only is explicit, keeps device validation and cannot claim Simulato
   assert.match(github, /if \[\[ "\$DEVICE_ONLY_REQUEST" == "true" \]\]; then\n\s+bash scripts\/build-ios-shell\.sh --device-only\n\s+else\n\s+bash scripts\/build-ios-shell\.sh\n\s+fi/);
 });
 
-test('simulator tests run before the separate arm64 iPhoneOS device build', () => {
-  const testIndex = script.indexOf('\nrun_with_timeout 600 xcodebuild test \\\n');
+test('bounded simulator compilation and full tests precede the separate arm64 iPhoneOS device build', () => {
+  const simulatorBuildIndex = script.indexOf('\nrun_with_timeout 600 xcodebuild build-for-testing \\\n');
+  const bootIndex = script.indexOf('\n  run_with_timeout 60 xcrun simctl boot ');
+  const testIndex = script.indexOf('\nrun_with_timeout 600 xcodebuild test-without-building \\\n');
   const buildIndex = script.indexOf('\nxcodebuild build \\\n');
-  assert(testIndex > 0 && buildIndex > testIndex);
+  assert(simulatorBuildIndex > 0 && bootIndex > simulatorBuildIndex && testIndex > bootIndex && buildIndex > testIndex);
+  const simulatorBuild = script.slice(simulatorBuildIndex, bootIndex);
   const tests = script.slice(testIndex, buildIndex);
   const device = script.slice(buildIndex, script.indexOf('# BEGIN IPA_VALIDATOR'));
-  assert.match(tests, /-sdk iphonesimulator/);
-  assert.match(script, /SIMULATOR_DESTINATION="\$\{SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=26\.0\.1\}"/);
+  for (const phase of [simulatorBuild, tests]) {
+    assert.match(phase, /-project "\$PROJECT" -scheme "\$SCHEME" -configuration Debug/);
+    assert.match(phase, /-sdk iphonesimulator/);
+    assert.match(phase, /-destination "platform=iOS Simulator,id=\$SIMULATOR_UDID"/);
+    assert.match(phase, /-derivedDataPath "\$RUN_DIR\/simulator-derived-data"/);
+    assert.match(phase, /CURRENT_PROJECT_VERSION="\$BUILD_NUMBER"/);
+    assert.match(phase, /CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO/);
+    assert.doesNotMatch(phase, /only-testing|skip-testing/); // Full shared scheme in both phases.
+  }
+  assert.match(simulatorBuild, /tee "\$ARTIFACTS\/simulator-build-for-testing\.log"/);
+  assert.match(script, /SIMULATOR_DESTINATION="\$\{SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=18\.6\}"/);
   assert.match(script, /printf '%s\\n' "\$SIMULATOR_DESTINATION" \| tee "\$ARTIFACTS\/simulator-destination\.txt"/);
+  assert.match(script, /printf 'Native Simulator tests passed on %s\.[^\n]+"\$SIMULATOR_DESTINATION" >> "\$ARTIFACTS\/README\.txt"/);
   assert.match(tests, /-destination "platform=iOS Simulator,id=\$SIMULATOR_UDID"/);
   assert.match(script, /run_with_timeout 60 xcrun simctl boot "\$SIMULATOR_UDID"/);
   assert.match(script, /run_with_timeout 180 xcrun simctl bootstatus "\$SIMULATOR_UDID" -b/);
@@ -167,7 +180,6 @@ test('simulator tests run before the separate arm64 iPhoneOS device build', () =
   assert.match(tests, /simulator-derived-data/);
   assert.match(tests, /-resultBundlePath "\$TEST_RESULTS"/);
   assert.match(tests, /xcresulttool export attachments/);
-  assert.doesNotMatch(tests, /only-testing/); // Includes unit and UI tests in the shared scheme.
   assert.match(device, /-sdk iphoneos -destination 'generic\/platform=iOS'/);
   assert.match(device, /ARCHS=arm64 ONLY_ACTIVE_ARCH=NO/);
   assert.match(script, /BUILD_NUMBER="\$\{GITHUB_RUN_NUMBER:-\$\{BUILD_NUMBER:-1\}\}"/);
@@ -204,8 +216,8 @@ test('failures retain diagnostics without uploading the checkout', () => {
   assert.match(script, /cp "\$simulator_plist" "\$ARTIFACTS\/simulator-app-Info\.plist"/);
   assert.match(script, /source-plist-identity\.json/);
   assert.match(script, /generated-build-identity\.json/);
-  assert(script.indexOf('generated-build-identity.json') < script.indexOf('\nrun_with_timeout 600 xcodebuild test '));
-  for (const artifact of ['selected-simulator.json', 'simulator-boot.log', 'simulator-bootstatus.log', 'simulator-devices-after-boot.json', 'simulator-state-on-exit.json']) assert(script.includes(artifact));
+  assert(script.indexOf('generated-build-identity.json') < script.indexOf('\nrun_with_timeout 600 xcodebuild build-for-testing '));
+  for (const artifact of ['selected-simulator.json', 'simulator-build-for-testing.log', 'simulator-boot.log', 'simulator-bootstatus.log', 'simulator-devices-after-boot.json', 'simulator-state-on-exit.json']) assert(script.includes(artifact));
 });
 
 test('exact available Simulator selection does not fall back to another OS or device', () => {
@@ -214,18 +226,18 @@ test('exact available Simulator selection does not fall back to another OS or de
   const harness = String.raw`
 import contextlib, io, json, os, sys, tempfile
 source = sys.stdin.read()
-runtime = "com.apple.CoreSimulator.SimRuntime.iOS-26-0"
+runtime = "com.apple.CoreSimulator.SimRuntime.iOS-18-6"
 selected = "11111111-1111-4111-8111-111111111111"
 with tempfile.TemporaryDirectory(prefix="cc98-simulator-contract-") as folder:
     runtime_file, device_file = os.path.join(folder,"runtimes.json"), os.path.join(folder,"devices.json")
-    json.dump({"runtimes":[{"identifier":runtime,"version":"26.0.1","isAvailable":True}]},open(runtime_file,"w"))
+    json.dump({"runtimes":[{"identifier":runtime,"version":"18.6","isAvailable":True}]},open(runtime_file,"w"))
     valid = {"name":"iPhone 16","udid":selected,"state":"Shutdown","isAvailable":True}
     for mode in ("exact", "wrong-os", "wrong-name", "unavailable", "duplicate"):
         devices = [dict(valid)]
         if mode == "unavailable": devices[0]["isAvailable"] = False
         if mode == "duplicate": devices.append(dict(valid,udid="22222222-2222-4222-8222-222222222222"))
         json.dump({"devices":{runtime:devices}},open(device_file,"w"))
-        destination = "platform=iOS Simulator,name=%s,OS=%s" % ("iPhone 17" if mode == "wrong-name" else "iPhone 16", "26.0" if mode == "wrong-os" else "26.0.1")
+        destination = "platform=iOS Simulator,name=%s,OS=%s" % ("iPhone 17" if mode == "wrong-name" else "iPhone 16", "26.0.1" if mode == "wrong-os" else "18.6")
         sys.argv = ["selector",destination,runtime_file,device_file]
         output = io.StringIO()
         succeeded = True
@@ -271,32 +283,54 @@ print("6 boot timeout state cases passed")
   assert.match(result.stdout, /6 boot timeout state cases passed/);
 });
 
-test('watchdog preserves exits and terminates only its owned group on timeout', () => {
+test('watchdog preserves timeout through exit races and denied cleanup without signaling exited groups', () => {
   const match = script.match(/run_with_timeout\(\) \{\n[^\n]*\n  python3[^\n]*\n([\s\S]*?)\nPY\n\}/);
   assert(match);
   const harness = String.raw`
 import contextlib, io, signal, subprocess, sys
 from unittest.mock import patch, Mock
 source = sys.stdin.read()
-for mode in ("success", "failure", "timeout"):
+timeout = subprocess.TimeoutExpired("owned-command",1)
+cleanup_timeout = subprocess.TimeoutExpired("owned-command",10)
+cases = [
+    ("success", [0], None, None, None, 0, []),
+    ("failure", [7], None, None, None, 7, []),
+    ("term-completes", [timeout, -15], None, [None, PermissionError(1,"must not signal exited group")], None, 124, [signal.SIGTERM]),
+    ("kill-required", [timeout, cleanup_timeout, -9], None, None, None, 124, [signal.SIGTERM,9]),
+    ("exited-before-term", [timeout, 0], [0], None, None, 124, []),
+    ("exited-before-kill", [timeout, cleanup_timeout, 0], [None,0], None, None, 124, [signal.SIGTERM]),
+    ("group-disappeared", [timeout, -15], None, ProcessLookupError(), None, 124, [signal.SIGTERM]),
+    ("group-denied", [timeout, -15], None, PermissionError(1,"denied"), None, 124, [signal.SIGTERM]),
+    ("all-signals-denied", [timeout, cleanup_timeout, cleanup_timeout], None, PermissionError(1,"denied"), PermissionError(1,"denied"), 124, [signal.SIGTERM,9]),
+]
+for mode, waits, polls, group_error, command_error, expected_exit, signals in cases:
     process = Mock(pid=12345)
-    process.wait.side_effect = [0] if mode == "success" else [7] if mode == "failure" else [subprocess.TimeoutExpired("owned-command",1), -15, -15]
+    process.wait.side_effect = waits
+    process.poll.return_value = None
+    if polls is not None: process.poll.side_effect = polls
+    process.send_signal.side_effect = command_error
     sys.argv = ["watchdog","1","owned-command"]
-    with patch("subprocess.Popen",return_value=process) as start, patch("os.killpg",create=True) as kill, patch.object(signal,"SIGKILL",9,create=True):
+    output, errors = io.StringIO(), io.StringIO()
+    with patch("subprocess.Popen",return_value=process) as start, patch("os.killpg",side_effect=group_error,create=True) as kill, patch.object(signal,"SIGKILL",9,create=True):
         try:
-            with contextlib.redirect_stdout(io.StringIO()): exec(source,{"__name__":"__main__"})
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors): exec(source,{"__name__":"__main__"})
         except SystemExit as exit:
-            assert exit.code == {"success":0,"failure":7,"timeout":124}[mode]
+            assert exit.code == expected_exit, mode
         else: raise AssertionError("Watchdog did not propagate exit")
         start.assert_called_once_with(["owned-command"], start_new_session=True)
-        if mode == "timeout":
-            assert [call.args for call in kill.call_args_list] == [(12345,signal.SIGTERM),(12345,signal.SIGKILL)]
-        else: kill.assert_not_called()
-print("3 watchdog cases passed")
+        assert [call.args for call in kill.call_args_list] == [(12345,value) for value in signals], mode
+        assert [call.kwargs for call in process.wait.call_args_list] == [{"timeout":1}] + [{"timeout":10}] * (len(waits)-1), mode
+        assert output.getvalue() == "", "Watchdog diagnostics must not corrupt command JSON"
+        if mode in ("group-denied", "all-signals-denied"):
+            assert [call.args for call in process.send_signal.call_args_list] == [(value,) for value in signals], mode
+            assert "cannot signal owned group" in errors.getvalue(), mode
+        else: process.send_signal.assert_not_called()
+        if mode == "all-signals-denied": assert "did not exit within cleanup bounds" in errors.getvalue()
+print("9 watchdog cases passed")
 `;
   const result = spawnSync(pythonCommand(), ['-c', harness], { input: match[1], encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /3 watchdog cases passed/);
+  assert.match(result.stdout, /9 watchdog cases passed/);
 });
 
 test('actual IPA validator rejects simulator, malformed ZIPs, and signed or empty candidates', () => {

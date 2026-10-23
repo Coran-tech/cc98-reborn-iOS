@@ -30,8 +30,9 @@ permissions:
 
 jobs:
   unsigned-device-candidate:
-    # Stable Intel image/Xcode pair verified 2026-10-23. Use 14 GB RAM to address
-    # the repeated Simulator startup stalls observed on the 7 GB ARM image.
+    # Keep the Intel image and Xcode fixed. The shared script explicitly tests
+    # iPhone 16 / iOS 18.6 after repeated iOS 26.0.1 Simulator startup stalls.
+    # This does not establish iOS 26 physical-device acceptance.
     # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md
     runs-on: macos-15-intel
     timeout-minutes: 45

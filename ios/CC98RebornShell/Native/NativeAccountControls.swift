@@ -3,6 +3,8 @@ import SwiftUI
 // Shared by the profile and the logged-out recovery gate, so saved accounts
 // remain reachable even when /me cannot currently be loaded.
 struct NativeAccountControls: View {
+    // The login gate presents one state-specific primary action above this list.
+    var showsSessionActions = true
     @EnvironmentObject private var auth: NativeAuth
     @State private var error: String?
     @State private var confirmSignOut = false
@@ -10,22 +12,23 @@ struct NativeAccountControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if case let .unavailable(message) = auth.state {
+            if showsSessionActions, case let .unavailable(message) = auth.state {
                 Text(message).foregroundStyle(ShellTheme.secondaryText)
-                Button("重试恢复") { Task { await auth.restore() } }
+                Button("恢复已保存登录") { Task { await auth.restore() } }
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("account.restore")
-            } else if case let .requiresAuthorization(message) = auth.state {
+            } else if showsSessionActions, case let .requiresAuthorization(message) = auth.state {
                 Text(message).foregroundStyle(ShellTheme.secondaryText)
-            } else if auth.profile != nil {
+            } else if showsSessionActions, auth.profile != nil {
                 Text(auth.hasRefreshAuthorization
                      ? "已记住此账号，将在授权有效期内自动续期。"
                      : "当前会话尚未取得刷新授权，可重新授权以启用长期登录。")
                     .foregroundStyle(ShellTheme.secondaryText)
             }
 
-            if let id = auth.activeAccountID {
-                Button(auth.hasRefreshAuthorization ? "重新授权当前账号" : "启用长期登录／重新授权") {
+            if showsSessionActions, let id = auth.activeAccountID,
+               let title = auth.state.longSessionAuthorizationTitle(hasRefreshAuthorization: auth.hasRefreshAuthorization) {
+                Button(title) {
                     perform { try await auth.reauthorize(accountID: id) }
                 }
                 .frame(minHeight: 44)
@@ -51,6 +54,11 @@ struct NativeAccountControls: View {
                     .buttonStyle(.plain)
                     Menu {
                         Button("重新授权") { perform { try await auth.reauthorize(accountID: account.id) } }
+                        Button("重新输入账号") {
+                            perform { try await auth.reauthorize(accountID: account.id, forceEphemeral: true) }
+                        }
+                        .accessibilityHint("使用独立登录窗口，仍须登录 \(account.name)，不会切换到其他账号")
+                        .accessibilityIdentifier("account.reenter.\(account.id)")
                         if account.id != auth.activeAccountID {
                             Button("移除本机账号", role: .destructive) {
                                 accountToRemove = account

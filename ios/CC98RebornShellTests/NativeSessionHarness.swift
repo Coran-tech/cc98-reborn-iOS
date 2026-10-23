@@ -135,6 +135,33 @@ enum NativeSessionContractChecks {
                            issuedAt: epoch)
         }
 
+        // Production recovery actions must not mistake a retained but currently
+        // unreachable session for a new login, or hide an access-only upgrade.
+        try check("signed out offers first login", NativeAuthState.signedOut.recoveryAction(accountID: nil) == .signIn)
+        try check("temporary failure restores saved account", NativeAuthState.unavailable("offline").recoveryAction(accountID: 1) == .restore)
+        try check("legacy recovery failure retries storage instead of OAuth", NativeAuthState.unavailable("storage").recoveryAction(accountID: nil) == .restore)
+        try check("explicit rejection reauthorizes the exact account", NativeAuthState.requiresAuthorization("expired").recoveryAction(accountID: 2) == .reauthorize(accountID: 2))
+        try check("missing legacy identity can sign in", NativeAuthState.requiresAuthorization("expired").recoveryAction(accountID: nil) == .signIn)
+        try check("usable access-only session offers enable long login", NativeAuthState.signedIn.longSessionAuthorizationTitle(hasRefreshAuthorization: false) == "启用长期登录")
+        try check("renewable session hides redundant authorization", NativeAuthState.signedIn.longSessionAuthorizationTitle(hasRefreshAuthorization: true) == nil)
+        try check("offline session does not offer an authorization detour", NativeAuthState.unavailable("offline").longSessionAuthorizationTitle(hasRefreshAuthorization: false) == nil)
+        try check("rejected session with refresh grant says reauthorize", NativeAuthState.requiresAuthorization("expired").longSessionAuthorizationTitle(hasRefreshAuthorization: true) == "重新授权当前账号")
+        try check("rejected session without refresh grant still says reauthorize", NativeAuthState.requiresAuthorization("expired").longSessionAuthorizationTitle(hasRefreshAuthorization: false) == "重新授权当前账号")
+        try check("recovery primary actions have distinct stable identifiers", Set([
+            NativeLoginAction.signIn.accessibilityIdentifier,
+            NativeLoginAction.restore.accessibilityIdentifier,
+            NativeLoginAction.reauthorize(accountID: 1).accessibilityIdentifier
+        ]).count == 3)
+
+        try check("first login can reuse system SSO", !NativeAuthorizationBrowserPolicy.prefersEphemeralSession(addingAccount: false, expectedAccountID: nil, activeAccountID: nil))
+        try check("current account reauthorization can reuse system SSO", !NativeAuthorizationBrowserPolicy.prefersEphemeralSession(addingAccount: false, expectedAccountID: 1, activeAccountID: 1))
+        try check("adding another account uses an isolated browser", NativeAuthorizationBrowserPolicy.prefersEphemeralSession(addingAccount: true, expectedAccountID: nil, activeAccountID: 1))
+        try check("adding an account without an active account stays isolated", NativeAuthorizationBrowserPolicy.prefersEphemeralSession(addingAccount: true, expectedAccountID: nil, activeAccountID: nil))
+        try check("reauthorizing a different saved account stays isolated", NativeAuthorizationBrowserPolicy.prefersEphemeralSession(addingAccount: false, expectedAccountID: 2, activeAccountID: 1))
+        try check("known account without a current selection stays isolated", NativeAuthorizationBrowserPolicy.prefersEphemeralSession(addingAccount: false, expectedAccountID: 2, activeAccountID: nil))
+        try check("manual reentry overrides current account SSO", NativeAuthorizationBrowserPolicy.prefersEphemeralSession(addingAccount: false, expectedAccountID: 1, activeAccountID: 1, forceEphemeral: true))
+        try check("manual reentry overrides an unselected system session", NativeAuthorizationBrowserPolicy.prefersEphemeralSession(addingAccount: false, expectedAccountID: nil, activeAccountID: nil, forceEphemeral: true))
+
         // Migration does not require replacing existing Keychain items or expanding
         // the older web-binding flow's permissions.
         let oldData = try json([
@@ -152,6 +179,7 @@ enum NativeSessionContractChecks {
         try check("native flow requests offline access", nativeScopes.contains("offline_access"))
         try check("native flow retains existing permissions", Set(OAuthProtocol.scopes.split(separator: " ")).isSubset(of: nativeScopes))
         try check("native flow asks for consent", (native["prompt"] ?? "").split(separator: " ").contains("consent"))
+        try check("native flow does not force a fresh password login", native["prompt"] == "consent" && native["max_age"] == nil)
         try check("native flow keeps exact callback and PKCE", native["redirect_uri"] == OAuthProtocol.callback && native["response_type"] == "code" && native["code_challenge_method"] == "S256")
         try check("native flow has no client secret", native["client_secret"] == nil)
         try check("legacy flow keeps original scope and SSO", legacy["scope"] == OAuthProtocol.scopes && legacy["prompt"] == nil && !Set(OAuthProtocol.scopes.split(separator: " ")).contains("offline_access"))

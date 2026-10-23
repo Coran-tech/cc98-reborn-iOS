@@ -1,6 +1,66 @@
 import Foundation
 import CoreFoundation
 
+// The recovery UI distinguishes a temporarily unreachable saved session from an
+// explicitly expired grant. Keep this mapping beside the session contract so a
+// connectivity failure can never turn the primary action into a new OAuth flow.
+enum NativeAuthState: Equatable {
+    case unknown, signedOut, signingIn, signedIn
+    case requiresAuthorization(String)
+    case unavailable(String)
+
+    func recoveryAction(accountID: Int?) -> NativeLoginAction {
+        switch self {
+        case .signedOut:
+            return .signIn
+        case .requiresAuthorization:
+            return accountID.map { .reauthorize(accountID: $0) } ?? .signIn
+        case .unknown, .signingIn, .signedIn, .unavailable:
+            return .restore
+        }
+    }
+
+    func longSessionAuthorizationTitle(hasRefreshAuthorization: Bool) -> String? {
+        switch self {
+        case .requiresAuthorization: return "重新授权当前账号"
+        case .signedIn: return hasRefreshAuthorization ? nil : "启用长期登录"
+        default: return nil
+        }
+    }
+}
+
+enum NativeLoginAction: Equatable {
+    case signIn, restore
+    case reauthorize(accountID: Int)
+
+    var title: String {
+        switch self {
+        case .signIn: return "使用 CC98 登录"
+        case .restore: return "恢复已保存登录"
+        case .reauthorize: return "重新授权当前账号"
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .signIn: return "login.signIn"
+        case .restore: return "login.restore"
+        case .reauthorize: return "login.reauthorize"
+        }
+    }
+}
+
+enum NativeAuthorizationBrowserPolicy {
+    static func prefersEphemeralSession(addingAccount: Bool, expectedAccountID: Int?, activeAccountID: Int?, forceEphemeral: Bool = false) -> Bool {
+        // Reuse system SSO only for first login or the selected account. Choosing
+        // another account stays isolated; the verified callback UID is still
+        // checked independently before any credential is adopted.
+        if forceEphemeral || addingAccount { return true }
+        if let expectedAccountID { return expectedAccountID != activeAccountID }
+        return false
+    }
+}
+
 struct NativeTokenSet: Codable, Equatable {
     var accessToken: String
     var refreshToken: String?
@@ -27,7 +87,7 @@ enum NativeAuthError: LocalizedError, Equatable {
         case .storage: return "登录状态未能安全保存，请重试或检查设备钥匙串。"
         case .configuration: return "授权配置暂不可用，请检查客户端的授权范围与站方限制。"
         case .accountChanged: return "账号已变化，未应用旧请求结果；提交操作请先确认是否成功。"
-        case .accountMismatch: return "授权返回的账号与所选账号不同，原账号未改变。请重新选择正确账号。"
+        case .accountMismatch: return "授权返回的账号与所选账号不同，原账号未改变。请在账号菜单选择「重新输入账号」，登录所选账号。"
         }
     }
 }

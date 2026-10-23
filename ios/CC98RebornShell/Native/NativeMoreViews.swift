@@ -627,10 +627,13 @@ struct ReadLaterView: View {
                             Text(library.isReadLaterRead(item.id) ? "已读" : "未读").font(ShellTheme.Fonts.caption).foregroundStyle(ShellTheme.secondaryText)
                         }
                     }
+                    .accessibilityIdentifier("read-later.item.\(item.id)")
                     Menu {
                         Button(library.isReadLaterRead(item.id) ? "标为未读" : "标为已读") { library.setReadLaterRead(item.id, read: !library.isReadLaterRead(item.id)) }
                         Button("移除", role: .destructive) { library.removeReadLater(item.id) }
-                    } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }.accessibilityLabel("稍后再看操作")
+                    } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+                    .accessibilityLabel("稍后再看操作")
+                    .accessibilityIdentifier("read-later.actions.\(item.id)")
                 }
                 .swipeActions { Button("移除", role: .destructive) { library.removeReadLater(item.id) } }
             }
@@ -639,6 +642,7 @@ struct ReadLaterView: View {
         .searchable(text: $query, prompt: "搜索标题或主题 ID")
         .navigationTitle("稍后再看")
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom, spacing: 0) { NativeReadLaterUndoView() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

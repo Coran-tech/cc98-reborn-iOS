@@ -91,6 +91,7 @@ struct ProfileView: View {
                 NavigationLink { DraftCenterView() } label: { Label("草稿中心", systemImage: "doc.text") }
                     .accessibilityIdentifier("profile.drafts")
                 NavigationLink { ReadLaterView() } label: { Label("稍后再看", systemImage: "bookmark") }
+                    .accessibilityIdentifier("profile.readLater")
                 NavigationLink { HistoryView() } label: { Label("浏览历史", systemImage: "clock") }
             }
 

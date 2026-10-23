@@ -141,6 +141,65 @@ struct NativeLibraryHarness {
         let noVotes = try JSONDecoder().decode(NativePost.self, from: Data(#"{"id":4,"likeCount":0,"dislikeCount":0}"#.utf8))
         try expect(rules.shouldBlock(post: noDislikes) && !rules.shouldBlock(post: noVotes), "ratio infinity and unknown boundary")
         try expect(NativeReputation.delta(in: "财富 +100 风评值 -2") == -2 && NativeReputation.delta(in: "威望 +5") == nil && NativeReputation.delta(in: "+3") == 3, "reputation semantics")
+
+        let undoLibrary = NativeLibrary(accountID: 94, directory: dir)
+        for id in [10, 11, 12] { undoLibrary.addReadLater(topicID: id, title: "主题 \(id)", boardID: 12) }
+        undoLibrary.setReadLaterRead(11, read: true)
+        let originalItems = undoLibrary.readLater
+        undoLibrary.removeReadLater(11)
+        let removedMiddle = undoLibrary.readLaterUndo!.id
+        try expect(!undoLibrary.isReadLater(11) && !undoLibrary.isReadLaterRead(11), "remove captures item without leaving read state")
+        try expect(undoLibrary.undoReadLaterRemoval(removedMiddle), "undo restores the removed item")
+        try expect(undoLibrary.readLater == originalItems && undoLibrary.isReadLaterRead(11), "undo preserves original item metadata, position and read state")
+        try expect(!undoLibrary.undoReadLaterRemoval(removedMiddle), "undo is single-use")
+        try expect(NativeLibrary(accountID: 94, directory: dir).readLater == originalItems, "undo persists restored item")
+        undoLibrary.removeReadLater(11)
+        let supersededUndo = undoLibrary.readLaterUndo!.id
+        undoLibrary.removeReadLater(12)
+        let latestUndo = undoLibrary.readLaterUndo!.id
+        try expect(!undoLibrary.undoReadLaterRemoval(supersededUndo), "old undo cannot restore or replace a later removal")
+        try expect(undoLibrary.undoReadLaterRemoval(latestUndo) && !undoLibrary.isReadLater(11), "undo restores only the last removed item")
+        undoLibrary.removeReadLater(12)
+        let readdedUndo = undoLibrary.readLaterUndo!.id
+        undoLibrary.addReadLater(topicID: 12, title: "后来重新加入的内容", boardID: 414)
+        try expect(!undoLibrary.undoReadLaterRemoval(readdedUndo) && undoLibrary.readLater.first?.title == "后来重新加入的内容", "undo never overwrites a later re-add")
+        undoLibrary.removeReadLater(12)
+        let clearingUndo = undoLibrary.readLaterUndo!.id
+        undoLibrary.clearReadLater()
+        try expect(!undoLibrary.undoReadLaterRemoval(clearingUndo) && undoLibrary.readLater.isEmpty, "clear invalidates pending undo")
+        undoLibrary.addReadLater(topicID: 10, title: "当前账号主题", boardID: 12)
+        undoLibrary.removeReadLater(10)
+        let oldAccountUndo = undoLibrary.readLaterUndo!.id
+        undoLibrary.setAccount(95)
+        try expect(!undoLibrary.undoReadLaterRemoval(oldAccountUndo) && undoLibrary.readLater.isEmpty, "undo cannot cross accounts")
+        undoLibrary.setAccount(94)
+        try expect(undoLibrary.readLaterUndo == nil, "returning to account does not revive transient undo")
+        undoLibrary.addReadLater(topicID: 10, title: "普通撤销期限", boardID: 12)
+        undoLibrary.removeReadLater(10)
+        let expiringUndo = undoLibrary.readLaterUndo!
+        try expect(!undoLibrary.undoReadLaterRemoval(expiringUndo.id, now: expiringUndo.expiresAt!.addingTimeInterval(1)), "expired undo does not restore stale items")
+        undoLibrary.addReadLater(topicID: 10, title: "读屏撤销期限", boardID: 12)
+        undoLibrary.removeReadLater(10)
+        let accessibleUndo = undoLibrary.readLaterUndo!.id
+        undoLibrary.keepReadLaterUndoAvailable(accessibleUndo)
+        try expect(undoLibrary.undoReadLaterRemoval(accessibleUndo, now: Date().addingTimeInterval(3600)), "accessibility undo remains available until dismissed")
+        let importableLater = try undoLibrary.exportBackup(mode: .readLater)
+        undoLibrary.removeReadLater(10)
+        let importedUndo = undoLibrary.readLaterUndo!.id
+        let importUndoPreview = try undoLibrary.previewImport(importableLater, mode: .readLater)
+        try expect(undoLibrary.importBackup(importUndoPreview) && !undoLibrary.undoReadLaterRemoval(importedUndo), "imported same-ID entry invalidates stale undo")
+        var failUndoWrite = false
+        let undoFailure = NativeLibrary(accountID: 96, directory: dir, writeData: { data, url in
+            if failUndoWrite { throw CocoaError(.fileWriteOutOfSpace) }
+            try data.write(to: url, options: .atomic)
+        })
+        undoFailure.addReadLater(topicID: 10, title: "可重试撤销", boardID: 12)
+        undoFailure.removeReadLater(10)
+        let failedUndo = undoFailure.readLaterUndo!.id
+        failUndoWrite = true
+        try expect(!undoFailure.undoReadLaterRemoval(failedUndo) && !undoFailure.isReadLater(10) && undoFailure.lastSaveError != nil, "undo write failure does not claim restoration")
+        failUndoWrite = false
+        try expect(undoFailure.undoReadLaterRemoval(failedUndo) && undoFailure.isReadLater(10), "failed undo can retry without duplicate restoration")
         print("NativeLibraryHarness: \(checks) checks passed")
     }
 }

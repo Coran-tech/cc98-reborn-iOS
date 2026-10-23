@@ -132,6 +132,48 @@ final class ShellSmokeTests: XCTestCase {
         screenshot("18-new-topics-cards-320pt")
     }
 
+    func testReadLaterRemovalCanBeUndone() throws {
+        let app = launch()
+        tap("home.hot.91001", in: app)
+        tap("topic.more", in: app)
+        app.buttons["稍后再看"].tap()
+        tap("topic.more", in: app)
+        app.buttons["取消稍后再看"].tap()
+        tap("read-later.undo", in: app)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["我的"].tap()
+        let entry = element("profile.readLater", in: app)
+        for _ in 0..<4 where !entry.isHittable { app.swipeUp() }
+        tap("profile.readLater", in: app)
+        XCTAssertTrue(element("read-later.item.91001", in: app).waitForExistence(timeout: 5))
+        tap("read-later.actions.91001", in: app)
+        app.buttons["移除"].tap()
+        XCTAssertFalse(element("read-later.item.91001", in: app).exists)
+        XCTAssertTrue(element("read-later.undo", in: app).waitForExistence(timeout: 5))
+        screenshot("22-read-later-undo")
+        tap("read-later.undo", in: app)
+        XCTAssertTrue(element("read-later.item.91001", in: app).waitForExistence(timeout: 5))
+        XCTAssertFalse(element("read-later.undo", in: app).exists)
+        screenshot("23-read-later-restored")
+    }
+
+    func testSavedLoginRecoveryDoesNotPromptForNewAuthorization() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-ui-fixture", "--fixture-login-recovery"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["我的"].waitForExistence(timeout: 15))
+        app.tabBars.buttons["我的"].tap()
+        let restore = element("login.restore", in: app)
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        XCTAssertTrue(restore.isHittable)
+        XCTAssertEqual(restore.label, "恢复已保存登录")
+        XCTAssertFalse(element("login.signIn", in: app).exists)
+        XCTAssertFalse(element("login.reauthorize", in: app).exists)
+        screenshot("24-saved-login-recovery")
+        app.buttons["林间风 的账号操作"].tap()
+        XCTAssertTrue(element("account.reenter.900001", in: app).waitForExistence(timeout: 5))
+    }
+
     func testPrivateDraftRecoveryAndBackupEntry() throws {
         let app = launch()
         app.tabBars.buttons["消息"].tap()

@@ -2,12 +2,6 @@ import AuthenticationServices
 import SwiftUI
 import UIKit
 
-enum NativeAuthState: Equatable {
-    case unknown, signedOut, signingIn, signedIn
-    case requiresAuthorization(String)
-    case unavailable(String)
-}
-
 struct NativeRequestAuthorization {
     let accountID: Int?
     let selectionID: UUID
@@ -50,6 +44,10 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
             identity.select(activeAccountID)
             state = .signedIn
             hasRefreshAuthorization = true
+            if NativeUITestFixture.isLoginRecoveryEnabled {
+                profile = nil
+                state = .unavailable(NativeAuthError.network.localizedDescription)
+            }
             return
         }
         #endif
@@ -107,11 +105,11 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
         try await signIn(addingAccount: true, expectedAccountID: nil)
     }
 
-    func reauthorize(accountID: Int) async throws {
-        try await signIn(addingAccount: true, expectedAccountID: accountID)
+    func reauthorize(accountID: Int, forceEphemeral: Bool = false) async throws {
+        try await signIn(addingAccount: false, expectedAccountID: accountID, forceEphemeral: forceEphemeral)
     }
 
-    private func signIn(addingAccount: Bool, expectedAccountID: Int?) async throws {
+    private func signIn(addingAccount: Bool, expectedAccountID: Int?, forceEphemeral: Bool = false) async throws {
         guard !isBusy else { throw NativeAuthError.unavailable }
         isBusy = true
         let previousState = state
@@ -122,7 +120,13 @@ final class NativeAuth: NSObject, ObservableObject, ASWebAuthenticationPresentat
             let stateValue = OAuthProtocol.randomValue()
             let verifier = OAuthProtocol.randomValue()
             let url = OAuthProtocol.nativeAuthorizationURL(state: stateValue, verifier: verifier)
-            let callback = try await authorize(url: url, ephemeral: addingAccount || expectedAccountID != nil)
+            let ephemeral = NativeAuthorizationBrowserPolicy.prefersEphemeralSession(
+                addingAccount: addingAccount,
+                expectedAccountID: expectedAccountID,
+                activeAccountID: activeAccountID,
+                forceEphemeral: forceEphemeral
+            )
+            let callback = try await authorize(url: url, ephemeral: ephemeral)
             let code = try OAuthProtocol.callbackCode(callback, expectedState: stateValue)
             let fresh = try await Self.exchange(code: code, verifier: verifier)
             let user = try await Self.fetchMe(token: fresh.accessToken)

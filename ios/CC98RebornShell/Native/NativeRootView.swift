@@ -135,21 +135,46 @@ struct LoginGateView: View {
     @State private var busy = false
     @State private var error: String?
 
+    private var action: NativeLoginAction {
+        auth.state.recoveryAction(accountID: auth.activeAccountID)
+    }
+
+    private var title: String {
+        switch action {
+        case .signIn: return "登录 CC98"
+        case .restore: return "恢复 CC98 登录"
+        case .reauthorize: return "重新授权 CC98"
+        }
+    }
+
+    private var message: String? {
+        switch auth.state {
+        case let .unavailable(message), let .requiresAuthorization(message): return message
+        default: return nil
+        }
+    }
+
     var body: some View {
         ScrollView {
           VStack(spacing: 16) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.system(size: 46))
                 .foregroundStyle(ShellTheme.accent)
-            Text("登录 CC98")
+            Text(title)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(ShellTheme.primaryText)
+            if let message {
+                Text(message)
+                    .font(ShellTheme.Fonts.footnote)
+                    .foregroundStyle(ShellTheme.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
             Button {
-                Task { await signIn() }
+                Task { await recover(using: action) }
             } label: {
                 HStack(spacing: 8) {
-                    if busy { ProgressView().tint(.white) }
-                    Text(busy ? "正在登录…" : "使用 CC98 登录")
+                    if busy || auth.isBusy { ProgressView().tint(.white) }
+                    Text(busy || auth.isBusy ? "正在处理…" : action.title)
                         .font(ShellTheme.Fonts.body.weight(.medium))
                 }
                 .frame(minWidth: 180, minHeight: 48)
@@ -157,8 +182,9 @@ struct LoginGateView: View {
             .buttonStyle(.borderedProminent)
             .tint(ShellTheme.accent)
             .disabled(busy || auth.isBusy)
+            .accessibilityIdentifier(action.accessibilityIdentifier)
             if !auth.accounts.isEmpty {
-                NativeAccountControls().padding(.top, 12)
+                NativeAccountControls(showsSessionActions: false).padding(.top, 12)
             }
             if let error {
                 Text(error)
@@ -174,15 +200,21 @@ struct LoginGateView: View {
     }
 
     @MainActor
-    private func signIn() async {
+    private func recover(using action: NativeLoginAction) async {
         busy = true
         error = nil
+        defer { busy = false }
         do {
-            try await auth.signIn()
+            switch action {
+            case .signIn: try await auth.signIn()
+            case .restore: await auth.restore()
+            case let .reauthorize(accountID): try await auth.reauthorize(accountID: accountID)
+            }
+        } catch NativeAuthError.cancelled {
+            // Cancelling the system sheet leaves the current task and account intact.
         } catch {
             self.error = error.localizedDescription
         }
-        busy = false
     }
 }
 
