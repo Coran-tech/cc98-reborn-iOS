@@ -2,19 +2,19 @@
 
 当前路线以 DeepSeek 原生分支为基础：使用 SwiftUI 展示首页、版面、新帖、消息、我的五个入口，直接调用 CC98 API。登录走官方 OpenID 系统授权窗口；没有公网代理，也不需要先在内嵌网页登录再绑定。
 
-本轮优先完成长时登录，暂不全面改版 UI。目标设备为 **iPhone 16 Pro / iOS 26.5.2**，最低支持 iOS 17；仍需校网或覆盖 App 及系统授权窗口的系统 VPN。
+本轮在 Build 82 长时登录版上完成手机界面改造与本机增强。目标设备为 **iPhone 16 Pro / iOS 26.5.2**，最低支持 iOS 17；仍需校网或覆盖 App 及系统授权窗口的系统 VPN。
 
 ## 安装本轮候选包
 
-**已生成 0.3.0 / Build 82**：[2026-10-22 成功构建与下载](https://github.com/Coran-tech/cc98-reborn-iOS/actions/runs/39765933412)，源码提交 `0480d8f`。109 项生产原生会话检查、60 项旧 OAuth 检查和 31 项 Node 检查通过，iPhoneOS arm64 编译及 IPA 校验通过。尚未完成本版真实 CC98 授权、跨有效期续期与原生 UI 真机验收。
+当前 UI 候选版本为 **0.4.0**，分支 `codex/ios-mobile-ui`。完整云构建与模拟器验证进行中，成功构建编号和下载地址将在验证结束后更新；尚未产出本轮可交付 IPA。
 
-1. 打开 [GitHub Actions](https://github.com/Coran-tech/cc98-reborn-iOS/actions/workflows/ios-shell.yml)，选择 `codex/ios-long-session` 分支的成功构建。
-2. 下载 `ios-shell-运行编号-尝试次数` artifact。本轮使用 `device_only`，设备候选为 `CC98RebornShell-unsigned-unverified-device.ipa`。同包的 `build-status.txt` 和测试日志记录实际完成的检查。
-3. 沿用已成功使用的 Windows 自签方式签名并安装。Apple Account、密码、验证码只在你信任的签名工具中输入，不交给聊天或云构建。
-4. 升级时尽量保持原有签名身份、Bundle ID 与数据容器，先覆盖安装，不先卸载含有草稿的版本。是否保留 Keychain 访问权限也受重签方式影响，不能保证跨签名身份自动迁移。
-5. 连接校网／VPN，打开“我的”完成登录，再按 [真机验证清单](DEVICE_TEST_CHECKLIST.md) 检查恢复和续期。
+1. 成功后打开 [GitHub Actions](https://github.com/Coran-tech/cc98-reborn-iOS/actions/workflows/ios-shell.yml)，选择 `codex/ios-mobile-ui` 对应构建。
+2. 下载 `ios-shell-运行编号-尝试次数` artifact，取出 `CC98RebornShell-unsigned-device.ipa`；`build-status.txt` 与测试日志记录实际完成的检查。
+3. 沿用已成功使用的 Windows 自签方式签名并安装。Apple Account、密码、验证码只在你信任的签名工具中输入。
+4. 保持原签名身份和 Bundle ID，优先覆盖安装，不先卸载含有草稿的版本。Keychain 访问权限受重签方式影响，不保证跨签名身份迁移。
+5. 连接校网／VPN，在“我的”核对账号，再按 [真机验证清单](DEVICE_TEST_CHECKLIST.md) 检查中文输入、上传、恢复和续期。
 
-**IPA 未签名，不能直接安装。** 本轮云端验证包含生产 Swift 会话逻辑测试和 iPhoneOS 编译，但未完成原生界面模拟器验收；真实授权、校网连通性、长时间使用和续签仍由真机验证。
+**IPA 未签名，不能直接安装。** 模拟器使用合成离线内容验证真实 SwiftUI 界面；真实授权、校网连接、跨有效期续期与服务端写操作仍需真机。
 
 ## 登录与长期使用
 
@@ -33,7 +33,19 @@
 
 保留原生分支已有的阅读、搜索、新帖列表／卡片、发帖回复、UBB／Markdown 编辑及预览、上传、投票、评分、私信、收藏、资料、多账号和本机内容管理。功能清单与后续 UI 要求以 [手机端设计规范](MOBILE_UI_SPEC.md) 为准。
 
-前台新消息检查不等于应用关闭后的远程推送。桌面问号、AI、本地语义服务及其他未迁入能力，不因本轮登录改动自动变为可用。
+本轮新增功能入口：
+
+- **版面**：置顶版面与取消置顶。
+- **消息 → 私信**：联系人操作中的置顶、用户备注；未发送输入按账号及联系人自动保存。
+- **我的 → 草稿中心**：主题、投票、回复、引用、编辑、私信按任务恢复或删除。旧草稿缺少原帖位置时保留正文供复制，不伪造引用对象。
+- **搜索**：最近搜索可复用、单条移除或清空。
+- **我的 → 稍后再看**：搜索、已读筛选、手动标记、清空确认及独立导入导出。
+- **我的 → 本机备份与导入**：先预览再合并，冲突保留本机，同账号增强数据不跨账号导入。
+- **设置 → 前台消息提醒**：主动启用后申请系统许可；仍只在前台约每 60 秒检查，不是应用关闭后的远程推送。
+
+本机增强备份包含置顶、用户／主题备注、屏蔽规则及稍后再看；**不含凭据、草稿、私信正文、搜索／浏览历史、阅读进度、外观设置**。重要草稿请另外复制保存。这是本机增强数据备份，不是完整设备迁移。
+
+桌面问号、AI、本地语义服务、完整跨帖对话缓存及远程推送仍待独立接入；现有媒体／公式的可用回退不等于完整播放器和数学排版。
 
 仓库仍保留旧 `ShellView`、网页注入资源与同账号绑定代码，但当前 App 从 `NativeRootView` 启动。旧壳的“原站模式／Reborn 模式／恢复原站”不是当前主界面入口；旧壳的成功安装反馈也不代替本版原生客户端验收。
 
@@ -49,16 +61,16 @@ node scripts/package-ios-resources.cjs
 Windows 本地检查不编译 iOS SDK。macOS 使用仓库锁定的 Xcode 和 XcodeGen，通过同一脚本生成工程与设备包：
 
 ```sh
-bash scripts/build-ios-shell.sh --device-only
+bash scripts/build-ios-shell.sh
 ```
 
-本轮设备构建须依次通过 Node 检查、旧 OAuth 协议生产代码检查、原生长会话生产代码行为检查、iPhoneOS arm64 编译以及 IPA 结构与资源校验，才产出候选包。测试使用合成账号、凭据和网络响应，不接入真实论坛账号。
+完整构建须通过 Node 合约检查、生产 OAuth／原生会话／本机库行为检查、Simulator 单元与原生 UI 测试、iPhoneOS arm64 编译及 IPA 结构校验。真实 SwiftUI 截图随 `.xcresult` 导出，覆盖五栏、读帖、编辑、私信、草稿、深色大字及 320 pt 容器。
 
-不带 `--device-only` 的旧完整流程还会运行 Simulator 测试；其中 UI smoke 仍针对旧网页壳，需要另行迁移后才能用于当前原生界面验收。本轮不会把跳过该测试记为通过。
+`--native-ui-fixture` 只在 Debug 存在，所有 API 请求由合成数据接管，未知路径本地失败；Release 不含此测试入口。测试不接入真实账号、不发送论坛内容。`--device-only` 仍可用于单独排查编译，但跳过模拟器时产物标为 unverified，不能作为本轮 UI 验收依据。
 
 GitHub 工作流支持手动触发，自动触发仍限于原有 `codex/ios-verification-shell` 分支。新分支不自动发布 Release、上传 TestFlight 或修改默认／DeepSeek 分支。构建不使用 Apple 分发凭据或学校 VPN。
 
-现有 AppIcon 资源仍有未分配图片及缺失尺寸警告；本轮未调整图标，真机安装后需检查显示。它不影响本次 Swift 会话检查通过，但正式分发前需完善资源配置。
+AppIcon 已将原浅色图片设为默认图标，保留深色变体；实际安装和系统主题下的显示仍在真机清单内。
 
 ## 数据与更新
 

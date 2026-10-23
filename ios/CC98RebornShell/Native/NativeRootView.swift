@@ -30,6 +30,7 @@ private struct NativeRootContent: View {
     @AppStorage("native.appearance") private var appearance = "system"
     @AppStorage("native.notificationsEnabled") private var notificationsEnabled = false
     @State private var selectedTab = 0
+    @State private var messageSection: NativeMessageSection = .reply
 
     var body: some View {
         Group {
@@ -37,7 +38,7 @@ private struct NativeRootContent: View {
                 ProgressView("正在恢复本机登录")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                NativeAccountTabs(auth: auth, selectedTab: $selectedTab)
+                NativeAccountTabs(auth: auth, selectedTab: $selectedTab, messageSection: $messageSection)
                     .id(auth.activeAccountID)
             }
         }
@@ -59,8 +60,12 @@ private struct NativeRootContent: View {
                 notifications.start()
             } else { notifications.stop() }
         }
-        .onReceive(notifications.$openMessages) { open in
-            if open { selectedTab = 3; notifications.markMessagesOpened() }
+        .onReceive(notifications.$messageDestination) { destination in
+            if let destination {
+                messageSection = destination
+                selectedTab = 3
+                notifications.markMessagesOpened()
+            }
         }
     }
 
@@ -78,8 +83,9 @@ private struct NativeAccountTabs: View {
     @StateObject private var library: NativeLibrary
     @StateObject private var app: NativeAppModel
     @Binding var selectedTab: Int
+    @Binding var messageSection: NativeMessageSection
 
-    init(auth: NativeAuth, selectedTab: Binding<Int>) {
+    init(auth: NativeAuth, selectedTab: Binding<Int>, messageSection: Binding<NativeMessageSection>) {
         #if DEBUG
         if NativeUITestFixture.isEnabled {
             let library = NativeLibrary(accountID: auth.activeAccountID, directory: NativeUITestFixture.libraryDirectory)
@@ -92,6 +98,7 @@ private struct NativeAccountTabs: View {
         #endif
         _app = StateObject(wrappedValue: NativeAppModel(auth: auth, accountContext: auth.captureAccountContext()))
         _selectedTab = selectedTab
+        _messageSection = messageSection
     }
 
     var body: some View {
@@ -99,7 +106,7 @@ private struct NativeAccountTabs: View {
             HomeView().tag(0).tabItem { Label("首页", systemImage: "list.bullet.rectangle") }
             BoardsView().tag(1).tabItem { Label("版面", systemImage: "square.grid.2x2") }
             NewTopicsView().tag(2).tabItem { Label("新帖", systemImage: "newspaper") }
-            MessagesView().tag(3).tabItem { Label("消息", systemImage: "bubble.left.and.bubble.right") }
+            MessagesView(section: $messageSection).tag(3).tabItem { Label("消息", systemImage: "bubble.left.and.bubble.right") }
             ProfileView().tag(4).tabItem { Label("我的", systemImage: "person.crop.circle") }
         }
         // The whole view tree and its local library belong to a fixed UID.

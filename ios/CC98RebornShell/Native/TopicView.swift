@@ -76,6 +76,26 @@ struct NativeTraceRequest: Identifiable {
     let floor: Int?
 }
 
+/// A requested page is not a reading position until its posts arrive.
+struct NativeTopicPaging {
+    private(set) var requestedPage: Int
+    private(set) var displayedPage: Int?
+
+    init(initialPage: Int) { requestedPage = max(1, initialPage) }
+
+    var visiblePage: Int { displayedPage ?? requestedPage }
+    var isShowingRequestedPage: Bool { displayedPage == requestedPage }
+
+    mutating func request(_ page: Int) { requestedPage = max(1, page) }
+
+    @discardableResult
+    mutating func accept(_ page: Int) -> Bool {
+        guard page == requestedPage else { return false }
+        displayedPage = page
+        return true
+    }
+}
+
 struct TopicDetailView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -89,7 +109,7 @@ struct TopicDetailView: View {
     @State private var topic: NativeTopic? = nil
     @State private var board: NativeBoard? = nil
     @State private var posts: [NativePost] = []
-    @State private var page: Int
+    @State private var paging: NativeTopicPaging
     @State private var loading = false
     @State private var error: String? = nil
     @State private var isFavorite = false
@@ -129,7 +149,7 @@ struct TopicDetailView: View {
         self.topicID = topicID
         self.boardID = boardID
         let resolvedPage = initialFloor.map { max(1, ($0 + 9) / 10) } ?? max(1, initialPage)
-        _page = State(initialValue: resolvedPage)
+        _paging = State(initialValue: NativeTopicPaging(initialPage: resolvedPage))
         _targetFloor = State(initialValue: initialFloor)
         _didAutoResume = State(initialValue: initialPage != 1 || initialFloor != nil)
     }
@@ -214,9 +234,6 @@ struct TopicDetailView: View {
                         .id(floorAnchor(post.id))
                         .accessibilityIdentifier("topic.floor.\(post.floor ?? 0)")
                     }
-                    if let error {
-                        NativeInlineRetry(message: error) { Task { await load() } }.padding(.horizontal, 16)
-                    }
                     if page < pageCount, posts.count >= pageSize {
                         Text("上拉进入下一页")
                             .font(ShellTheme.Fonts.metadata)
@@ -259,12 +276,12 @@ struct TopicDetailView: View {
             bottomBars
         }
         .refreshable { await load() }
-        .task(id: page) { await load() }
+        .task(id: paging.requestedPage) { await load() }
         .task { await loadFavorite() }
         .task { await loadHot() }
         .onDisappear {
-            if saveBrowseProgress, let topic {
-                library.recordPosition(topicID: topicID, page: page, floor: posts.first?.floor)
+            if saveBrowseProgress, let displayedPage = paging.displayedPage {
+                library.recordPosition(topicID: topicID, page: displayedPage, floor: posts.first?.floor)
             }
         }
         .environment(\.openURL, OpenURLAction { url in
@@ -293,11 +310,8 @@ struct TopicDetailView: View {
         }
         .sheet(isPresented: $showReply, onDismiss: { quotedPost = nil }) {
             ReplyComposer(topicID: topicID, quotedPost: quotedPost, allowReplyTail: topic != nil && board != nil && topic?.isAnonymous != true && topic?.isPosterOnly != true && (topic?.allowedViewerState ?? 0) == 0 && (board?.anonymousState ?? 0) == 0) {
-                Task {
-                    let nextPage = max(1, ((topic?.replyCount ?? 0) + 11) / pageSize)
-                    page = nextPage
-                    await load()
-                }
+                let nextPage = max(1, ((topic?.replyCount ?? 0) + 11) / pageSize)
+                requestPage(nextPage)
             }
         }
         .sheet(isPresented: $showNote) {
@@ -330,6 +344,13 @@ struct TopicDetailView: View {
         } message: {
             Text(alertMessage)
         }
+    }
+
+    private var page: Int { paging.visiblePage }
+
+    private func pageLoadError(_ error: String) -> String {
+        guard let displayedPage = paging.displayedPage, displayedPage != paging.requestedPage else { return error }
+        return "第 \(paging.requestedPage) 页未能加载，仍显示第 \(displayedPage) 页。\n\(error)"
     }
 
     private var pageCount: Int {
@@ -429,6 +450,13 @@ struct TopicDetailView: View {
 
     private var bottomBars: some View {
         VStack(spacing: 4) {
+            if !posts.isEmpty, let error {
+                NativeInlineRetry(message: pageLoadError(error)) { Task { await load() } }
+                    .accessibilityIdentifier("topic.pageError")
+            } else if loading, paging.requestedPage != page {
+                ProgressView("正在加载第 \(paging.requestedPage) 页…")
+                    .font(ShellTheme.Fonts.metadata)
+            }
             if pageCount > 1 {
                 if dynamicTypeSize.isAccessibilitySize {
                     pageIndicator
@@ -519,6 +547,7 @@ struct TopicDetailView: View {
     private func handlePullNext() {
         guard page < pageCount,
               !loading,
+              error == nil,
               !pullNextTriggered,
               posts.count >= pageSize else {
             return
@@ -530,8 +559,18 @@ struct TopicDetailView: View {
     private func turnPage(_ delta: Int) {
         let target = page + delta
         guard target >= 1, target <= pageCount else { return }
+        targetFloor = nil
         scrollToTopOnNextLoad = true
-        page = target
+        requestPage(target)
+    }
+
+    private func requestPage(_ target: Int) {
+        if paging.requestedPage == target {
+            // A retry of a failed page must run even though the task ID is unchanged.
+            Task { await load() }
+        } else {
+            paging.request(target)
+        }
     }
 
     private func openReply(quoted: NativePost? = nil) {
@@ -596,6 +635,7 @@ struct TopicDetailView: View {
 
     @MainActor
     private func scrollToTarget(_ proxy: ScrollViewProxy) {
+        guard paging.isShowingRequestedPage else { return }
         if let targetFloor {
             var candidates: [NativePost] = []
             if let opPost { candidates.append(opPost) }
@@ -631,8 +671,8 @@ struct TopicDetailView: View {
         targetFloor = clamped
         scrollToTopOnNextLoad = false
         let targetPage = max(1, (clamped + 9) / pageSize)
-        if page != targetPage {
-            page = targetPage
+        if paging.requestedPage != targetPage || paging.displayedPage != targetPage {
+            requestPage(targetPage)
         } else {
             scrollNonce += 1
         }
@@ -673,7 +713,7 @@ struct TopicDetailView: View {
     private func load() async {
         let requestID = UUID()
         loadID = requestID
-        let requestedPage = page
+        let requestedPage = paging.requestedPage
         loading = true
         error = nil
         do {
@@ -681,7 +721,7 @@ struct TopicDetailView: View {
             async let postsRequest = app.api.posts(topicID: topicID, from: (requestedPage - 1) * pageSize, size: pageSize)
             let loadedTopic = try await topicRequest
             let loadedPosts = try await postsRequest
-            guard requestID == loadID, page == requestedPage else { return }
+            guard requestID == loadID, paging.accept(requestedPage) else { return }
             topic = loadedTopic
             posts = loadedPosts
             if page == 1 {
@@ -702,7 +742,7 @@ struct TopicDetailView: View {
                 targetFloor = saved.floor
                 if saved.page > 1 {
                     loading = false
-                    page = saved.page
+                    paging.request(saved.page)
                     return
                 }
             }

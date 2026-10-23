@@ -563,7 +563,7 @@ enum UBBFirstImage {
     static func first(in source: String) -> URL? {
         // Use the same parsed visibility as the reader: hidden images never
         // enter thumbnails or a gallery opened from another visible image.
-        UBBBlockParser.parse(source).flatMap(\.images).first
+        UBBBlockParser.parse(source, markdown: false).flatMap(\.images).first
     }
 }
 

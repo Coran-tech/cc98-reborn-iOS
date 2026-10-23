@@ -6,6 +6,7 @@ struct NativeAccountControls: View {
     @EnvironmentObject private var auth: NativeAuth
     @State private var error: String?
     @State private var confirmSignOut = false
+    @State private var accountToRemove: NativeAccount?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -52,7 +53,7 @@ struct NativeAccountControls: View {
                         Button("重新授权") { perform { try await auth.reauthorize(accountID: account.id) } }
                         if account.id != auth.activeAccountID {
                             Button("移除本机账号", role: .destructive) {
-                                Task { await auth.removeAccount(account.id) }
+                                accountToRemove = account
                             }
                         }
                     } label: {
@@ -80,6 +81,15 @@ struct NativeAccountControls: View {
             Button("退出", role: .destructive) { Task { await auth.signOutCurrent() } }
         } message: {
             Text("将移除此账号的本机登录，并尝试切换到下一个已保存账号。草稿与历史不会删除。")
+        }
+        .alert("移除本机账号？", isPresented: Binding(
+            get: { accountToRemove != nil },
+            set: { if !$0 { accountToRemove = nil } }
+        ), presenting: accountToRemove) { account in
+            Button("取消", role: .cancel) { }
+            Button("移除", role: .destructive) { Task { await auth.removeAccount(account.id) } }
+        } message: { account in
+            Text("仅移除 \(account.name) 的本机登录凭据，不删除该账号的草稿、备注和历史，也不撤销站方授权。")
         }
     }
 

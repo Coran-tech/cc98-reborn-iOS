@@ -392,9 +392,16 @@ final class NativeLibrary: ObservableObject {
 
     @discardableResult
     func clearDraft(for key: String) -> Bool {
-        drafts.removeValue(forKey: key)
-        draftDates.removeValue(forKey: key)
-        draftContexts.removeValue(forKey: key)
+        clearDrafts(for: [key])
+    }
+
+    @discardableResult
+    func clearDrafts(for keys: [String]) -> Bool {
+        for key in keys {
+            drafts.removeValue(forKey: key)
+            draftDates.removeValue(forKey: key)
+            draftContexts.removeValue(forKey: key)
+        }
         refreshDraftItems()
         return save()
     }
@@ -410,13 +417,13 @@ final class NativeLibrary: ObservableObject {
 
     @discardableResult
     func removeDraft(_ item: NativeDraftItem) -> Bool {
-        for key in item.keys {
-            drafts.removeValue(forKey: key)
-            draftDates.removeValue(forKey: key)
-            draftContexts.removeValue(forKey: key)
+        var keys = item.keys
+        // An intentionally empty edit keeps its source context on the body key,
+        // even though only the settings snapshot remains in the draft map.
+        if let id = item.targetID, item.kind == .edit {
+            keys.append("edit.body:\(id)")
         }
-        refreshDraftItems()
-        return save()
+        return clearDrafts(for: keys)
     }
 
     private func refreshDraftItems() {

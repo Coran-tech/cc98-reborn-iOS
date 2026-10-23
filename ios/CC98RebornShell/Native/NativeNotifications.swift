@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
-    @Published private(set) var openMessages = false
+    @Published private(set) var messageDestination: NativeMessageSection?
     @Published var notice: String?
 
     private var api: CC98API?
@@ -57,7 +57,7 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
     }
 
     func markMessagesOpened() {
-        openMessages = false
+        messageDestination = nil
     }
 
     private func poll() async {
@@ -89,7 +89,7 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
         content.body = "你有 \(current - previous) 条新消息"
         content.sound = .default
         content.threadIdentifier = "cc98.\(identifier)"
-        content.userInfo = ["tab": "messages", "accountID": lastAccountID ?? 0]
+        content.userInfo = ["tab": "messages", "accountID": lastAccountID ?? 0, "category": identifier]
         let request = UNNotificationRequest(
             identifier: "cc98.\(identifier).\(Int(Date().timeIntervalSince1970))",
             content: content,
@@ -116,7 +116,10 @@ final class NativeNotificationManager: NSObject, ObservableObject, UNUserNotific
             if let expectedID, expectedID != auth?.activeAccountID {
                 notice = "这条通知来自另一个账号。请先在“我的”切换到对应账号，再查看消息。"
             } else {
-                openMessages = true
+                let content = response.notification.request.content
+                let category = content.userInfo["category"] as? String
+                    ?? content.threadIdentifier.replacingOccurrences(of: "cc98.", with: "")
+                messageDestination = NativeMessageSection.fromNotification(category: category) ?? .reply
             }
             completionHandler()
         }

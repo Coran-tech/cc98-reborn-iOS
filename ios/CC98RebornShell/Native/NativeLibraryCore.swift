@@ -65,6 +65,25 @@ struct NativeDraftContext: Codable, Hashable {
     let title: String?
 }
 
+// The snapshot distinguishes an intentional empty edit from an absent legacy
+// draft. This is shared by the editor and the production-data test harness.
+struct NativeEditorDraftRecovery: Codable, Equatable {
+    let title: String
+    let body: String
+
+    static func encode(title: String, body: String) throws -> String {
+        let bytes = try JSONEncoder().encode(Self(title: title, body: body))
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
+    static func restore(snapshot: String, legacyTitle: String, legacyBody: String,
+                        originalTitle: String, originalBody: String) -> Self {
+        if let value = try? JSONDecoder().decode(Self.self, from: Data(snapshot.utf8)) { return value }
+        return Self(title: legacyTitle.isEmpty ? originalTitle : legacyTitle,
+                    body: legacyBody.isEmpty ? originalBody : legacyBody)
+    }
+}
+
 struct NativeDraftItem: Identifiable, Hashable {
     enum Kind: String { case topic, vote, reply, quote, edit, message, other }
     let id: String
@@ -117,8 +136,19 @@ struct NativeDraftItem: Identifiable, Hashable {
             default: kind = .other
             }
             let visibleKeys = keys.filter { !$0.contains(".settings:") }
-            guard !visibleKeys.isEmpty else { return nil }
-            let context = keys.compactMap { contexts[$0] }.first
+            let bodyContextKey = target.map { "\(prefix).body:\($0)" }
+            let context = keys.compactMap { contexts[$0] }.first ?? bodyContextKey.flatMap { contexts[$0] }
+            let settingsKey = keys.first { $0.contains(".settings:") }
+            let settings = settingsKey.flatMap { drafts[$0] }
+            let hasVoteOptions: Bool
+            if kind == .vote, let settings,
+               let object = try? JSONSerialization.jsonObject(with: Data(settings.utf8)) as? [String: Any],
+               let options = object["voteItems"] as? [String] {
+                hasVoteOptions = options.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            } else { hasVoteOptions = false }
+            // Editing can intentionally clear both fields. Its settings snapshot
+            // still represents a recoverable task when the original post is known.
+            guard !visibleKeys.isEmpty || hasVoteOptions || (kind == .edit && context != nil) else { return nil }
             let titleKey = keys.first { $0.contains(".title:") }
             let bodyKey = keys.first { $0.contains(".body:") } ?? visibleKeys.first { !$0.contains(".title:") }
             let title = titleKey.flatMap { drafts[$0] }.flatMap { $0.isEmpty ? nil : $0 }
@@ -137,6 +167,8 @@ enum NativeLibraryRules {
         let flags = String(rule[rule.index(after: end)...])
         guard flags.isEmpty || flags == "i" else { return nil }
         let pattern = String(rule[rule.index(after: rule.startIndex)..<end])
+        // Build 82 already treated /pattern/ as case-insensitive. Keep stored
+        // rules working while also accepting the advertised /pattern/i form.
         return try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }
     static func validationError(_ rule: String) -> String? {
@@ -157,11 +189,17 @@ struct NativeLibraryImportPreview: Identifiable {
     let accountID: Int?
     var summary: [(String, Int)] {
         let p = backup.payload
-        var rows = [("稍后再看", p.readLater.count)]
+        var rows: [(String, Int)] = [("稍后再看", p.readLater.count)]
         if backup.kind == .library {
-            rows += [("置顶版面", p.pinnedBoards.count), ("置顶联系人", p.pinnedContactIDs.count),
-                     ("用户备注", p.userNotes.count), ("主题备注", p.notes.count),
-                     ("屏蔽规则", p.blockedUsers.count + p.blockedKeywords.count + p.blockedUserIDs.count + p.blockedBoards.count + p.blockedTitleKeywords.count + p.blockedContentRules.count + p.blockedNumericRules.count + p.blockedTopicIDs.count)]
+            rows.append(("置顶版面", p.pinnedBoards.count))
+            rows.append(("置顶联系人", p.pinnedContactIDs.count))
+            rows.append(("用户备注", p.userNotes.count))
+            rows.append(("主题备注", p.notes.count))
+            let ruleCounts: [Int] = [p.blockedUsers.count, p.blockedKeywords.count,
+                                    p.blockedUserIDs.count, p.blockedBoards.count,
+                                    p.blockedTitleKeywords.count, p.blockedContentRules.count,
+                                    p.blockedNumericRules.count, p.blockedTopicIDs.count]
+            rows.append(("屏蔽规则", ruleCounts.reduce(0, +)))
         }
         return rows
     }

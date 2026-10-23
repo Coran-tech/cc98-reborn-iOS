@@ -552,7 +552,7 @@ struct NewTopicComposer: View {
             .interactiveDismissDisabled(hasInput || uploading || sending || published)
             .confirmationDialog("退出当前任务？", isPresented: $showExit, titleVisibility: .visible) {
                 Button("保存草稿并退出") { if saveDraft() { dismiss() } }
-                Button("丢弃本任务草稿并退出", role: .destructive) { clearDraft(); dismiss() }
+                Button("丢弃本任务草稿并退出", role: .destructive) { if clearDraft() { dismiss() } }
                 Button("继续编辑", role: .cancel) { }
             } message: { Text("仅影响这个版面的当前\(isVote ? "投票" : "主题")草稿。") }
             .alert("恢复\(boardName)的草稿？", isPresented: $showRestore) {
@@ -610,11 +610,11 @@ struct NewTopicComposer: View {
 
     @discardableResult
     private func saveDraft() -> Bool {
-        let savedTitle = library.setDraft(title, for: titleKey)
-        let savedBody = library.setDraft(content, for: bodyKey)
-        let encoded = (try? JSONEncoder().encode(settings)).flatMap { String(data: $0, encoding: .utf8) }
-        let savedSettings = encoded.map { library.setDraft($0, for: settingsKey) } ?? false
-        let saved = savedTitle && savedBody && savedSettings
+        guard let encoded = (try? JSONEncoder().encode(settings)).flatMap({ String(data: $0, encoding: .utf8) }) else {
+            draftStatus = "草稿未保存，请重试或复制正文"
+            return false
+        }
+        let saved = library.setDrafts([titleKey: title, bodyKey: content, settingsKey: encoded])
         if saved { savedSnapshot = snapshot }
         draftStatus = saved ? "草稿已保存到本机" : "草稿未保存，请重试或复制正文"
         return saved
@@ -637,12 +637,12 @@ struct NewTopicComposer: View {
         needVote = saved.needVote
     }
 
-    private func clearDraft() {
-        library.clearDraft(for: titleKey)
-        library.clearDraft(for: bodyKey)
-        library.clearDraft(for: settingsKey)
-        savedSnapshot = snapshot
-        draftStatus = library.lastSaveError == nil ? "已清除本任务草稿，编辑区保留" : "清除未保存到本机，请重试"
+    @discardableResult
+    private func clearDraft() -> Bool {
+        let success = library.clearDrafts(for: [titleKey, bodyKey, settingsKey])
+        if success { savedSnapshot = snapshot }
+        draftStatus = success ? "已清除本任务草稿，编辑区保留" : "清除未保存到本机，请重试"
+        return success
     }
 
     private static func mentionedNames(in content: String) -> [String] {
@@ -784,9 +784,10 @@ struct EditPostComposer: View {
 
     private var titleKey: String { "edit.title:\(post.id)" }
     private var bodyKey: String { "edit.body:\(post.id)" }
+    private var settingsKey: String { "edit.settings:\(post.id)" }
     private var contentType: Int { post.contentType ?? 0 }
     private var savedAtDescription: String {
-        if let date = library.draftItems.first(where: { $0.keys.contains(bodyKey) || $0.keys.contains(titleKey) })?.updatedAt {
+        if let date = library.draftItems.first(where: { $0.keys.contains(bodyKey) || $0.keys.contains(titleKey) || $0.keys.contains(settingsKey) })?.updatedAt {
             return "保存时间：\(date.formatted(date: .abbreviated, time: .shortened))。"
         }
         return "旧草稿未记录保存时间。"
@@ -890,7 +891,7 @@ struct EditPostComposer: View {
             .interactiveDismissDisabled(changed || saving || uploading)
             .confirmationDialog("退出编辑？", isPresented: $showExit, titleVisibility: .visible) {
                 Button("保存草稿并退出") { if saveDraft() { dismiss() } }
-                Button("丢弃本任务草稿并退出", role: .destructive) { clearDraft(); dismiss() }
+                Button("丢弃本任务草稿并退出", role: .destructive) { if clearDraft() { dismiss() } }
                 Button("继续编辑", role: .cancel) { }
             }
             .alert("恢复本楼层草稿？", isPresented: $showRestore) {
@@ -916,28 +917,36 @@ struct EditPostComposer: View {
 
     @discardableResult
     private func saveDraft() -> Bool {
+        guard let encoded = try? NativeEditorDraftRecovery.encode(title: title, body: content) else {
+            draftStatus = "草稿未保存，请重试或复制正文"
+            return false
+        }
         library.setDraftContext(for: bodyKey, topicID: post.topicId, boardID: post.boardId, floor: post.floor, title: topicTitle)
-        let titleSaved = library.setDraft(title, for: titleKey)
-        let bodySaved = library.setDraft(content, for: bodyKey)
-        let success = titleSaved && bodySaved
+        let success = library.setDrafts([titleKey: title, bodyKey: content, settingsKey: encoded])
         if success { savedFields = [title, content] }
         draftStatus = success ? "草稿已保存到本机" : "草稿未保存，请重试或复制正文"
         return success
     }
 
     private func restoreDraft() {
-        let savedTitle = library.draft(for: titleKey)
-        let savedBody = library.draft(for: bodyKey)
-        if !savedTitle.isEmpty { title = savedTitle }
-        if !savedBody.isEmpty { content = savedBody }
+        let saved = NativeEditorDraftRecovery.restore(
+            snapshot: library.draft(for: settingsKey),
+            legacyTitle: library.draft(for: titleKey),
+            legacyBody: library.draft(for: bodyKey),
+            originalTitle: post.floor == 1 ? topicTitle ?? "" : "",
+            originalBody: post.content ?? ""
+        )
+        title = saved.title
+        content = saved.body
         selection = NSRange(location: (content as NSString).length, length: 0)
     }
 
-    private func clearDraft() {
-        library.clearDraft(for: titleKey)
-        library.clearDraft(for: bodyKey)
-        savedFields = [title, content]
-        draftStatus = library.lastSaveError == nil ? "已清除草稿，编辑区保留" : "清除未保存到本机"
+    @discardableResult
+    private func clearDraft() -> Bool {
+        let success = library.clearDrafts(for: [titleKey, bodyKey, settingsKey])
+        if success { savedFields = [title, content] }
+        draftStatus = success ? "已清除草稿，编辑区保留" : "清除未保存到本机"
+        return success
     }
 
     @MainActor

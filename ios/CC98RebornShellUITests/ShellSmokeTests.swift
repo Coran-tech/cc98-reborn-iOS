@@ -59,6 +59,7 @@ final class ShellSmokeTests: XCTestCase {
         let title = element("compose.title", in: app)
         title.tap()
         title.typeText("Offline draft")
+        for _ in 0..<4 where !element("compose.draft", in: app).isHittable { app.swipeUp() }
         tap("compose.draft", in: app)
         app.buttons["保存当前草稿"].tap()
         screenshot("08-draft-saved")

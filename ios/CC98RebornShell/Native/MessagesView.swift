@@ -6,6 +6,16 @@ enum NativeMessageSection: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    static func fromNotification(category: String) -> NativeMessageSection? {
+        switch category {
+        case "reply": return .reply
+        case "at": return .at
+        case "system": return .system
+        case "message", "privateMessages": return .privateMessages
+        default: return nil
+        }
+    }
+
     var title: String {
         switch self {
         case .reply: return "回复"
@@ -29,7 +39,7 @@ struct MessagesView: View {
     @EnvironmentObject private var app: NativeAppModel
     @EnvironmentObject private var auth: NativeAuth
 
-    @State private var section: NativeMessageSection = .reply
+    @Binding var section: NativeMessageSection
     @State private var counts: NativeMessageCounts? = nil
     @State private var countUnavailable = false
     @State private var refreshID = 0
@@ -629,7 +639,9 @@ struct PrivateConversationView: View {
         .confirmationDialog("私信草稿尚未保存", isPresented: $showExit, titleVisibility: .visible) {
             Button("重试保存并返回") { if library.setDraft(text, for: draftKey) { dismiss() } }
             Button("复制私信") { UIPasteboard.general.string = text }
-            Button("丢弃本会话草稿并返回", role: .destructive) { library.clearDraft(for: draftKey); dismiss() }
+            Button("丢弃本会话草稿并返回", role: .destructive) {
+                if library.clearDraft(for: draftKey) { dismiss() }
+            }
             Button("继续编辑", role: .cancel) { }
         }
         .alert(errorTitle, isPresented: $showError) {

@@ -740,7 +740,7 @@ struct BlocklistView: View {
                     }
                     .disabled(newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                Text("单条条件命中即折叠；支持关键词、/正则/i 与出现次数比较，不支持 AND／OR 组合表达式。")
+                Text("单条条件命中即折叠；支持关键词、/正则/、/正则/i 与出现次数比较，文本匹配均忽略大小写。不支持 AND／OR 组合表达式。")
                     .font(ShellTheme.Fonts.caption).foregroundStyle(ShellTheme.secondaryText)
                 ForEach(library.blockedContentRules, id: \.self) { value in
                     ruleRow(value) { library.removeBlockedContentRule(value) }
