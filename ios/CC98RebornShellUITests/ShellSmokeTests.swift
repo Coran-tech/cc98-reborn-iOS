@@ -117,10 +117,10 @@ final class ShellSmokeTests: XCTestCase {
         let body = element("reply.body", in: app)
         body.tap()
         body.typeText("Large text draft")
-        let completeText = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Large text draft"), object: body)
-        let inputResult = XCTWaiter.wait(for: [completeText], timeout: 5)
         screenshot("15b-editor-dark-large-type-input")
-        XCTAssertEqual(inputResult, .completed, "Actual editor value: \(String(describing: body.value))")
+        // typeText is synchronous. Assert the content, not whether a separate
+        // accessibility query managed to finish inside a five-second timer.
+        XCTAssertEqual(body.value as? String, "Large text draft")
         dismissKeyboard(in: app)
     }
     func testCompactWidth() throws {

@@ -30,10 +30,11 @@ permissions:
 
 jobs:
   unsigned-device-candidate:
-    # Fixed stable image/toolchain with the Xcode 26.4+ simdiskimaged hang fix
-    # (Apple issue 172343027). Full tests use iPhone 17 Pro / iOS 26.5.
-    # https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md
-    runs-on: macos-26-intel
+    # Standard Apple Silicon runner; keep the same fixed Xcode/runtime after
+    # Intel run 39922238185 stalled across boot migration and UI automation.
+    # Full tests remain iPhone 17 Pro / iOS 26.5, with unchanged time bounds.
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md
+    runs-on: macos-26
     timeout-minutes: 45
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
