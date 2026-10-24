@@ -63,6 +63,7 @@ final class BrowserCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
         guard !isPopup else { return }
         model?.status = model?.isUITesting == true ? "本地测试夹具 · 未连接论坛" : "页面已加载 · 功能需手动验证"
         model?.update(webView)
+        model?.restorePendingScroll(webView)
         model?.record("navigation.finished")
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(webView, error: error) }
@@ -85,6 +86,10 @@ final class BrowserCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard navigationAction.targetFrame == nil, let url = navigationAction.request.url,
               ShellPolicy.isWebURL(url) || url.absoluteString == "about:blank" else { return nil }
+        if ShellPolicy.isTopic(url) {
+            model?.openReading(url: url)
+            return nil
+        }
         return model?.makePopup(configuration: configuration, request: navigationAction.request, loadRequest: false)
     }
     func webViewDidClose(_ webView: WKWebView) { if isPopup { model?.closePopup() } }
@@ -131,6 +136,13 @@ final class BrowserCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WK
                 guard !items.isEmpty else { throw BridgeFailure(code: "INVALID_ARGUMENT", message: "没有可分享的内容。") }
                 try model.share(items)
                 value = ["presented": true]
+            case "host.route":
+                guard let path = args["path"] as? String, path.count <= 200,
+                      path.range(of: "^/[A-Za-z0-9/_-]*$", options: .regularExpression) != nil else {
+                    throw BridgeFailure(code: "INVALID_ARGUMENT", message: "页面路径无效。")
+                }
+                model.navigationChanged(path: path)
+                value = ["recorded": true]
             case "diagnostics.report":
                 let known: Set<String> = ["document.end", "runtime.ready", "runtime.error", "resource.error", "csp.violation", "bridge.unsupported", "storage.error", "iframe.unsupported"]
                 let event = args["event"] as? String ?? "unknown"

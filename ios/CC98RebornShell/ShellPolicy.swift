@@ -18,6 +18,13 @@ enum ShellPolicy {
         return ["https", "http"].contains(url.scheme?.lowercased() ?? "") && url.host != nil
     }
 
+    // Reading container routing. Only real topic pages qualify; API paths such
+    // as /topic/me/favorite stay out of the reading task.
+    static func isTopic(_ url: URL?) -> Bool {
+        guard let url, isForum(url) else { return false }
+        return url.path.range(of: "^/topic/[0-9]+(?:/[0-9]+)?/?$", options: .regularExpression) != nil
+    }
+
     static func isAllowedOrigin(scheme: String, host: String, port: Int) -> Bool {
         scheme.lowercased() == "https" && ["cc98.org", "www.cc98.org"].contains(host.lowercased()) && [0, 443].contains(port)
     }
